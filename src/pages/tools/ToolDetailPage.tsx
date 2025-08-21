@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { HealthTool, ComprehensiveHealthToolsService, ToolType } from '../../lib/complete-health-tools';
-import { dbHelpers, collections } from '../../lib/database';
+import { githubDB, collections } from '../../lib/database';
 import { initializeAllHealthTools } from '../../lib/health-tools';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { 
@@ -37,7 +37,7 @@ const ToolDetailPage = () => {
         // Ensure tools are initialized first
         await initializeAllHealthTools();
         
-        const toolData = await dbHelpers.findById(collections.health_tools, toolId);
+        const toolData = await githubDB.findById(collections.health_tools, toolId);
         if (!toolData) {
           setError('Tool not found');
         } else {

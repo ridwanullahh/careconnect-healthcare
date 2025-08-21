@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { HealthcareEntity } from '../../lib/entities';
-import { getEntity } from '../../lib/database';
+import { githubDB, collections } from '../../lib/database';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const BookingPage = () => {
@@ -28,7 +28,7 @@ const BookingPage = () => {
       }
 
       try {
-        const entityData = await getEntity(entityId);
+        const entityData = await githubDB.findById(collections.entities, entityId);
         setEntity(entityData);
       } catch (err) {
         setError('Failed to load entity details');

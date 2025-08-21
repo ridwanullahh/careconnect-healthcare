@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Course, CourseModule, Lesson, CourseEnrollment, LMSService } from '../../lib/lms';
-import { dbHelpers, collections } from '../../lib/database';
+import { githubDB, collections } from '../../lib/database';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface QuizAnswer {
@@ -45,8 +45,8 @@ const CourseLearningPage = () => {
       try {
         // Load course and enrollment data
         const [courseData, enrollmentData] = await Promise.all([
-          dbHelpers.findById(collections.courses, courseId),
-          dbHelpers.find(collections.course_enrollments, {
+          githubDB.findById(collections.courses, courseId),
+          githubDB.find(collections.course_enrollments, {
             course_id: courseId,
             user_id: currentUserId
           })

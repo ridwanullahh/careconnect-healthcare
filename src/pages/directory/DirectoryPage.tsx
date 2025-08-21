@@ -1,7 +1,8 @@
 // Healthcare Directory Page
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { EntityService, EntityType, BadgeType } from '../../lib/entities';
+import { EntityService, EntityType, BadgeType, HealthcareEntity } from '../../lib/entities';
+import { githubDB, collections } from '../../lib/database';
 import {
   Search,
   MapPin,
@@ -25,9 +26,12 @@ import DirectoryGridView from '../../components/DirectoryGridView';
 
 const DirectoryPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [entities, setEntities] = useState<any[]>([]);
+  const [entities, setEntities] = useState<HealthcareEntity[]>([]);
+  const [displayedEntities, setDisplayedEntities] = useState<HealthcareEntity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'map' | 'grid'>('list');
+  const [sortBy, setSortBy] = useState('relevance');
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   
   const [filters, setFilters] = useState({
     query: searchParams.get('search') || '',
@@ -41,6 +45,8 @@ const DirectoryPage: React.FC = () => {
     language: ''
   });
 
+  const [specialtyOptions, setSpecialtyOptions] = useState<string[]>([]);
+
   const entityTypeOptions = [
     { value: '', label: 'All Types' },
     { value: EntityType.HEALTH_CENTER, label: 'Health Centers' },
@@ -48,12 +54,6 @@ const DirectoryPage: React.FC = () => {
     { value: EntityType.HOSPITAL, label: 'Hospitals' },
     { value: EntityType.PHARMACY, label: 'Pharmacies' },
     { value: EntityType.PRACTITIONER, label: 'Individual Practitioners' }
-  ];
-
-  const specialtyOptions = [
-    'Family Medicine', 'Internal Medicine', 'Pediatrics', 'Cardiology',
-    'Dermatology', 'Psychiatry', 'Orthopedics', 'Neurology',
-    'Gynecology', 'Ophthalmology', 'ENT', 'Emergency Medicine'
   ];
 
   const featureOptions = [
@@ -64,18 +64,53 @@ const DirectoryPage: React.FC = () => {
   ];
 
   useEffect(() => {
-    searchEntities();
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      (error) => {
+        console.error("Error getting user location:", error);
+        // Default to a fallback location if permission is denied
+        setUserLocation({ lat: 34.0522, lng: -118.2437 });
+      }
+    );
   }, []);
+
+  useEffect(() => {
+    const loadPageData = async () => {
+      setIsLoading(true);
+      try {
+        const [results, specialties] = await Promise.all([
+          EntityService.searchEntities(filters),
+          githubDB.get('specialties')
+        ]);
+        setEntities(results);
+        setSpecialtyOptions(specialties);
+      } catch (error) {
+        console.error('Failed to load page data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadPageData();
+  }, []);
+
+  useEffect(() => {
+    let sortedEntities = [...entities];
+    if (sortBy === 'rating') {
+      sortedEntities.sort((a, b) => b.rating - a.rating);
+    }
+    // Add other sort options here
+    setDisplayedEntities(sortedEntities);
+  }, [entities, sortBy]);
 
   const searchEntities = async () => {
     setIsLoading(true);
     try {
-      const results = await EntityService.searchEntities({
-        query: filters.query,
-        entity_type: filters.entity_type as EntityType,
-        specialties: filters.specialties,
-        rating_min: filters.rating_min
-      });
+      const results = await EntityService.searchEntities(filters);
       setEntities(results);
     } catch (error) {
       console.error('Search failed:', error);
@@ -310,13 +345,17 @@ const DirectoryPage: React.FC = () => {
                 <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
                   <div className="flex items-center justify-between">
                     <p className="text-gray-600">
-                      {entities.length} healthcare providers found
+                      {displayedEntities.length} healthcare providers found
                     </p>
-                    <select className="px-3 py-1 border border-gray-300 rounded-lg text-sm">
-                      <option>Sort by Relevance</option>
-                      <option>Sort by Rating</option>
-                      <option>Sort by Distance</option>
-                      <option>Sort by Availability</option>
+                    <select
+                      className="px-3 py-1 border border-gray-300 rounded-lg text-sm"
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                    >
+                      <option value="relevance">Sort by Relevance</option>
+                      <option value="rating">Sort by Rating</option>
+                      <option value="distance">Sort by Distance</option>
+                      <option value="availability">Sort by Availability</option>
                     </select>
                   </div>
                 </div>
@@ -324,7 +363,7 @@ const DirectoryPage: React.FC = () => {
                 {/* Render based on view mode */}
                 {viewMode === 'list' && (
                   <div className="space-y-6">
-                    {entities.map((entity) => (
+                    {displayedEntities.map((entity) => (
                       <div key={entity.id} className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
                         <div className="flex flex-col md:flex-row">
                           {/* Provider Image */}
@@ -463,7 +502,7 @@ const DirectoryPage: React.FC = () => {
                 
                 {viewMode === 'grid' && (
                   <DirectoryGridView
-                    entities={entities}
+                    entities={displayedEntities}
                     loading={isLoading}
                     onEntitySelect={(entity) => {
                       // Navigate to entity detail page
@@ -472,17 +511,17 @@ const DirectoryPage: React.FC = () => {
                   />
                 )}
                 
-                {viewMode === 'map' && (
+                {viewMode === 'map' && userLocation && (
                   <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                     <DirectoryMapView
-                      initialEntities={entities}
+                      initialEntities={displayedEntities}
                       filters={{
                         entityType: filters.entity_type as any,
                         specialties: filters.specialties as string[],
                         searchQuery: filters.query
                       }}
-                      centerLat={34.0522} // Default to Los Angeles
-                      centerLng={-118.2437}
+                      centerLat={userLocation.lat}
+                      centerLng={userLocation.lng}
                       zoom={12}
                       onEntitySelect={(entity) => {
                         // Navigate to entity detail page
@@ -492,7 +531,7 @@ const DirectoryPage: React.FC = () => {
                   </div>
                 )}
 
-                {entities.length === 0 && (
+                {displayedEntities.length === 0 && (
                   <div className="bg-white rounded-lg shadow-sm p-12 text-center">
                     <Search className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">

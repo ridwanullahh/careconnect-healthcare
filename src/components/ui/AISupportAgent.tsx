@@ -21,6 +21,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
+import { githubDB, collections } from '../../lib/database';
 
 interface ChatMessage {
   id: string;
@@ -33,6 +34,7 @@ interface ChatMessage {
 
 interface ChatSession {
   id: string;
+  userId: string;
   name: string;
   messages: ChatMessage[];
   createdAt: Date;
@@ -55,50 +57,28 @@ const AISupportAgent: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Load chat sessions from localStorage on mount
   useEffect(() => {
-    const savedSessions = localStorage.getItem('chatSessions');
-    if (savedSessions) {
-      try {
-        const parsedSessions = JSON.parse(savedSessions);
-        // Convert date strings back to Date objects
-        const formattedSessions = parsedSessions.map((session: any) => ({
-          ...session,
-          createdAt: new Date(session.createdAt),
-          lastActivity: new Date(session.lastActivity),
-          messages: session.messages.map((msg: any) => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp)
-          }))
-        }));
-        setSessions(formattedSessions);
-        if (formattedSessions.length > 0) {
-          setCurrentSessionId(formattedSessions[0].id);
-        } else {
-          createNewSession();
-        }
-      } catch (e) {
-        console.error('Failed to parse saved sessions', e);
-        createNewSession();
-      }
+    if (user) {
+      loadSessions();
+    }
+  }, [user]);
+
+  const loadSessions = async () => {
+    if (!user) return;
+    const userSessions = await githubDB.find(collections.chat_sessions, { userId: user.id });
+    const sortedSessions = userSessions.sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime());
+    setSessions(sortedSessions);
+    if (sortedSessions.length > 0) {
+      setCurrentSessionId(sortedSessions[0].id);
     } else {
-      // Initialize with a default session
       createNewSession();
     }
-  }, []);
-
-  // Save sessions to localStorage when they change
-  useEffect(() => {
-    if (sessions.length > 0) {
-      localStorage.setItem('chatSessions', JSON.stringify(sessions));
-    }
-  }, [sessions]);
+  };
 
   useEffect(() => {
     scrollToBottom();
   }, [sessions, isLoading]);
 
-  // Set initial suggestions for chat
   useEffect(() => {
     setSuggestions([
       "Find a healthcare provider near me",
@@ -118,9 +98,11 @@ const AISupportAgent: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const createNewSession = () => {
+  const createNewSession = async () => {
+    if (!user) return;
     const newSession: ChatSession = {
       id: crypto.randomUUID(),
+      userId: user.id,
       name: `Chat ${sessions.length + 1}`,
       messages: [
         {
@@ -136,10 +118,10 @@ const AISupportAgent: React.FC = () => {
     };
     newSession.messages[0].sessionId = newSession.id;
     
+    await githubDB.insert(collections.chat_sessions, newSession);
     setSessions(prev => [newSession, ...prev]);
     setCurrentSessionId(newSession.id);
     
-    // Reset suggestions when creating a new session
     setSuggestions([
       "Find a healthcare provider near me",
       "How do I use the symptom checker?",
@@ -153,7 +135,7 @@ const AISupportAgent: React.FC = () => {
   };
 
   const sendMessage = async (message: string = currentMessage) => {
-    if (!message.trim() || !currentSessionId) return;
+    if (!message.trim() || !currentSessionId || !user) return;
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -163,8 +145,7 @@ const AISupportAgent: React.FC = () => {
       sessionId: currentSessionId
     };
 
-    // Add user message
-    setSessions(prev => prev.map(session => 
+    const updatedSessions = sessions.map(session =>
       session.id === currentSessionId 
         ? { 
             ...session, 
@@ -172,22 +153,22 @@ const AISupportAgent: React.FC = () => {
             lastActivity: new Date()
           }
         : session
-    ));
+    );
+    setSessions(updatedSessions);
+    const currentSession = updatedSessions.find(s => s.id === currentSessionId);
+    if (currentSession) {
+      await githubDB.update(collections.chat_sessions, currentSessionId, { messages: currentSession.messages, lastActivity: currentSession.lastActivity });
+    }
 
     setCurrentMessage('');
     setError(null);
     setIsLoading(true);
-    setIsThinking(true); // Start thinking animation
-    
-    // Clear suggestions once user sends a message
+    setIsThinking(true);
     setSuggestions([]);
 
-    // Delay the API call slightly to show the thinking animation
     setTimeout(async () => {
       try {
-        setIsThinking(false); // Stop thinking animation when API call starts
-        
-        // Generate response using Gemini API
+        setIsThinking(false);
         const response = await generateAIResponse(message, getCurrentSession());
         
         const botMessage: ChatMessage = {
@@ -198,7 +179,7 @@ const AISupportAgent: React.FC = () => {
           sessionId: currentSessionId
         };
 
-        setSessions(prev => prev.map(session => 
+        const finalSessions = updatedSessions.map(session =>
           session.id === currentSessionId 
             ? { 
                 ...session, 
@@ -207,9 +188,13 @@ const AISupportAgent: React.FC = () => {
                 name: message.length > 20 ? `${message.substring(0, 20)}...` : message
               }
             : session
-        ));
+        );
+        setSessions(finalSessions);
+        const finalCurrentSession = finalSessions.find(s => s.id === currentSessionId);
+        if (finalCurrentSession) {
+          await githubDB.update(collections.chat_sessions, currentSessionId, { messages: finalCurrentSession.messages, lastActivity: finalCurrentSession.lastActivity, name: finalCurrentSession.name });
+        }
         
-        // Set follow-up suggestions if provided
         if (response.suggestions && response.suggestions.length > 0) {
           setSuggestions(response.suggestions);
         }
@@ -217,7 +202,6 @@ const AISupportAgent: React.FC = () => {
         console.error('AI response failed:', error);
         setError('I\'m having trouble connecting right now. Please try again in a moment.');
         
-        // Still add an error message to the chat
         const errorMessage: ChatMessage = {
           id: crypto.randomUUID(),
           content: "I'm sorry, I'm having trouble responding right now. Please try again in a moment or contact our support team for immediate assistance.",
@@ -226,7 +210,7 @@ const AISupportAgent: React.FC = () => {
           sessionId: currentSessionId
         };
 
-        setSessions(prev => prev.map(session => 
+        const errorSessions = updatedSessions.map(session =>
           session.id === currentSessionId 
             ? { 
                 ...session, 
@@ -234,31 +218,32 @@ const AISupportAgent: React.FC = () => {
                 lastActivity: new Date()
               }
             : session
-        ));
+        );
+        setSessions(errorSessions);
+        const errorCurrentSession = errorSessions.find(s => s.id === currentSessionId);
+        if (errorCurrentSession) {
+          await githubDB.update(collections.chat_sessions, currentSessionId, { messages: errorCurrentSession.messages, lastActivity: errorCurrentSession.lastActivity });
+        }
       } finally {
         setIsLoading(false);
       }
-    }, 600); // Show the thinking animation for at least 600ms
+    }, 600);
   };
 
   const generateAIResponse = async (message: string, session: ChatSession | undefined): Promise<{message: string, suggestions?: string[]}> => {
     try {
-      // Use the real Gemini API
       const apiKeys = (import.meta.env.VITE_GEMINI_API_KEYS || '').split(',').filter(key => key.trim());
       if (apiKeys.length === 0) {
         throw new Error('No Gemini API keys configured');
       }
       
-      // Use rotating API keys for load balancing
       const currentKeyIndex = Math.floor(Math.random() * apiKeys.length);
       const apiKey = apiKeys[currentKeyIndex].trim();
       
-      // Build context from previous messages
       const contextMessages = session?.messages.slice(-6).map(msg => 
         `${msg.isBot ? 'Assistant' : 'User'}: ${msg.content}`
       ).join('\n') || '';
       
-      // Enhanced system prompt with more capabilities
       const systemPrompt = `You are a sophisticated AI assistant for the CareConnect Healthcare Platform. Your primary goal is to provide comprehensive, empathetic, and accurate guidance to users, helping them navigate the platform and access the healthcare resources they need.
 
 **Platform Overview:**
@@ -347,7 +332,6 @@ ${contextMessages}
         throw new Error('No response generated');
       }
       
-      // Extract suggestions if provided
       let suggestions: string[] = [];
       const suggestionMatch = aiResponse.match(/SUGGESTIONS:\s*(.+?)(?=$|\n)/s);
       if (suggestionMatch && suggestionMatch[1]) {
@@ -356,7 +340,6 @@ ${contextMessages}
           .map(s => s.trim())
           .filter(s => s.length > 0);
         
-        // Remove suggestions section from the final response
         aiResponse = aiResponse.replace(/SUGGESTIONS:\s*(.+?)(?=$|\n)/s, '').trim();
       }
       
@@ -368,7 +351,6 @@ ${contextMessages}
     } catch (error) {
       console.error('Gemini AI call failed:', error);
       
-      // Fallback to predefined responses
       const lowerMessage = message.toLowerCase();
       let fallbackResponse = "I'm experiencing some technical difficulties right now, but I'm here to help you with finding healthcare providers, using health tools, booking appointments, learning about courses, supporting community causes, and managing your account. For immediate assistance, please contact our support team.";
       let fallbackSuggestions = [
@@ -426,32 +408,34 @@ ${contextMessages}
     URL.revokeObjectURL(url);
   };
 
-  const deleteSession = (sessionId: string) => {
-    if (sessions.length <= 1) {
-      // Don't delete the last session, create a new one instead
-      createNewSession();
-    } else {
-      setSessions(prev => prev.filter(s => s.id !== sessionId));
-      if (currentSessionId === sessionId) {
-        // Set the first available session as current
-        const remainingSessions = sessions.filter(s => s.id !== sessionId);
-        if (remainingSessions.length > 0) {
-          setCurrentSessionId(remainingSessions[0].id);
-        }
+  const deleteSession = async (sessionId: string) => {
+    await githubDB.delete(collections.chat_sessions, sessionId);
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    if (currentSessionId === sessionId) {
+      const remainingSessions = sessions.filter(s => s.id !== sessionId);
+      if (remainingSessions.length > 0) {
+        setCurrentSessionId(remainingSessions[0].id);
+      } else {
+        createNewSession();
       }
     }
     setShowSessionMenu(false);
   };
 
-  const giveFeedback = (messageId: string, feedback: 'positive' | 'negative') => {
-    setSessions(prev => prev.map(session => ({
+  const giveFeedback = async (messageId: string, feedback: 'positive' | 'negative') => {
+    const updatedSessions = sessions.map(session => ({
       ...session,
       messages: session.messages.map(msg => 
         msg.id === messageId
           ? { ...msg, feedback }
           : msg
       )
-    })));
+    }));
+    setSessions(updatedSessions);
+    const currentSession = updatedSessions.find(s => s.id === currentSessionId);
+    if (currentSession) {
+      await githubDB.update(collections.chat_sessions, currentSessionId, { messages: currentSession.messages });
+    }
   };
 
   const currentSession = getCurrentSession();

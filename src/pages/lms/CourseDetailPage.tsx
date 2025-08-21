@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { Course, CourseEnrollment, LMSService } from '../../lib/lms';
-import { dbHelpers, collections } from '../../lib/database';
+import { githubDB, collections } from '../../lib/database';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const CourseDetailPage = () => {
@@ -32,7 +32,7 @@ const CourseDetailPage = () => {
         setCourse(courseData);
 
         // Check if user is enrolled
-        const enrollments = await dbHelpers.find(collections.course_enrollments, {
+        const enrollments = await githubDB.find(collections.course_enrollments, {
           course_id: courseId,
           user_id: currentUserId
         });

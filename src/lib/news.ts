@@ -47,6 +47,10 @@ export class NewsService {
     return await githubDB.findById(collections.news_articles, articleId);
   }
 
+  static async deleteArticle(articleId: string): Promise<void> {
+    await githubDB.delete(collections.news_articles, articleId);
+  }
+
   static async subscribeToNewsletter(email: string): Promise<boolean> {
     // In a real application, this would integrate with an email marketing service.
     // For now, we'll just log the subscription.
