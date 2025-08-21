@@ -1,0 +1,178 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Theme Colors - Light Mode (Default) */
+    --color-primary: #05B34D;
+    --color-accent: #F2B91C;
+    --color-dark: #181F25;
+    --color-light: #E9FBF1;
+    --color-white: #FFFFFF;
+    --color-background: #FFFFFF;
+    --color-surface: #F8F9FA;
+    --color-text: #181F25;
+    --color-text-secondary: #6B7280;
+    --color-border: #E5E7EB;
+    --color-shadow: rgba(0, 0, 0, 0.1);
+    --gradient-background: linear-gradient(135deg, #E9FBF1 0%, #FFFFFF 100%);
+    --gradient-primary: linear-gradient(135deg, #05B34D 0%, #04A041 100%);
+    --gradient-accent: linear-gradient(135deg, #F2B91C 0%, #E6A500 100%);
+  }
+
+  .dark {
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Theme Colors - Dark Mode */
+    --color-primary: #06D455;
+    --color-accent: #FFD700;
+    --color-dark: #FFFFFF;
+    --color-light: #1F2937;
+    --color-white: #111827;
+    --color-background: #111827;
+    --color-surface: #1F2937;
+    --color-text: #F9FAFB;
+    --color-text-secondary: #D1D5DB;
+    --color-border: #374151;
+    --color-shadow: rgba(0, 0, 0, 0.3);
+    --gradient-background: linear-gradient(135deg, #1F2937 0%, #111827 100%);
+    --gradient-primary: linear-gradient(135deg, #06D455 0%, #059142 100%);
+    --gradient-accent: linear-gradient(135deg, #FFD700 0%, #F59E0B 100%);
+  }
+
+  /* Theme transition styles */
+  .theme-transition {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, fill 0.3s ease, stroke 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+  }
+
+  .theme-transition.transitioning * {
+    transition: all 0.3s ease;
+  }
+
+  /* Base styling */
+  * {
+    @apply theme-transition;
+  }
+
+  body {
+    @apply theme-transition bg-background text-text;
+  }
+
+  /* Custom theme classes */
+  .theme-light {
+    color-scheme: light;
+  }
+
+  .theme-dark {
+    color-scheme: dark;
+  }
+
+  .theme-custom {
+    color-scheme: light;
+  }
+
+  /* Accessibility enhancements for themes */
+  .accessibility-high-contrast {
+    filter: contrast(200%);
+  }
+
+  .accessibility-grayscale {
+    filter: grayscale(100%);
+  }
+
+  .accessibility-invert {
+    filter: invert(100%);
+  }
+
+  .accessibility-underline-links a {
+    text-decoration: underline !important;
+  }
+
+  .accessibility-big-cursor * {
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M2 2v28l8-8h18V2H2z" fill="black"/><path d="M3 3v24.586l6-6H27V3H3z" fill="white"/></svg>') 2 2, auto !important;
+  }
+
+  .accessibility-reading-guide {
+    position: relative;
+  }
+
+  .accessibility-reading-guide::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #ff4444;
+    z-index: 9999;
+    pointer-events: none;
+  }
+
+  .accessibility-reduced-motion * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .accessibility-focus-visible *:focus {
+    outline: 3px solid #ff4444 !important;
+    outline-offset: 2px !important;
+  }
+}
+
+@layer components {
+  /* Helper classes for theme-aware components */
+  .bg-theme-primary {
+    @apply bg-primary;
+  }
+
+  .bg-theme-surface {
+    @apply bg-surface;
+  }
+
+  .bg-theme-background {
+    @apply bg-background;
+  }
+
+  .text-theme-primary {
+    @apply text-primary;
+  }
+
+  .text-theme-text {
+    @apply text-text;
+  }
+
+  .text-theme-secondary {
+    @apply text-text-secondary;
+  }
+
+  .border-theme {
+    @apply border-border;
+  }
+}
+
+img {
+  object-position: top;
+}
+
+.fixed {
+  position: fixed;
+}
