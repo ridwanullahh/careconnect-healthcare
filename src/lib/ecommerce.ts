@@ -200,6 +200,10 @@ export class ECommerceService {
   static async updateProduct(productId: string, updates: Partial<Product>): Promise<Product> {
     return await githubDB.update(collections.products, productId, updates);
   }
+
+  static async deleteProduct(productId: string): Promise<void> {
+    await githubDB.delete(collections.products, productId);
+  }
   
   static async searchProducts(filters: {
     query?: string;

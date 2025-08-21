@@ -290,6 +290,10 @@ export class LMSService {
   static async updateCourse(courseId: string, updates: Partial<Course>): Promise<Course> {
     return await githubDB.update(collections.courses, courseId, updates);
   }
+
+  static async deleteCourse(courseId: string): Promise<void> {
+    await githubDB.delete(collections.courses, courseId);
+  }
   
   static async publishCourse(courseId: string): Promise<Course> {
     const course = await githubDB.update(collections.courses, courseId, {

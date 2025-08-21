@@ -50,6 +50,7 @@ import TermsOfServicePage from './pages/legal/TermsOfServicePage';
 import PublicDashboard from './pages/dashboard/PublicDashboard';
 import EntityDashboard from './pages/dashboard/EntityDashboard';
 import SuperAdminDashboard from './pages/dashboard/SuperAdminDashboard';
+import NewsManagementPage from './pages/dashboard/NewsManagementPage';
 
 // Floating Tools
 import AISupportAgent from './components/ui/AISupportAgent';
@@ -148,7 +149,10 @@ function App() {
                   )}
                   
                   {user.user_type === 'super_admin' && (
-                    <Route path="/super-admin/*" element={<SuperAdminDashboard />} />
+                    <>
+                      <Route path="/super-admin/*" element={<SuperAdminDashboard />} />
+                      <Route path="/super-admin/news" element={<NewsManagementPage />} />
+                    </>
                   )}
                   
                   <Route path="*" element={<Navigate to={getDashboardPath(user.user_type)} replace />} />

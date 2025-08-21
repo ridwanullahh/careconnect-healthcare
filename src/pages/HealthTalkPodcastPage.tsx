@@ -19,7 +19,7 @@ import {
   Mic,
   TrendingUp
 } from 'lucide-react';
-import { dbHelpers, collections } from '../lib/database';
+import { githubDB, collections } from '../lib/database';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 interface PodcastEpisode {
@@ -108,64 +108,7 @@ const HealthTalkPodcastPage: React.FC = () => {
   const loadPodcastData = async () => {
     setIsLoading(true);
     try {
-      // Mock podcast episodes (in real app, fetch from database)
-      const mockEpisodes: PodcastEpisode[] = [
-        {
-          id: '1',
-          title: 'Daily Wellness Check: Heart Health Basics',
-          description: 'Understanding cardiovascular health, risk factors, and simple prevention strategies everyone should know.',
-          audioUrl: '/audio/podcasts/heart-health-basics.mp3',
-          duration: 300, // 5 minutes
-          publishedAt: '2024-01-20',
-          category: 'general',
-          host: {
-            name: 'Dr. Sarah Chen',
-            credentials: 'MD, Cardiologist',
-            avatar: '/images/hosts/dr-chen.jpg'
-          },
-          transcript: 'Welcome to today\'s HealthTalk! I\'m Dr. Sarah Chen, and today we\'re discussing heart health basics...',
-          tags: ['heart health', 'prevention', 'wellness'],
-          playCount: 2847,
-          likes: 234,
-          isLive: false
-        },
-        {
-          id: '2',
-          title: 'Nutrition Minute: Building Healthy Eating Habits',
-          description: 'Simple, science-based tips for developing sustainable healthy eating patterns that fit your lifestyle.',
-          audioUrl: '/audio/podcasts/healthy-eating-habits.mp3',
-          duration: 295,
-          publishedAt: '2024-01-19',
-          category: 'nutrition',
-          host: {
-            name: 'Lisa Rodriguez, RD',
-            credentials: 'Registered Dietitian',
-            avatar: '/images/hosts/lisa-rodriguez.jpg'
-          },
-          tags: ['nutrition', 'diet', 'healthy habits'],
-          playCount: 1923,
-          likes: 156,
-          isLive: false
-        },
-        {
-          id: '3',
-          title: 'Mental Wellness Today: Managing Daily Stress',
-          description: 'Quick, effective strategies for managing everyday stress and maintaining mental wellness in busy times.',
-          audioUrl: '/audio/podcasts/daily-stress-management.mp3',
-          duration: 318,
-          publishedAt: '2024-01-18',
-          category: 'mental-health',
-          host: {
-            name: 'Dr. Michael Thompson',
-            credentials: 'PhD, Clinical Psychologist',
-            avatar: '/images/hosts/dr-thompson.jpg'
-          },
-          tags: ['stress management', 'mental health', 'wellness'],
-          playCount: 3156,
-          likes: 287,
-          isLive: false
-        }
-      ];
+      let fetchedEpisodes = await githubDB.find(collections.podcasts, {});
 
       const mockLiveSessions: LiveSession[] = [
         {
@@ -184,12 +127,11 @@ const HealthTalkPodcastPage: React.FC = () => {
         }
       ];
 
-      let filteredEpisodes = mockEpisodes;
       if (selectedCategory) {
-        filteredEpisodes = filteredEpisodes.filter(ep => ep.category === selectedCategory);
+        fetchedEpisodes = fetchedEpisodes.filter(ep => ep.category === selectedCategory);
       }
 
-      setEpisodes(filteredEpisodes);
+      setEpisodes(fetchedEpisodes);
       setLiveSessions(mockLiveSessions);
     } catch (error) {
       console.error('Failed to load podcast data:', error);

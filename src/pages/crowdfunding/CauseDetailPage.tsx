@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { Cause } from '../../lib/crowdfunding';
-import { getCause } from '../../lib/database';
+import { githubDB, collections } from '../../lib/database';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const CauseDetailPage = () => {
@@ -21,7 +21,7 @@ const CauseDetailPage = () => {
       }
 
       try {
-        const causeData = await getCause(causeId);
+        const causeData = await githubDB.findById(collections.causes, causeId);
         setCause(causeData);
       } catch (err) {
         setError('Failed to load cause details');

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Course, CourseEnrollment, Certificate, LMSService } from '../../lib/lms';
-import { dbHelpers, collections } from '../../lib/database';
+import { githubDB, collections } from '../../lib/database';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const CourseCompletionPage = () => {
@@ -28,8 +28,8 @@ const CourseCompletionPage = () => {
       try {
         // Load course and enrollment data
         const [courseData, enrollmentData] = await Promise.all([
-          dbHelpers.findById(collections.courses, courseId),
-          dbHelpers.find(collections.course_enrollments, {
+          githubDB.findById(collections.courses, courseId),
+          githubDB.find(collections.course_enrollments, {
             course_id: courseId,
             user_id: currentUserId
           })
@@ -50,7 +50,7 @@ const CourseCompletionPage = () => {
           
           // Load certificate if course provides one
           if (courseData.provides_certificate) {
-            const certificates = await dbHelpers.find(collections.certificates, {
+            const certificates = await githubDB.find(collections.certificates, {
               course_id: courseId,
               user_id: currentUserId
             });

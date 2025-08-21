@@ -1,5 +1,5 @@
 // Multi-Payment Gateway Integration for CareConnect
-import { dbHelpers, collections } from './database';
+import { githubDB, collections } from './database';
 
 // Payment Gateway Types
 export enum PaymentGateway {
@@ -119,7 +119,7 @@ export class PaymentService {
     const netAmount = paymentData.amount - platformFee - gatewayFee;
     
     // Create payment record
-    const payment = await dbHelpers.create(collections.payments, {
+    const payment = await githubDB.insert(collections.payments, {
       ...paymentData,
       gateway,
       gateway_fee: gatewayFee,
@@ -152,7 +152,7 @@ export class PaymentService {
     }
     
     // Update payment with gateway response
-    await dbHelpers.update(collections.payments, payment.id, {
+    await githubDB.update(collections.payments, payment.id, {
       gateway_transaction_id: gatewayResponse.transaction_id,
       gateway_response: gatewayResponse,
       status: PaymentStatus.PROCESSING
@@ -166,7 +166,7 @@ export class PaymentService {
   
   // Verify payment
   static async verifyPayment(paymentId: string, gatewayReference: string) {
-    const payment = await dbHelpers.findById(collections.payments, paymentId);
+    const payment = await githubDB.findById(collections.payments, paymentId);
     if (!payment) {
       throw new Error('Payment not found');
     }
@@ -186,7 +186,7 @@ export class PaymentService {
     }
     
     if (verified) {
-      await dbHelpers.update(collections.payments, paymentId, {
+      await githubDB.update(collections.payments, paymentId, {
         status: PaymentStatus.COMPLETED,
         completed_at: new Date().toISOString()
       });
@@ -200,7 +200,7 @@ export class PaymentService {
   
   // Process refund
   static async processRefund(paymentId: string, amount?: number, reason?: string) {
-    const payment = await dbHelpers.findById(collections.payments, paymentId);
+    const payment = await githubDB.findById(collections.payments, paymentId);
     if (!payment || payment.status !== PaymentStatus.COMPLETED) {
       throw new Error('Payment cannot be refunded');
     }
@@ -224,7 +224,7 @@ export class PaymentService {
     if (refunded) {
       const newStatus = refundAmount === payment.amount ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED;
       
-      await dbHelpers.update(collections.payments, paymentId, {
+      await githubDB.update(collections.payments, paymentId, {
         status: newStatus,
         refunded_at: new Date().toISOString()
       });
@@ -452,7 +452,7 @@ export class PaymentService {
   }
   
   private static async getPaymentConfig(entityId: string): Promise<PaymentConfig> {
-    const configs = await dbHelpers.find(collections.payment_methods, { entity_id: entityId });
+    const configs = await githubDB.find(collections.payment_methods, { entity_id: entityId });
     
     if (configs.length === 0) {
       // Return default configuration
@@ -482,7 +482,7 @@ export class PaymentService {
     switch (payment.type) {
       case PaymentType.ONE_TIME:
         if (payment.order_id) {
-          await dbHelpers.update(collections.orders, payment.order_id, {
+          await githubDB.update(collections.orders, payment.order_id, {
             payment_status: 'completed',
             status: 'confirmed'
           });
@@ -491,7 +491,7 @@ export class PaymentService {
         
       case PaymentType.DONATION:
         if (payment.donation_id) {
-          await dbHelpers.update(collections.donations, payment.donation_id, {
+          await githubDB.update(collections.donations, payment.donation_id, {
             payment_status: 'completed',
             status: 'confirmed'
           });
@@ -500,7 +500,7 @@ export class PaymentService {
         
       case PaymentType.SUBSCRIPTION:
         if (payment.subscription_id) {
-          await dbHelpers.update(collections.subscriptions, payment.subscription_id, {
+          await githubDB.update(collections.subscriptions, payment.subscription_id, {
             status: 'active',
             last_payment_at: new Date().toISOString()
           });
@@ -514,7 +514,7 @@ export class PaymentService {
   
   private static async sendPaymentConfirmation(payment: Payment) {
     // Send email/SMS notifications
-    await dbHelpers.create(collections.notifications, {
+    await githubDB.insert(collections.notifications, {
       user_id: payment.payer_id,
       type: 'payment_confirmation',
       title: 'Payment Successful',

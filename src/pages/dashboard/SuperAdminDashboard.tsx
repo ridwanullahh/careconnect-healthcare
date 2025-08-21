@@ -252,6 +252,7 @@ const SuperAdminDashboard = () => {
     { name: 'Entities', path: 'entities' },
     { name: 'Verifications', path: 'verifications' },
     { name: 'Content', path: 'content' },
+    { name: 'News', path: 'news' },
     { name: 'Reports', path: 'reports' },
     { name: 'Settings', path: 'settings' }
   ];

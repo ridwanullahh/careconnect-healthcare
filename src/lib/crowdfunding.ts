@@ -13,6 +13,23 @@ export interface Cause {
 }
 
 export class CrowdfundingService {
+  static async createCause(causeData: Partial<Cause>): Promise<Cause> {
+    const cause = await githubDB.insert(collections.causes, {
+      ...causeData,
+      current_amount: 0,
+      is_active: true,
+    });
+    return cause;
+  }
+
+  static async updateCause(causeId: string, updates: Partial<Cause>): Promise<Cause> {
+    return await githubDB.update(collections.causes, causeId, updates);
+  }
+
+  static async deleteCause(causeId: string): Promise<void> {
+    await githubDB.delete(collections.causes, causeId);
+  }
+
   static async searchCauses(filters: {
     query?: string;
     category?: string;

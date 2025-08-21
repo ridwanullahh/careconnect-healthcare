@@ -28,13 +28,38 @@ export interface BlogPost {
 }
 
 export class BlogService {
+  static async createPost(postData: Partial<BlogPost>): Promise<BlogPost> {
+    const post = await githubDB.insert(collections.blog_posts, {
+      ...postData,
+      views: 0,
+      likes: 0,
+      commentsCount: 0,
+      isFeatured: false,
+      publishedAt: new Date().toISOString(),
+    });
+    return post;
+  }
+
+  static async updatePost(postId: string, updates: Partial<BlogPost>): Promise<BlogPost> {
+    return await githubDB.update(collections.blog_posts, postId, { ...updates, updatedAt: new Date().toISOString() });
+  }
+
+  static async deletePost(postId: string): Promise<void> {
+    await githubDB.delete(collections.blog_posts, postId);
+  }
+
   static async getPosts(filters: {
     query?: string;
     category?: string;
     tag?: string;
     sortBy?: 'newest' | 'popular' | 'likes' | 'comments';
+    entityId?: string;
   }): Promise<BlogPost[]> {
     let posts = await githubDB.find(collections.blog_posts, {});
+
+    if (filters.entityId) {
+      posts = posts.filter(post => post.entityId === filters.entityId);
+    }
 
     if (filters.query) {
       const query = filters.query.toLowerCase();
