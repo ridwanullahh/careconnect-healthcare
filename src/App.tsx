@@ -4,6 +4,7 @@ import { useAuth } from './lib/auth';
 import { initializeDatabase } from './lib/database';
 import { initializeAllHealthTools } from './lib/health-tools';
 import { initializeTheme } from './lib/theme';
+import { LMSService } from './lib/lms';
 
 // Layout Components
 import Header from './components/layout/Header';
@@ -41,6 +42,10 @@ import CreateForumPostPage from './pages/community/CreateForumPostPage';
 import HealthNewsFeedPage from './pages/HealthNewsFeedPage';
 import HealthTalkPodcastPage from './pages/HealthTalkPodcastPage';
 import HealthNewsArticlePage from './pages/HealthNewsArticlePage';
+import WeeklyTipsPage from './pages/WeeklyTipsPage';
+import TimelessFactsPage from './pages/TimelessFactsPage';
+import JobsPage from './pages/JobsPage';
+import JobDetailPage from './pages/JobDetailPage';
 import HelpCenterPage from './pages/support/HelpCenterPage';
 import ContactPage from './pages/support/ContactPage';
 import PrivacyPolicyPage from './pages/legal/PrivacyPolicyPage';
@@ -51,10 +56,15 @@ import PublicDashboard from './pages/dashboard/PublicDashboard';
 import EntityDashboard from './pages/dashboard/EntityDashboard';
 import SuperAdminDashboard from './pages/dashboard/SuperAdminDashboard';
 import NewsManagementPage from './pages/dashboard/NewsManagementPage';
+import WeeklyTipsManagementPage from './pages/dashboard/WeeklyTipsManagementPage';
+import TimelessFactsManagementPage from './pages/dashboard/TimelessFactsManagementPage';
+import ForumManagementPage from './pages/dashboard/ForumManagementPage';
+import JobManagementPage from './pages/dashboard/JobManagementPage';
 
 // Floating Tools
 import AISupportAgent from './components/ui/AISupportAgent';
 import AccessibilityTools from './components/ui/AccessibilityTools';
+import ConsentBanner from './components/ui/ConsentBanner';
 
 // Loading Component
 import LoadingSpinner from './components/ui/LoadingSpinner';
@@ -129,6 +139,12 @@ function App() {
               <Route path="/health-news-feed" element={<HealthNewsFeedPage />} />
               <Route path="/health-news/:articleId" element={<HealthNewsArticlePage />} />
               <Route path="/health-talk-podcast" element={<HealthTalkPodcastPage />} />
+              <Route path="/weekly-tips" element={<WeeklyTipsPage />} />
+              <Route path="/timeless-facts" element={<TimelessFactsPage />} />
+              <Route path="/jobs" element={<JobsPage />} />
+              <Route path="/jobs/:jobId" element={<JobDetailPage />} />
+              <Route path="/blog" element={<BlogPage />} />
+              <Route path="/blog/:postId" element={<BlogPostPage />} />
               <Route path="/help" element={<HelpCenterPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/privacy" element={<PrivacyPolicyPage />} />
@@ -145,13 +161,22 @@ function App() {
                   )}
                   
                   {(['health_center', 'pharmacy', 'practitioner'].includes(user.user_type)) && (
-                    <Route path="/admin/*" element={<EntityDashboard />} />
+                    <>
+                      <Route path="/admin/*" element={<EntityDashboard />} />
+                      {user.user_type === 'health_center' && (
+                        <Route path="/admin/jobs" element={<JobManagementPage />} />
+                      )}
+                    </>
                   )}
                   
                   {user.user_type === 'super_admin' && (
                     <>
                       <Route path="/super-admin/*" element={<SuperAdminDashboard />} />
                       <Route path="/super-admin/news" element={<NewsManagementPage />} />
+                      <Route path="/super-admin/weekly-tips" element={<WeeklyTipsManagementPage />} />
+                      <Route path="/super-admin/timeless-facts" element={<TimelessFactsManagementPage />} />
+                      <Route path="/super-admin/forum" element={<ForumManagementPage />} />
+                      <Route path="/super-admin/jobs" element={<JobManagementPage />} />
                     </>
                   )}
                   
@@ -169,6 +194,9 @@ function App() {
         {/* Floating Tools */}
         <AISupportAgent />
         <AccessibilityTools />
+        
+        {/* Consent & Cookie Banner */}
+        <ConsentBanner />
       </div>
     </Router>
   );

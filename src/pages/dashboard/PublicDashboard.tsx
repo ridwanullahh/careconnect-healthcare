@@ -20,10 +20,10 @@ const OverviewSection = () => {
       if (!user) return;
       try {
         const [appointments, courses, tools, donations] = await Promise.all([
-          githubDB.find(collections.bookings, { userId: user.id }),
-          githubDB.find(collections.course_enrollments, { userId: user.id }),
-          githubDB.find(collections.tool_results, { userId: user.id }),
-          githubDB.find(collections.donations, { userId: user.id }),
+          githubDB.find(collections.bookings, { patient_id: user.id }),
+          githubDB.find(collections.course_enrollments, { user_id: user.id }),
+          githubDB.find(collections.tool_results, { user_id: user.id }),
+          githubDB.find(collections.donations, { user_id: user.id }),
         ]);
         setStats({
           appointments: appointments.length,
@@ -205,7 +205,7 @@ const AppointmentsSection = () => {
     const fetchAppointments = async () => {
       if (!user) return;
       try {
-        const userAppointments = await githubDB.find(collections.bookings, { userId: user.id });
+        const userAppointments = await githubDB.find(collections.bookings, { patient_id: user.id });
         setAppointments(userAppointments);
       } catch (error) {
         console.error("Failed to fetch appointments:", error);
@@ -296,7 +296,7 @@ const CoursesSection = () => {
     const fetchCourses = async () => {
       if (!user) return;
       try {
-        const userEnrollments = await githubDB.find(collections.course_enrollments, { userId: user.id });
+        const userEnrollments = await githubDB.find(collections.course_enrollments, { user_id: user.id });
         setEnrollments(userEnrollments);
 
         if (userEnrollments.length > 0) {
@@ -355,7 +355,7 @@ const OrdersSection = () => {
     const fetchOrders = async () => {
       if (!user) return;
       try {
-        const userOrders = await githubDB.find(collections.orders, { userId: user.id });
+        const userOrders = await githubDB.find(collections.orders, { user_id: user.id });
         setOrders(userOrders);
       } catch (error) {
         console.error("Failed to fetch orders:", error);
@@ -401,7 +401,7 @@ const DonationsSection = () => {
     const fetchDonations = async () => {
       if (!user) return;
       try {
-        const userDonations = await githubDB.find(collections.donations, { userId: user.id });
+        const userDonations = await githubDB.find(collections.donations, { user_id: user.id });
         setDonations(userDonations);
       } catch (error) {
         console.error("Failed to fetch donations:", error);

@@ -76,7 +76,59 @@ export const collections = {
   // Admin
   audit_logs: 'audit_logs',
   feature_flags: 'feature_flags',
-  system_settings: 'system_settings'
+  system_settings: 'system_settings',
+  
+  // Additional collections for production completeness
+  booking_reminders: 'booking_reminders',
+  newsletter_subscriptions: 'newsletter_subscriptions',
+  news_sources: 'news_sources',
+  news_articles: 'news_articles',
+  verification_queue: 'verification_queue',
+  moderation_queue: 'moderation_queue',
+  comments: 'comments',
+  user_preferences: 'user_preferences',
+  encrypted_keys: 'encrypted_keys',
+  activity_feed: 'activity_feed',
+  
+  // New content collections
+  weekly_tips: 'weekly_tips',
+  timeless_facts: 'timeless_facts',
+  forum_questions: 'forum_questions',
+  forum_answers: 'forum_answers',
+  forum_categories: 'forum_categories',
+  
+  // Job management collections
+  job_postings: 'job_postings',
+  job_applications: 'job_applications',
+  job_categories: 'job_categories',
+  job_saved: 'job_saved',
+  job_alerts: 'job_alerts',
+  
+  // Hospital Management System collections
+  patients: 'patients',
+  patient_identifiers: 'patient_identifiers',
+  patient_entity_links: 'patient_entity_links',
+  encounters: 'encounters',
+  vitals: 'vitals',
+  conditions: 'conditions',
+  allergies: 'allergies',
+  medication_requests: 'medication_requests',
+  medication_dispenses: 'medication_dispenses',
+  lab_orders: 'lab_orders',
+  lab_results: 'lab_results',
+  imaging_orders: 'imaging_orders',
+  documents: 'documents',
+  care_plans: 'care_plans',
+  referrals: 'referrals',
+  bed_management: 'bed_management',
+  staff_schedules: 'staff_schedules',
+  triage_notes: 'triage_notes',
+  pharmacy_inventory: 'pharmacy_inventory',
+  pharmacy_orders: 'pharmacy_orders',
+  insurance_claims: 'insurance_claims',
+  billing_items: 'billing_items',
+  consents: 'consents',
+  access_grants: 'access_grants'
 };
 
 // Auto-initialize all collections
@@ -96,3 +148,4 @@ export const initializeDatabase = async () => {
 };
 
 export { githubDB };
+export const dbHelpers = githubDB; // Alias for backward compatibility
