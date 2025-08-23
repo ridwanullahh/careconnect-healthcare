@@ -20,7 +20,12 @@ import {
   Moon,
   Settings,
   Headphones,
-  Newspaper
+  Newspaper,
+  Sparkles,
+  Shield,
+  Star,
+  Zap,
+  Briefcase
 } from 'lucide-react';
 import SearchModal from '../ui/SearchModal';
 import ThemeToggle from '../ui/ThemeToggle';
@@ -33,6 +38,8 @@ const Header: React.FC = () => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [showMegaMenu, setShowMegaMenu] = useState<string | null>(null);
+  const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [showGetStartedMenu, setShowGetStartedMenu] = useState(false);
 
   // Setup keyboard shortcut for search
   useEffect(() => {
@@ -67,9 +74,9 @@ const Header: React.FC = () => {
   };
 
   const navigation = [
-    { 
-      name: 'Healthcare Directory', 
-      href: '/directory', 
+    {
+      name: 'Directory',
+      href: '/directory',
       icon: Stethoscope,
       megaMenu: 'directory',
       items: [
@@ -83,10 +90,10 @@ const Header: React.FC = () => {
         { name: 'List View', href: '/directory?view=list' },
       ]
     },
-    { 
-      name: 'Health Tools', 
-      href: '/health-tools', 
-      icon: Heart,
+    {
+      name: 'Tools',
+      href: '/health-tools',
+      icon: Zap,
       megaMenu: 'tools',
       items: [
         { name: 'All Health Tools', href: '/health-tools' },
@@ -99,48 +106,81 @@ const Header: React.FC = () => {
         { name: 'Pregnancy & Family', href: '/health-tools?category=maternal_health' },
       ]
     },
-    { 
-      name: 'Courses & Learning', 
-      href: '/courses', 
+    {
+      name: 'Resources',
+      href: '/courses',
       icon: GraduationCap,
-      megaMenu: 'courses',
+      megaMenu: 'resources',
       items: [
-        { name: 'Browse All Courses', href: '/courses' },
-        ...(user && ['health_center', 'pharmacy', 'practitioner'].includes(user.user_type) 
-          ? [{ name: 'Create Course', href: '/courses/create' }] 
+        { name: 'Health Courses', href: '/courses' },
+        ...(user && ['health_center', 'pharmacy', 'practitioner'].includes(user.user_type)
+          ? [{ name: 'Create Course', href: '/courses/create' }]
           : []),
-        { name: 'Health Education', href: '/courses?category=Medical%20Fundamentals' },
-        { name: 'Patient Care', href: '/courses?category=Patient%20Care' },
-        { name: 'Mental Health', href: '/courses?category=Mental%20Health' },
-        { name: 'Healthcare Technology', href: '/courses?category=Healthcare%20Technology' },
-        { name: 'First Aid & Emergency', href: '/courses?category=Emergency%20Medicine' },
-        { name: 'Certifications', href: '/courses?type=certification' },
-        { name: 'Free Courses', href: '/courses?price=free' },
+        { name: 'Blog Articles', href: '/blog' },
+        { name: 'HealthTalk Podcast', href: '/health-talk-podcast' },
+        { name: 'Health News', href: '/health-news-feed' },
+        { name: 'Weekly Tips', href: '/weekly-tips' },
+        { name: 'Timeless Facts', href: '/timeless-facts' },
+        { name: 'Q&A Community', href: '/community' },
       ]
     },
-    { 
-      name: 'Community', 
-      href: '/community', 
+    {
+      name: 'Community',
+      href: '/community',
       icon: Heart,
       megaMenu: 'community',
       items: [
+        { name: 'Q&A Forum', href: '/community' },
+        { name: 'Ask a Question', href: '/community/new' },
         { name: 'Healthcare Causes', href: '/causes' },
-        { name: 'Forums & Groups', href: '/community' },
-        { name: 'Events Calendar', href: '/community/events' },
         { name: 'Volunteer Opportunities', href: '/causes?type=volunteer' },
-        { name: 'Support Groups', href: '/community/support-groups' },
-        { name: 'HealthTalk Podcast', href: '/health-talk-podcast' },
-        { name: 'Health News Feed', href: '/health-news-feed' },
-        { name: 'Success Stories', href: '/community/stories' },
+        { name: 'Featured Questions', href: '/community?tab=featured' },
+        { name: 'Trending Topics', href: '/community?tab=trending' },
+        { name: 'Unanswered Questions', href: '/community?tab=unanswered' },
+      ]
+    },
+    {
+      name: 'Jobs',
+      href: '/jobs',
+      icon: Briefcase,
+      megaMenu: 'jobs',
+      items: [
+        { name: 'Browse All Jobs', href: '/jobs' },
+        { name: 'Nursing Jobs', href: '/jobs?category=nursing' },
+        { name: 'Doctor Positions', href: '/jobs?category=medical-doctors' },
+        { name: 'Allied Health', href: '/jobs?category=allied-health' },
+        { name: 'Administration', href: '/jobs?category=administration' },
+        { name: 'Remote Jobs', href: '/jobs?location=remote' },
+        { name: 'Full-time', href: '/jobs?type=full_time' },
+        { name: 'Part-time', href: '/jobs?type=part_time' },
+        ...(user && user.user_type === 'health_center'
+          ? [{ name: 'Post a Job', href: '/dashboard/jobs/create' }]
+          : []),
+      ]
+    },
+    {
+      name: 'Shop',
+      href: '/shop',
+      icon: ShoppingCart,
+      megaMenu: 'shop',
+      items: [
+        { name: 'All Products', href: '/shop' },
+        { name: 'Health Supplements', href: '/shop?category=supplements' },
+        { name: 'Medical Equipment', href: '/shop?category=equipment' },
+        { name: 'Wellness Products', href: '/shop?category=wellness' },
+        { name: 'Pharmacy', href: '/shop?category=pharmacy' },
+        { name: 'Health Monitoring', href: '/shop?category=monitoring' },
+        { name: 'Special Offers', href: '/shop?type=special-offers' },
+        { name: 'New Arrivals', href: '/shop?sort=newest' },
       ]
     },
   ];
 
   return (
     <>
-      <header className="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
+      <header className="bg-gradient-to-r from-white via-white to-gray-50/50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800/50 shadow-lg border-b border-gray-200/60 dark:border-gray-700/60 backdrop-blur-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex justify-between items-center h-18">
             {/* Logo */}
             <div className="flex items-center">
               <Link to="/" className="flex items-center space-x-2">
@@ -159,9 +199,11 @@ const Header: React.FC = () => {
                     <div className="relative">
                         <button
                             onClick={() => setIsSearchModalOpen(true)}
-                            className="p-2 rounded-full text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                            className="group relative p-3 rounded-2xl text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gradient-to-r hover:from-primary/10 hover:to-primary/5 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
                         >
-                            <Search className="h-6 w-6" aria-hidden="true" />
+                            <Search className="h-6 w-6 transition-transform duration-200 group-hover:scale-110" aria-hidden="true" />
+                            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary/0 to-primary/0 group-hover:from-primary/5 group-hover:to-primary/10 transition-all duration-300"></div>
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 animate-pulse"></div>
                         </button>
                     </div>
                 </div>
@@ -174,31 +216,55 @@ const Header: React.FC = () => {
                 return (
                   <div key={item.name} className="relative">
                     <button
-                      className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${showMegaMenu === item.megaMenu ? 'text-primary bg-light dark:bg-gray-800' : 'text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800'}`}
+                      className={`group flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${showMegaMenu === item.megaMenu ? 'text-primary bg-gradient-to-r from-primary/10 to-primary/5 shadow-md dark:bg-gray-800' : 'text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 hover:shadow-sm'}`}
                       onClick={() => handleMegaMenuToggle(item.megaMenu)}
                       aria-expanded={showMegaMenu === item.megaMenu}
                     >
-                      <Icon className="w-4 h-4" />
-                      <span>{item.name}</span>
+                      <Icon className={`w-4 h-4 transition-transform duration-200 group-hover:scale-110 ${showMegaMenu === item.megaMenu ? 'text-primary' : 'text-gray-500 group-hover:text-primary'}`} />
+                      <span className="relative">
+                        {item.name}
+                        {showMegaMenu === item.megaMenu && (
+                          <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-primary/80 rounded-full"></div>
+                        )}
+                      </span>
                     </button>
                     
                     {/* Mega Menu */}
                     {showMegaMenu === item.megaMenu && item.items && (
-                      <div 
-                        className="absolute left-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50"
+                      <div
+                        className="absolute left-0 mt-3 w-72 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200/80 dark:border-gray-700/80 backdrop-blur-sm z-50 transform transition-all duration-300 ease-out"
                         onMouseLeave={() => handleMegaMenuToggle(null)}
+                        style={{
+                          animation: 'fadeInScale 0.2s ease-out forwards'
+                        }}
                       >
-                        <div className="p-4 grid grid-cols-1 gap-1">
-                          {item.items.map((subItem) => (
-                            <Link
-                              key={subItem.name}
-                              to={subItem.href}
-                              className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-700 dark:text-gray-300 hover:text-primary transition-colors"
-                              onClick={() => setShowMegaMenu(null)}
-                            >
-                              {subItem.name}
-                            </Link>
-                          ))}
+                        <div className="p-6">
+                          <div className="flex items-center space-x-2 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+                            <Icon className="w-5 h-5 text-primary" />
+                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{item.name}</h3>
+                          </div>
+                          <div className="grid grid-cols-1 gap-2">
+                            {item.items.map((subItem, index) => (
+                              <Link
+                                key={subItem.name}
+                                to={subItem.href}
+                                className="group flex items-center space-x-3 px-4 py-3 hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 rounded-xl text-gray-700 dark:text-gray-300 hover:text-primary transition-all duration-200 transform hover:translate-x-1 hover:shadow-sm"
+                                onClick={() => setShowMegaMenu(null)}
+                                style={{
+                                  animationDelay: `${index * 50}ms`,
+                                  animation: 'fadeInUp 0.3s ease-out forwards'
+                                }}
+                              >
+                                <div className="w-2 h-2 rounded-full bg-primary/20 group-hover:bg-primary/40 transition-colors duration-200"></div>
+                                <span className="text-sm font-medium">{subItem.name}</span>
+                                <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                  <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                </div>
+                              </Link>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -209,9 +275,86 @@ const Header: React.FC = () => {
 
             {/* User Actions */}
             <div className="flex items-center space-x-4">
-              {/* Theme Toggle */}
-              <ThemeToggle className="hidden sm:block" />
-              
+              {/* Consolidated Theme Toggle with Mega Dropdown */}
+              <div className="relative hidden sm:block">
+                <button
+                  onClick={() => setShowThemeMenu(!showThemeMenu)}
+                  className="group relative p-3 rounded-2xl text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gradient-to-r hover:from-primary/10 hover:to-primary/5 dark:hover:bg-gray-800 transition-all duration-300 transform hover:scale-105 hover:shadow-lg hover:shadow-primary/20"
+                  aria-label="Theme Settings"
+                >
+                  {theme === 'dark' ? (
+                    <Moon className="h-5 w-5 transition-all duration-300 group-hover:scale-110 text-gray-700 dark:text-gray-300 group-hover:text-primary" />
+                  ) : theme === 'light' ? (
+                    <Sun className="h-5 w-5 transition-all duration-300 group-hover:scale-110 text-gray-700 dark:text-gray-300 group-hover:text-yellow-500" />
+                  ) : (
+                    <Settings className="h-5 w-5 transition-all duration-300 group-hover:scale-110 text-gray-700 dark:text-gray-300 group-hover:text-primary" />
+                  )}
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary/0 to-primary/0 group-hover:from-primary/5 group-hover:to-primary/10 transition-all duration-300"></div>
+                </button>
+
+                {/* Theme Mega Menu */}
+                {showThemeMenu && (
+                  <div
+                    className="absolute right-0 mt-3 w-72 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200/80 dark:border-gray-700/80 backdrop-blur-sm z-50 transform transition-all duration-300 ease-out"
+                    style={{
+                      animation: 'fadeInScale 0.2s ease-out forwards'
+                    }}
+                  >
+                    <div className="p-6">
+                      <div className="flex items-center space-x-2 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+                        <Settings className="w-5 h-5 text-primary" />
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Display Settings</h3>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={() => {
+                            // For now, just toggle theme - in a real implementation this would set light theme
+                            toggleTheme();
+                            setShowThemeMenu(false);
+                          }}
+                          className={`group flex flex-col items-center space-y-2 px-4 py-4 rounded-xl text-gray-700 dark:text-gray-300 transition-all duration-200 transform hover:scale-105 hover:shadow-sm ${theme === 'light' ? 'bg-yellow-100 text-yellow-700 shadow-md' : 'hover:bg-gradient-to-r hover:from-yellow-50 hover:to-yellow-100 dark:hover:bg-gray-700/50 hover:text-yellow-600'}`}
+                        >
+                          <Sun className={`w-6 h-6 transition-transform duration-200 group-hover:scale-110 ${theme === 'light' ? 'text-yellow-600' : 'text-yellow-500'}`} />
+                          <span className="text-xs font-medium">Light</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            // For now, just toggle theme - in a real implementation this would set dark theme
+                            toggleTheme();
+                            setShowThemeMenu(false);
+                          }}
+                          className={`group flex flex-col items-center space-y-2 px-4 py-4 rounded-xl text-gray-700 dark:text-gray-300 transition-all duration-200 transform hover:scale-105 hover:shadow-sm ${theme === 'dark' ? 'bg-gray-800 text-white shadow-md' : 'hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 dark:hover:bg-gray-700/50 hover:text-gray-600'}`}
+                        >
+                          <Moon className={`w-6 h-6 transition-transform duration-200 group-hover:scale-110 ${theme === 'dark' ? 'text-white' : 'text-gray-600'}`} />
+                          <span className="text-xs font-medium">Dark</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            // For now, just toggle theme - in a real implementation this would set system theme
+                            toggleTheme();
+                            setShowThemeMenu(false);
+                          }}
+                          className={`group flex flex-col items-center space-y-2 px-4 py-4 rounded-xl text-gray-700 dark:text-gray-300 transition-all duration-200 transform hover:scale-105 hover:shadow-sm ${theme === 'system' ? 'bg-blue-100 text-blue-700 shadow-md' : 'hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 dark:hover:bg-gray-700/50 hover:text-blue-600'}`}
+                        >
+                          <Settings className={`w-6 h-6 transition-transform duration-200 group-hover:scale-110 ${theme === 'system' ? 'text-blue-600' : 'text-blue-500'}`} />
+                          <span className="text-xs font-medium">Auto</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            // High contrast theme functionality would go here
+                            setShowThemeMenu(false);
+                          }}
+                          className="group flex flex-col items-center space-y-2 px-4 py-4 hover:bg-gradient-to-r hover:from-purple-50 hover:to-purple-100 dark:hover:bg-gray-700/50 rounded-xl text-gray-700 dark:text-gray-300 hover:text-purple-600 transition-all duration-200 transform hover:scale-105 hover:shadow-sm"
+                        >
+                          <Shield className="w-6 h-6 transition-transform duration-200 group-hover:scale-110 text-purple-500" />
+                          <span className="text-xs font-medium">High Contrast</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {user ? (
                 <>
                   {/* Notifications */}
@@ -292,47 +435,122 @@ const Header: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <div className="flex items-center space-x-3">
-                  <Link
-                    to="/login"
-                    className="text-gray-700 dark:text-gray-300 hover:text-primary font-medium"
+                <div className="relative">
+                  <button
+                    onClick={() => setShowGetStartedMenu(!showGetStartedMenu)}
+                    className="group relative bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 font-medium transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
+                    aria-expanded={showGetStartedMenu}
+                    aria-haspopup="true"
                   >
-                    Sign In
-                  </Link>
-                  <Link
-                    to="/register"
-                    className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 font-medium transition-colors"
-                  >
-                    Get Started
-                  </Link>
+                    <span className="flex items-center space-x-2">
+                      <span>Get Started</span>
+                      <Sparkles className="w-4 h-4 transition-transform duration-300 group-hover:rotate-12" />
+                    </span>
+                  </button>
+
+                  {/* Get Started Mega Menu */}
+                  {showGetStartedMenu && (
+                    <div
+                      className="absolute right-0 mt-3 w-72 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200/80 dark:border-gray-700/80 backdrop-blur-sm z-50 transform transition-all duration-300 ease-out"
+                      style={{
+                        animation: 'fadeInScale 0.2s ease-out forwards'
+                      }}
+                    >
+                      <div className="p-6">
+                        <div className="flex items-center space-x-2 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+                          <User className="w-5 h-5 text-primary" />
+                          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Account Access</h3>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3">
+                          <Link
+                            to="/login"
+                            className="group flex items-center space-x-3 px-4 py-3 hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 rounded-xl text-gray-700 dark:text-gray-300 hover:text-primary transition-all duration-200 transform hover:translate-x-1 hover:shadow-sm"
+                            onClick={() => setShowGetStartedMenu(false)}
+                          >
+                            <div className="w-2 h-2 rounded-full bg-primary/20 group-hover:bg-primary/40 transition-colors duration-200"></div>
+                            <span className="text-sm font-medium">Sign In</span>
+                            <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </div>
+                          </Link>
+                          <Link
+                            to="/register"
+                            className="group flex items-center space-x-3 px-4 py-3 hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 rounded-xl text-gray-700 dark:text-gray-300 hover:text-primary transition-all duration-200 transform hover:translate-x-1 hover:shadow-sm"
+                            onClick={() => setShowGetStartedMenu(false)}
+                          >
+                            <div className="w-2 h-2 rounded-full bg-primary/20 group-hover:bg-primary/40 transition-colors duration-200"></div>
+                            <span className="text-sm font-medium">Sign Up</span>
+                            <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </div>
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Mobile Menu Button */}
-              <button
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-gray-200 dark:hover:bg-gray-800"
-                aria-expanded={isMobileMenuOpen}
-                aria-controls="mobile-menu"
-              >
-                <span className="sr-only">{isMobileMenuOpen ? 'Close menu' : 'Open menu'}</span>
-                {isMobileMenuOpen ? (
-                  <X className="w-6 h-6" aria-hidden="true" />
-                ) : (
-                  <Menu className="w-6 h-6" aria-hidden="true" />
-                )}
-              </button>
+              {/* Mobile Icons */}
+              <div className="flex items-center space-x-2 lg:hidden">
+                {/* Mobile Search */}
+                <button
+                  onClick={() => setIsSearchModalOpen(true)}
+                  className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800"
+                  aria-label="Search"
+                >
+                  <Search className="w-5 h-5" />
+                </button>
+
+                {/* Mobile Theme Toggle */}
+                <button
+                  onClick={toggleTheme}
+                  className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800"
+                  aria-label="Toggle theme"
+                >
+                  {theme === 'dark' ? (
+                    <Moon className="w-5 h-5" />
+                  ) : (
+                    <Sun className="w-5 h-5" />
+                  )}
+                </button>
+
+                {/* Mobile Menu Button */}
+                <button
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                  className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800"
+                  aria-expanded={isMobileMenuOpen}
+                  aria-controls="mobile-menu"
+                >
+                  <span className="sr-only">{isMobileMenuOpen ? 'Close menu' : 'Open menu'}</span>
+                  {isMobileMenuOpen ? (
+                    <X className="w-6 h-6" aria-hidden="true" />
+                  ) : (
+                    <Menu className="w-6 h-6" aria-hidden="true" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
-          <div className="fixed inset-0 z-40 flex lg:hidden" id="mobile-menu" role="dialog" aria-modal="true">
+          <div className="fixed inset-0 z-50 lg:hidden" id="mobile-menu" role="dialog" aria-modal="true">
             <div className="fixed inset-0 bg-black bg-opacity-25" aria-hidden="true" onClick={() => setIsMobileMenuOpen(false)}></div>
-            <div className="relative max-w-xs w-full bg-white dark:bg-gray-900 shadow-xl pb-12 flex flex-col overflow-y-auto">
-                <div className="px-4 pt-5 pb-2 flex">
-                    <button type="button" className="-m-2 p-2 rounded-md inline-flex items-center justify-center text-gray-400" onClick={() => setIsMobileMenuOpen(false)}>
+            <div className="fixed inset-y-0 right-0 max-w-xs w-full bg-white dark:bg-gray-900 shadow-xl flex flex-col overflow-y-auto">
+                <div className="px-4 pt-5 pb-2 flex justify-between items-center">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                        <Stethoscope className="w-5 h-5 text-white" />
+                      </div>
+                      <span className="text-lg font-bold text-gray-900 dark:text-white">CareConnect</span>
+                    </div>
+                    <button type="button" className="-m-2 p-2 rounded-md inline-flex items-center justify-center text-gray-400 hover:text-gray-500" onClick={() => setIsMobileMenuOpen(false)}>
                         <span className="sr-only">Close menu</span>
                         <X className="h-6 w-6" aria-hidden="true" />
                     </button>
@@ -394,7 +612,7 @@ const Header: React.FC = () => {
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     <Headphones className="w-4 h-4" />
-                    <span>HealthTalk Podcast</span>
+                    <span>Podcast</span>
                   </Link>
                   <Link
                     to="/health-news-feed"
@@ -402,33 +620,107 @@ const Header: React.FC = () => {
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     <Newspaper className="w-4 h-4" />
-                    <span>Health News</span>
+                    <span>News</span>
+                  </Link>
+                  <Link
+                    to="/weekly-tips"
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <Calendar className="w-4 h-4" />
+                    <span>Weekly Tips</span>
+                  </Link>
+                  <Link
+                    to="/timeless-facts"
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <Star className="w-4 h-4" />
+                    <span>Facts</span>
                   </Link>
                 </div>
               </div>
               
-              {/* Mobile Theme Toggle */}
-              <div className="px-3 py-2">
-                <ThemeToggle showLabel={true} showTitle={true} />
-              </div>
-              
-              {!user && (
-                <div className="pt-4 pb-2 border-t border-gray-200 dark:border-gray-700">
-                  <div className="flex flex-col space-y-2">
+              {/* Mobile Theme and Account Access */}
+              <div className="pt-2 pb-1 border-t border-gray-200 dark:border-gray-700">
+                <p className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Settings & Account
+                </p>
+                <div className="grid grid-cols-2 gap-1 mt-2">
+                  <button
+                    onClick={() => {
+                      // Open theme settings
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                  >
+                    <Sun className="w-4 h-4" />
+                    <span>Theme</span>
+                  </button>
+                  {!user && (
                     <Link
                       to="/login"
-                      className="block px-3 py-2 text-base font-medium text-gray-700 dark:text-gray-300 hover:text-primary"
+                      className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      Sign In
+                      <User className="w-4 h-4" />
+                      <span>Sign In</span>
+                    </Link>
+                  )}
+                </div>
+                {!user && (
+                  <>
+                    <Link
+                      to="/login"
+                      className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <User className="w-4 h-4" />
+                      <span>Sign In</span>
+                    </Link>
+                    <div className="mt-2">
+                      <Link
+                        to="/register"
+                        className="block px-3 py-2 text-base font-medium bg-primary text-white rounded-md hover:bg-primary/90 mx-3 text-center"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        Get Started
+                      </Link>
+                    </div>
+                  </>
+                )}
+              </div>
+              
+              {/* User Profile Section for Mobile */}
+              {user && (
+                <div className="pt-2 pb-1 border-t border-gray-200 dark:border-gray-700">
+                  <p className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Account
+                  </p>
+                  <div className="mt-2 space-y-1">
+                    <Link
+                      to={getDashboardPath(user.user_type)}
+                      className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      <Settings className="w-4 h-4" />
+                      <span>Dashboard</span>
                     </Link>
                     <Link
-                      to="/register"
-                      className="block px-3 py-2 text-base font-medium bg-primary text-white rounded-md hover:bg-primary/90 mx-3"
+                      to="/profile"
+                      className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      Get Started
+                      <User className="w-4 h-4" />
+                      <span>Profile</span>
                     </Link>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md text-left"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Sign Out</span>
+                    </button>
                   </div>
                 </div>
               )}

@@ -1,5 +1,5 @@
 // Footer Component for CareConnect Healthcare Platform
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Heart,
@@ -10,11 +10,18 @@ import {
   Twitter,
   Instagram,
   Linkedin,
-  Stethoscope
+  Stethoscope,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 const Footer: React.FC = () => {
   const currentYear = new Date().getFullYear();
+  const [openSection, setOpenSection] = useState<number>(0); // First section open by default on mobile
+
+  const toggleSection = (index: number) => {
+    setOpenSection(openSection === index ? -1 : index);
+  };
 
   const footerSections = [
     {
@@ -33,27 +40,37 @@ const Footer: React.FC = () => {
         { name: 'Health Tools', href: '/health-tools' },
         { name: 'AI Health Assistant', href: '/health-tools?category=ai' },
         { name: 'Health Calculators', href: '/health-tools?category=calculators' },
-        { name: 'Wellness Programs', href: '/courses?category=wellness' },
-        { name: 'Health Education', href: '/courses' }
+        { name: 'Weekly Health Tips', href: '/weekly-tips' },
+        { name: 'Timeless Health Facts', href: '/timeless-facts' }
       ]
     },
     {
       title: 'Learning & Growth',
       links: [
         { name: 'Online Courses', href: '/courses' },
-        { name: 'Certifications', href: '/courses?type=certification' },
-        { name: 'Medical Training', href: '/courses?category=medical' },
-        { name: 'Continuing Education', href: '/courses?category=ceu' },
-        { name: 'Student Resources', href: '/courses?level=beginner' }
+        { name: 'Health Blog', href: '/blog' },
+        { name: 'HealthTalk Podcast', href: '/health-talk-podcast' },
+        { name: 'Health News', href: '/health-news-feed' },
+        { name: 'Medical Training', href: '/courses?category=medical' }
+      ]
+    },
+    {
+      title: 'Career Opportunities',
+      links: [
+        { name: 'Browse Jobs', href: '/jobs' },
+        { name: 'Nursing Jobs', href: '/jobs?category=nursing' },
+        { name: 'Doctor Positions', href: '/jobs?category=medical-doctors' },
+        { name: 'Remote Jobs', href: '/jobs?location=remote' },
+        { name: 'Post a Job', href: '/admin/jobs' }
       ]
     },
     {
       title: 'Community Impact',
       links: [
+        { name: 'Q&A Forum', href: '/community' },
+        { name: 'Ask a Question', href: '/community/new' },
         { name: 'Healthcare Causes', href: '/causes' },
-        { name: 'Medical Research', href: '/causes?category=research' },
         { name: 'Community Health', href: '/causes?category=community' },
-        { name: 'Emergency Relief', href: '/causes?category=emergency' },
         { name: 'Volunteer Opportunities', href: '/causes?type=volunteer' }
       ]
     },
@@ -150,22 +167,56 @@ const Footer: React.FC = () => {
         </div>
 
         {/* Footer Links Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
-          {footerSections.map((section) => (
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-8">
+          {footerSections.map((section, index) => (
             <div key={section.title}>
-              <h4 className="text-text font-semibold mb-4">{section.title}</h4>
-              <ul className="space-y-2">
-                {section.links.map((link) => (
-                  <li key={link.name}>
-                    <Link
-                      to={link.href}
-                      className="text-sm text-text-secondary hover:text-primary transition-colors"
-                    >
-                      {link.name}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              {/* Desktop View */}
+              <div className="hidden md:block">
+                <h4 className="text-text font-semibold mb-4">{section.title}</h4>
+                <ul className="space-y-2">
+                  {section.links.map((link) => (
+                    <li key={link.name}>
+                      <Link
+                        to={link.href}
+                        className="text-sm text-text-secondary hover:text-primary transition-colors"
+                      >
+                        {link.name}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Mobile Accordion View */}
+              <div className="md:hidden">
+                <button
+                  onClick={() => toggleSection(index)}
+                  className="w-full flex items-center justify-between py-3 text-text font-semibold border-b border-border"
+                >
+                  <span>{section.title}</span>
+                  {openSection === index ? (
+                    <ChevronUp className="w-5 h-5 text-text-secondary" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-text-secondary" />
+                  )}
+                </button>
+                <div className={`overflow-hidden transition-all duration-300 ${
+                  openSection === index ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                }`}>
+                  <ul className="space-y-2 pt-3 pb-4">
+                    {section.links.map((link) => (
+                      <li key={link.name}>
+                        <Link
+                          to={link.href}
+                          className="block text-sm text-text-secondary hover:text-primary transition-colors py-1"
+                        >
+                          {link.name}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </div>
           ))}
         </div>

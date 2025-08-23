@@ -18,7 +18,16 @@ export enum UserType {
   SUPER_ADMIN = 'super_admin',
   COMPLIANCE_OFFICER = 'compliance_officer',
   MODERATOR = 'moderator',
-  SUPPORT_AGENT = 'support_agent'
+  SUPPORT_AGENT = 'support_agent',
+  HOSPITAL_ADMIN = 'hospital_admin',
+  PHYSICIAN = 'physician',
+  NURSE = 'nurse',
+  PHARMACIST = 'pharmacist',
+  LAB_TECH = 'lab_tech',
+  IMAGING_TECH = 'imaging_tech',
+  BILLING_CLERK = 'billing_clerk',
+  PATIENT = 'patient',
+  CAREGIVER = 'caregiver'
 }
 
 // Permission System
@@ -49,7 +58,30 @@ export enum Permission {
   // System Administration
   SYSTEM_CONFIG = 'system_config',
   VIEW_ANALYTICS = 'view_analytics',
-  AUDIT_LOGS = 'audit_logs'
+  AUDIT_LOGS = 'audit_logs',
+  
+  // Hospital Management System Permissions
+  MANAGE_PATIENTS = 'manage_patients',
+  VIEW_PATIENT_DATA = 'view_patient_data',
+  CREATE_ENCOUNTERS = 'create_encounters',
+  MANAGE_ENCOUNTERS = 'manage_encounters',
+  RECORD_VITALS = 'record_vitals',
+  MANAGE_CONDITIONS = 'manage_conditions',
+  PRESCRIBE_MEDICATIONS = 'prescribe_medications',
+  DISPENSE_MEDICATIONS = 'dispense_medications',
+  ORDER_LABS = 'order_labs',
+  VIEW_LAB_RESULTS = 'view_lab_results',
+  ORDER_IMAGING = 'order_imaging',
+  VIEW_IMAGING_RESULTS = 'view_imaging_results',
+  MANAGE_CARE_PLANS = 'manage_care_plans',
+  CREATE_REFERRALS = 'create_referrals',
+  MANAGE_REFERRALS = 'manage_referrals',
+  MANAGE_BEDS = 'manage_beds',
+  MANAGE_PHARMACY_INVENTORY = 'manage_pharmacy_inventory',
+  PROCESS_BILLING = 'process_billing',
+  MANAGE_INSURANCE_CLAIMS = 'manage_insurance_claims',
+  OBTAIN_CONSENTS = 'obtain_consents',
+  MANAGE_ACCESS_GRANTS = 'manage_access_grants'
 }
 
 // User Interface
@@ -350,6 +382,90 @@ function getDefaultPermissions(userType: UserType): Permission[] {
         Permission.CREATE_CONTENT,
         Permission.UPDATE_CONTENT,
         Permission.VIEW_PAYMENTS
+      ];
+    
+    case UserType.HOSPITAL_ADMIN:
+      return [
+        Permission.MANAGE_PATIENTS,
+        Permission.VIEW_PATIENT_DATA,
+        Permission.CREATE_ENCOUNTERS,
+        Permission.MANAGE_ENCOUNTERS,
+        Permission.MANAGE_CARE_PLANS,
+        Permission.MANAGE_REFERRALS,
+        Permission.MANAGE_BEDS,
+        Permission.PROCESS_BILLING,
+        Permission.MANAGE_INSURANCE_CLAIMS,
+        Permission.OBTAIN_CONSENTS,
+        Permission.MANAGE_ACCESS_GRANTS,
+        Permission.VIEW_ANALYTICS
+      ];
+    
+    case UserType.PHYSICIAN:
+      return [
+        Permission.MANAGE_PATIENTS,
+        Permission.VIEW_PATIENT_DATA,
+        Permission.CREATE_ENCOUNTERS,
+        Permission.MANAGE_ENCOUNTERS,
+        Permission.RECORD_VITALS,
+        Permission.MANAGE_CONDITIONS,
+        Permission.PRESCRIBE_MEDICATIONS,
+        Permission.ORDER_LABS,
+        Permission.VIEW_LAB_RESULTS,
+        Permission.ORDER_IMAGING,
+        Permission.VIEW_IMAGING_RESULTS,
+        Permission.MANAGE_CARE_PLANS,
+        Permission.CREATE_REFERRALS,
+        Permission.OBTAIN_CONSENTS
+      ];
+    
+    case UserType.NURSE:
+      return [
+        Permission.VIEW_PATIENT_DATA,
+        Permission.MANAGE_ENCOUNTERS,
+        Permission.RECORD_VITALS,
+        Permission.MANAGE_CONDITIONS,
+        Permission.MANAGE_CARE_PLANS,
+        Permission.OBTAIN_CONSENTS
+      ];
+    
+    case UserType.PHARMACIST:
+      return [
+        Permission.VIEW_PATIENT_DATA,
+        Permission.DISPENSE_MEDICATIONS,
+        Permission.MANAGE_PHARMACY_INVENTORY
+      ];
+    
+    case UserType.LAB_TECH:
+      return [
+        Permission.VIEW_PATIENT_DATA,
+        Permission.VIEW_LAB_RESULTS,
+        Permission.ORDER_LABS
+      ];
+    
+    case UserType.IMAGING_TECH:
+      return [
+        Permission.VIEW_PATIENT_DATA,
+        Permission.VIEW_IMAGING_RESULTS,
+        Permission.ORDER_IMAGING
+      ];
+    
+    case UserType.BILLING_CLERK:
+      return [
+        Permission.VIEW_PATIENT_DATA,
+        Permission.PROCESS_BILLING,
+        Permission.MANAGE_INSURANCE_CLAIMS,
+        Permission.VIEW_PAYMENTS
+      ];
+    
+    case UserType.PATIENT:
+      return [
+        Permission.VIEW_PATIENT_DATA,
+        Permission.MANAGE_ACCESS_GRANTS
+      ];
+    
+    case UserType.CAREGIVER:
+      return [
+        Permission.VIEW_PATIENT_DATA
       ];
     
     case UserType.PUBLIC_USER:

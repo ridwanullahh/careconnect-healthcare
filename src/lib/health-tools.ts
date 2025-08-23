@@ -156,19 +156,24 @@ export interface HealthTool {
 
 // Health Tools Service with Multi-Key Support
 export class HealthToolsService {
-  private static geminiApiKeys = (
-    import.meta.env.VITE_GEMINI_API_KEYS || 
-    'AIzaSyAI31okqeVThGkaT-MCCOcgP4QwKaUg01Q,AIzaSyBc0N-5GmNRED_voJJOm6hJsJIfL5XMPUM'
-  ).split(',').filter(key => key.trim());
-  private static currentKeyIndex = 0;
-  
-  private static getApiKey(): string {
-    if (this.geminiApiKeys.length === 0) {
-      throw new Error('No Gemini API keys configured');
+  private static async getApiKey(userId?: string): Promise<string> {
+    // Import dynamically to avoid circular dependencies
+    try {
+      const { KeyManagementService, KeyType } = await import('./key-management');
+      
+      if (userId) {
+        const key = await KeyManagementService.getKey(KeyType.GEMINI_AI, userId);
+        if (key) return key;
+      }
+      
+      // Fallback for system operations (no hardcoded keys in production)
+      const envKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (envKey && envKey !== 'your_gemini_api_key_here') return envKey;
+      
+      throw new Error('No Gemini API key available. Please configure your BYOK key in settings.');
+    } catch (error) {
+      throw new Error('No Gemini API key available. Please configure your BYOK key in settings.');
     }
-    const key = this.geminiApiKeys[this.currentKeyIndex];
-    this.currentKeyIndex = (this.currentKeyIndex + 1) % this.geminiApiKeys.length;
-    return key;
   }
   
   // Get all active tools
@@ -203,7 +208,7 @@ export class HealthToolsService {
     const prompt = this.buildPrompt(tool.ai_config!.prompt_template, inputs);
     
     // Call Gemini API
-    const response = await this.callGeminiAPI(prompt, tool.ai_config!.safety_guidelines);
+    const response = await this.callGeminiAPI(prompt, tool.ai_config!.safety_guidelines, userId);
     
     // Save result
     const result = await githubDB.insert(collections.tool_results, {
@@ -285,9 +290,9 @@ export class HealthToolsService {
   }
   
   // AI Helper Functions
-  private static async callGeminiAPI(prompt: string, safetyGuidelines: string[]): Promise<string> {
+  private static async callGeminiAPI(prompt: string, safetyGuidelines: string[], userId?: string): Promise<string> {
     try {
-      const apiKey = this.getApiKey();
+      const apiKey = await this.getApiKey(userId);
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: {
