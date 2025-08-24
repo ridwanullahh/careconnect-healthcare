@@ -2,6 +2,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { Course, CourseEnrollment, LMSService } from '../../lib/lms';
 import { githubDB, collections } from '../../lib/database';
+import { useAuth } from '../../lib/auth';
+import { PaymentService } from '../../lib/payments';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const CourseDetailPage = () => {
@@ -15,8 +17,7 @@ const CourseDetailPage = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
 
-  // Mock current user ID - in real app, this would come from auth context
-  const currentUserId = 'user-123';
+  const { user: currentUser, isAuthenticated } = useAuth();
 
   useEffect(() => {
     const loadCourseData = async () => {
@@ -31,14 +32,16 @@ const CourseDetailPage = () => {
         const courseData = await LMSService.getCourse(courseId);
         setCourse(courseData);
 
-        // Check if user is enrolled
-        const enrollments = await githubDB.find(collections.course_enrollments, {
-          course_id: courseId,
-          user_id: currentUserId
-        });
-        
-        if (enrollments.length > 0) {
-          setEnrollment(enrollments[0]);
+        // Check if user is enrolled (only if authenticated)
+        if (isAuthenticated && currentUser) {
+          const enrollments = await githubDB.find(collections.course_enrollments, {
+            course_id: courseId,
+            user_id: currentUser.id
+          });
+          
+          if (enrollments.length > 0) {
+            setEnrollment(enrollments[0]);
+          }
         }
       } catch (err) {
         setError('Failed to load course details');
@@ -54,22 +57,59 @@ const CourseDetailPage = () => {
   const handleEnroll = async () => {
     if (!courseId || !course) return;
     
+    // Check authentication first
+    if (!isAuthenticated || !currentUser) {
+      alert('Please log in to enroll in this course.');
+      navigate('/auth/login', { state: { returnTo: `/courses/${courseId}` } });
+      return;
+    }
+    
     setEnrolling(true);
     try {
-      const newEnrollment = await LMSService.enrollUser(courseId, currentUserId);
+      // Handle payment for paid courses
+      if (!course.is_free) {
+        const paymentAmount = course.discounted_price || course.price;
+        const paymentResult = await PaymentService.processPayment({
+          amount: paymentAmount,
+          currency: course.currency,
+          description: `Enrollment for ${course.title}`,
+          metadata: {
+            course_id: courseId,
+            user_id: currentUser.id,
+            type: 'course_enrollment'
+          }
+        });
+        
+        if (!paymentResult.success) {
+          throw new Error('Payment failed. Please try again.');
+        }
+      }
+      
+      const newEnrollment = await LMSService.enrollUser(courseId, currentUser.id);
       setEnrollment(newEnrollment);
       
       // Show success message
       alert('Successfully enrolled in the course!');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Enrollment error:', err);
-      alert('Failed to enroll. Please try again.');
+      alert(err.message || 'Failed to enroll. Please try again.');
     } finally {
       setEnrolling(false);
     }
   };
 
   const handleStartCourse = () => {
+    if (!isAuthenticated || !currentUser) {
+      alert('Please log in to start learning.');
+      navigate('/auth/login', { state: { returnTo: `/courses/${courseId}` } });
+      return;
+    }
+    
+    if (!enrollment) {
+      alert('Please enroll in the course first.');
+      return;
+    }
+    
     if (course?.modules && course.modules.length > 0) {
       const firstModule = course.modules[0];
       if (firstModule.lessons && firstModule.lessons.length > 0) {
@@ -522,6 +562,7 @@ const CourseDetailPage = () => {
                       className="w-full bg-primary text-white py-3 px-4 rounded-lg hover:bg-primary/90 transition-colors font-medium disabled:opacity-50"
                     >
                       {enrolling ? 'Enrolling...' : 
+                       !isAuthenticated ? 'Login to Enroll' :
                        course.is_free ? 'Enroll for Free' : 
                        course.discounted_price ? `Enroll for $${course.discounted_price}` : `Enroll for $${course.price}`}
                     </button>

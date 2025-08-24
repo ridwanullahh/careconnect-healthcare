@@ -1,7 +1,8 @@
 // Login Page for CareConnect Healthcare Platform
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../../lib/auth';
+import { useAuth, UserType } from '../../lib/auth';
+import { useToast } from '../../components/ui/Toast';
 import {
   Mail,
   Lock,
@@ -15,7 +16,8 @@ import {
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login } = useAuth();
+  const { login, user, isAuthenticated } = useAuth();
+  const { success, error: showError, info } = useToast();
   
   const [formData, setFormData] = useState({
     email: '',
@@ -26,6 +28,44 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState('');
 
   const redirectTo = searchParams.get('redirect') || '/';
+  const message = searchParams.get('message');
+
+  // Redirect if already authenticated
+  React.useEffect(() => {
+    if (isAuthenticated && user) {
+      const dashboardRoute = getDashboardRoute(user.user_type);
+      navigate(dashboardRoute);
+    }
+  }, [isAuthenticated, user, navigate]);
+
+  // Show registration success message
+  React.useEffect(() => {
+    if (message === 'registration_success') {
+      info('Registration Successful!', 'Your account has been created. Please login with your credentials.');
+    }
+  }, [message, info]);
+
+  const getDashboardRoute = (userType: UserType) => {
+    switch (userType) {
+      case UserType.SUPER_ADMIN:
+        return '/dashboard/super-admin';
+      case UserType.HOSPITAL_ADMIN:
+      case UserType.HEALTH_CENTER:
+        return '/dashboard/hospital';
+      case UserType.PRACTITIONER:
+      case UserType.PHYSICIAN:
+      case UserType.NURSE:
+        return '/dashboard/provider';
+      case UserType.PHARMACY:
+      case UserType.PHARMACIST:
+        return '/dashboard/pharmacy';
+      case UserType.PATIENT:
+      case UserType.PUBLIC_USER:
+        return '/dashboard/patient';
+      default:
+        return '/dashboard';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,13 +73,20 @@ const LoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const success = await login(formData.email, formData.password);
-      if (success) {
-        navigate(redirectTo);
+      const loginSuccess = await login(formData.email, formData.password);
+      if (loginSuccess) {
+        success('Welcome back!', 'You have been successfully signed in.');
+        // Get updated user from auth store
+        const currentUser = useAuth.getState().user;
+        const dashboardRoute = currentUser ? getDashboardRoute(currentUser.user_type) : '/dashboard';
+        const finalRedirect = redirectTo === '/' ? dashboardRoute : redirectTo;
+        navigate(finalRedirect);
       } else {
+        showError('Login Failed', 'Invalid email or password. Please check your credentials and try again.');
         setError('Invalid email or password. Please try again.');
       }
     } catch (err: any) {
+      showError('Login Error', err.message || 'An unexpected error occurred during login.');
       setError(err.message || 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
@@ -138,19 +185,8 @@ const LoginPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
-                  Remember me
-                </label>
-              </div>
+            {/* Forgot Password Link */}
+            <div className="text-right">
               <Link
                 to="/forgot-password"
                 className="text-sm text-primary hover:text-primary/80 font-medium"
@@ -176,21 +212,6 @@ const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Demo Accounts */}
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <p className="text-xs text-gray-500 text-center mb-3">Demo Accounts (for testing)</p>
-            <div className="grid grid-cols-1 gap-2 text-xs">
-              <div className="bg-gray-50 p-2 rounded text-center">
-                <strong>Patient:</strong> patient@demo.com / demo123
-              </div>
-              <div className="bg-gray-50 p-2 rounded text-center">
-                <strong>Provider:</strong> provider@demo.com / demo123
-              </div>
-              <div className="bg-gray-50 p-2 rounded text-center">
-                <strong>Admin:</strong> admin@demo.com / demo123
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Sign Up Link */}

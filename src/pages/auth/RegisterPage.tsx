@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth, UserType } from '../../lib/auth';
+import { useToast } from '../../components/ui/Toast';
 import {
   User,
   Mail,
@@ -20,6 +21,7 @@ const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { register } = useAuth();
+  const { success, error: showError } = useToast();
   
   const defaultUserType = searchParams.get('type') === 'provider' ? UserType.PRACTITIONER : UserType.PUBLIC_USER;
   
@@ -41,6 +43,14 @@ const RegisterPage: React.FC = () => {
     license_number: '',
     bio: '',
     languages: ['English'],
+    
+    // Step 3: Entity Info (for entities)
+    entity_name: '',
+    entity_description: '',
+    entity_address: '',
+    entity_phone: '',
+    entity_email: '',
+    entity_services: [] as string[],
     
     // Terms
     acceptTerms: false,
@@ -85,6 +95,13 @@ const RegisterPage: React.FC = () => {
     'Gynecology', 'Ophthalmology', 'ENT', 'Emergency Medicine'
   ];
 
+  const serviceOptions = [
+    'Primary Care', 'Specialist Consultations', 'Diagnostic Services',
+    'Laboratory Services', 'Imaging Services', 'Emergency Care',
+    'Surgical Services', 'Rehabilitation', 'Mental Health Services',
+    'Preventive Care', 'Chronic Disease Management', 'Telemedicine'
+  ];
+
   const calculatePasswordStrength = (password: string) => {
     let strength = 0;
     if (password.length >= 8) strength++;
@@ -121,6 +138,15 @@ const RegisterPage: React.FC = () => {
     }));
   };
 
+  const handleServiceChange = (service: string) => {
+    setFormData(prev => ({
+      ...prev,
+      entity_services: prev.entity_services.includes(service)
+        ? prev.entity_services.filter(s => s !== service)
+        : [...prev.entity_services, service]
+    }));
+  };
+
   const validateStep = (stepNum: number) => {
     switch (stepNum) {
       case 1:
@@ -137,6 +163,13 @@ const RegisterPage: React.FC = () => {
                
       case 3:
         if (formData.user_type === UserType.PUBLIC_USER) return true;
+        if ([UserType.HEALTH_CENTER, UserType.PHARMACY].includes(formData.user_type)) {
+          return formData.entity_name && 
+                 formData.entity_description && 
+                 formData.entity_address && 
+                 formData.entity_phone && 
+                 formData.entity_services.length > 0;
+        }
         return formData.specialties.length > 0;
         
       case 4:
@@ -167,16 +200,42 @@ const RegisterPage: React.FC = () => {
     setError('');
 
     try {
-      const success = await register(formData);
-      if (success) {
-        navigate('/dashboard');
+      const registrationSuccess = await register(formData);
+      if (registrationSuccess) {
+        success('Account Created!', 'Welcome to CareConnect. Your account has been created successfully. Please login to continue.');
+        // Navigate to login page instead of auto-login
+        navigate('/login?message=registration_success');
       } else {
+        showError('Registration Failed', 'Unable to create your account. Please try again.');
         setError('Registration failed. Please try again.');
       }
     } catch (err: any) {
+      showError('Registration Error', err.message || 'An unexpected error occurred during registration.');
       setError(err.message || 'Registration failed. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const getDashboardRoute = (userType: UserType) => {
+    switch (userType) {
+      case UserType.SUPER_ADMIN:
+        return '/dashboard/super-admin';
+      case UserType.HOSPITAL_ADMIN:
+      case UserType.HEALTH_CENTER:
+        return '/dashboard/hospital';
+      case UserType.PRACTITIONER:
+      case UserType.PHYSICIAN:
+      case UserType.NURSE:
+        return '/dashboard/provider';
+      case UserType.PHARMACY:
+      case UserType.PHARMACIST:
+        return '/dashboard/pharmacy';
+      case UserType.PATIENT:
+      case UserType.PUBLIC_USER:
+        return '/dashboard/patient';
+      default:
+        return '/dashboard';
     }
   };
 
@@ -452,22 +511,133 @@ const RegisterPage: React.FC = () => {
               </div>
             )}
 
-            {/* Step 3: Professional Information (for providers) */}
+            {/* Step 3: Professional/Entity Information */}
             {step === 3 && (
               <div className="space-y-6">
                 <div className="text-center">
                   <h3 className="text-lg font-semibold text-dark mb-2">
-                    {formData.user_type === UserType.PUBLIC_USER ? 'Almost Done!' : 'Professional Information'}
+                    {formData.user_type === UserType.PUBLIC_USER 
+                      ? 'Almost Done!' 
+                      : [UserType.HEALTH_CENTER, UserType.PHARMACY].includes(formData.user_type)
+                        ? 'Entity Information'
+                        : 'Professional Information'
+                    }
                   </h3>
                   <p className="text-sm text-gray-600">
                     {formData.user_type === UserType.PUBLIC_USER 
                       ? 'Just a few more details to complete your profile'
-                      : 'Tell us about your professional background'
+                      : [UserType.HEALTH_CENTER, UserType.PHARMACY].includes(formData.user_type)
+                        ? 'Tell us about your healthcare facility'
+                        : 'Tell us about your professional background'
                     }
                   </p>
                 </div>
                 
-                {formData.user_type !== UserType.PUBLIC_USER && (
+                {/* Entity Information for Health Centers and Pharmacies */}
+                {[UserType.HEALTH_CENTER, UserType.PHARMACY].includes(formData.user_type) && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {formData.user_type === UserType.HEALTH_CENTER ? 'Health Center Name' : 'Pharmacy Name'} *
+                      </label>
+                      <input
+                        type="text"
+                        name="entity_name"
+                        value={formData.entity_name}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder={formData.user_type === UserType.HEALTH_CENTER ? 'e.g., City Medical Center' : 'e.g., HealthPlus Pharmacy'}
+                        required
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Description *
+                      </label>
+                      <textarea
+                        name="entity_description"
+                        value={formData.entity_description}
+                        onChange={handleInputChange}
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="Brief description of your facility and services"
+                        required
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Address *
+                      </label>
+                      <input
+                        type="text"
+                        name="entity_address"
+                        value={formData.entity_address}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="Full address of your facility"
+                        required
+                      />
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Phone Number *
+                        </label>
+                        <input
+                          type="tel"
+                          name="entity_phone"
+                          value={formData.entity_phone}
+                          onChange={handleInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                          placeholder="Facility phone number"
+                          required
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Email Address
+                        </label>
+                        <input
+                          type="email"
+                          name="entity_email"
+                          value={formData.entity_email}
+                          onChange={handleInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                          placeholder="Facility email (optional)"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Services Offered *
+                      </label>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {serviceOptions.map(service => (
+                          <button
+                            key={service}
+                            type="button"
+                            onClick={() => handleServiceChange(service)}
+                            className={`p-2 text-xs rounded border transition-colors ${
+                              formData.entity_services.includes(service)
+                                ? 'bg-primary text-white border-primary'
+                                : 'bg-white text-gray-700 border-gray-300 hover:border-primary'
+                            }`}
+                          >
+                            {service}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+                
+                {/* Professional Information for Individual Practitioners */}
+                {formData.user_type === UserType.PRACTITIONER && (
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">

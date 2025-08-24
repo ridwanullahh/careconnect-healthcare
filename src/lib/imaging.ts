@@ -1,7 +1,7 @@
 // Imaging Management Service for Hospital Management System
 import { githubDB, collections } from './database';
 import { logger } from './observability';
-import { EmailNotificationService } from './email-notifications';
+import { emailService, NotificationType } from './email-notifications';
 
 // Imaging Order Interface
 export interface ImagingOrder {

@@ -74,7 +74,7 @@ const WeeklyTipsPage: React.FC = () => {
 
         {/* Current Week Tip */}
         {currentTip && (
-          <div className="bg-gradient-to-r from-primary to-secondary rounded-lg p-8 mb-12 text-white">
+          <div className="bg-gradient-to-r from-primary via-primary/90 to-accent rounded-lg p-8 mb-12 text-white">
             <div className="flex items-center gap-3 mb-4">
               <TrendingUp className="w-6 h-6" />
               <span className="text-lg font-semibold">This Week's Tip</span>

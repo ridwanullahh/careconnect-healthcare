@@ -30,11 +30,11 @@ const ShopPage: React.FC = () => {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   const categories = [
-    { id: 'otc-medications', name: 'OTC Medications', icon: Pill, color: 'bg-blue-100 text-blue-600' },
+    { id: 'medications', name: 'OTC Medications', icon: Pill, color: 'bg-blue-100 text-blue-600' },
     { id: 'supplements', name: 'Supplements & Vitamins', icon: Activity, color: 'bg-green-100 text-green-600' },
-    { id: 'medical-devices', name: 'Medical Devices', icon: Stethoscope, color: 'bg-purple-100 text-purple-600' },
-    { id: 'personal-care', name: 'Personal Care', icon: Heart, color: 'bg-pink-100 text-pink-600' },
-    { id: 'first-aid', name: 'First Aid & Safety', icon: Package, color: 'bg-red-100 text-red-600' }
+    { id: 'medical_devices', name: 'Medical Devices', icon: Stethoscope, color: 'bg-purple-100 text-purple-600' },
+    { id: 'personal_care', name: 'Personal Care', icon: Heart, color: 'bg-pink-100 text-pink-600' },
+    { id: 'first_aid', name: 'First Aid & Safety', icon: Package, color: 'bg-red-100 text-red-600' }
   ];
 
   useEffect(() => {

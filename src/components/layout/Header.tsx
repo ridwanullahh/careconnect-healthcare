@@ -180,7 +180,7 @@ const Header: React.FC = () => {
     <>
       <header className="bg-gradient-to-r from-white via-white to-gray-50/50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800/50 shadow-lg border-b border-gray-200/60 dark:border-gray-700/60 backdrop-blur-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-18">
+          <div className="flex justify-between items-center py-2">
             {/* Logo */}
             <div className="flex items-center">
               <Link to="/" className="flex items-center space-x-2">
@@ -193,21 +193,6 @@ const Header: React.FC = () => {
 
             {/* Search Button */}
             {/* Search Icon */}
-            <div className="flex-1 flex justify-center px-2 lg:ml-6 lg:justify-end">
-                <div className="max-w-lg w-full lg:max-w-xs">
-                    <label htmlFor="search" className="sr-only">Search</label>
-                    <div className="relative">
-                        <button
-                            onClick={() => setIsSearchModalOpen(true)}
-                            className="group relative p-3 rounded-2xl text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gradient-to-r hover:from-primary/10 hover:to-primary/5 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
-                        >
-                            <Search className="h-6 w-6 transition-transform duration-200 group-hover:scale-110" aria-hidden="true" />
-                            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary/0 to-primary/0 group-hover:from-primary/5 group-hover:to-primary/10 transition-all duration-300"></div>
-                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 animate-pulse"></div>
-                        </button>
-                    </div>
-                </div>
-            </div>
 
             {/* Desktop Navigation */}
             <nav className="hidden lg:flex items-center space-x-1">
@@ -274,22 +259,28 @@ const Header: React.FC = () => {
             </nav>
 
             {/* User Actions */}
-            <div className="flex items-center space-x-4">
-              {/* Consolidated Theme Toggle with Mega Dropdown */}
-              <div className="relative hidden sm:block">
+            <div className="flex items-center space-x-2">
+              {/* Desktop Search */}
+              <button
+                onClick={() => setIsSearchModalOpen(true)}
+                className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800 hidden lg:block"
+                aria-label="Search"
+              >
+                <Search className="w-5 h-5" />
+              </button>
+
+{/* Consolidated Theme Toggle with Mega Dropdown */}
+              <div className="relative hidden lg:block">
                 <button
                   onClick={() => setShowThemeMenu(!showThemeMenu)}
-                  className="group relative p-3 rounded-2xl text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gradient-to-r hover:from-primary/10 hover:to-primary/5 dark:hover:bg-gray-800 transition-all duration-300 transform hover:scale-105 hover:shadow-lg hover:shadow-primary/20"
+                  className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800"
                   aria-label="Theme Settings"
                 >
                   {theme === 'dark' ? (
-                    <Moon className="h-5 w-5 transition-all duration-300 group-hover:scale-110 text-gray-700 dark:text-gray-300 group-hover:text-primary" />
-                  ) : theme === 'light' ? (
-                    <Sun className="h-5 w-5 transition-all duration-300 group-hover:scale-110 text-gray-700 dark:text-gray-300 group-hover:text-yellow-500" />
+                    <Moon className="w-5 h-5" />
                   ) : (
-                    <Settings className="h-5 w-5 transition-all duration-300 group-hover:scale-110 text-gray-700 dark:text-gray-300 group-hover:text-primary" />
+                    <Sun className="w-5 h-5" />
                   )}
-                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary/0 to-primary/0 group-hover:from-primary/5 group-hover:to-primary/10 transition-all duration-300"></div>
                 </button>
 
                 {/* Theme Mega Menu */}
@@ -435,7 +426,7 @@ const Header: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <div className="relative">
+                <div className="relative hidden lg:block">
                   <button
                     onClick={() => setShowGetStartedMenu(!showGetStartedMenu)}
                     className="group relative bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 font-medium transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
@@ -506,6 +497,7 @@ const Header: React.FC = () => {
                   <Search className="w-5 h-5" />
                 </button>
 
+
                 {/* Mobile Theme Toggle */}
                 <button
                   onClick={toggleTheme}
@@ -518,6 +510,7 @@ const Header: React.FC = () => {
                     <Sun className="w-5 h-5" />
                   )}
                 </button>
+
 
                 {/* Mobile Menu Button */}
                 <button
@@ -537,198 +530,198 @@ const Header: React.FC = () => {
             </div>
           </div>
         </div>
+      </header>
 
-        {/* Mobile Menu */}
-        {isMobileMenuOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden" id="mobile-menu" role="dialog" aria-modal="true">
-            <div className="fixed inset-0 bg-black bg-opacity-25" aria-hidden="true" onClick={() => setIsMobileMenuOpen(false)}></div>
-            <div className="fixed inset-y-0 right-0 max-w-xs w-full bg-white dark:bg-gray-900 shadow-xl flex flex-col overflow-y-auto">
-                <div className="px-4 pt-5 pb-2 flex justify-between items-center">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                        <Stethoscope className="w-5 h-5 text-white" />
-                      </div>
-                      <span className="text-lg font-bold text-gray-900 dark:text-white">CareConnect</span>
+      {/* Mobile Menu */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden" id="mobile-menu" role="dialog" aria-modal="true">
+          <div className="fixed inset-0 bg-black bg-opacity-25" aria-hidden="true" onClick={() => setIsMobileMenuOpen(false)}></div>
+          <div className="fixed inset-y-0 right-0 max-w-xs w-full bg-white dark:bg-gray-900 shadow-xl flex flex-col overflow-y-auto">
+              <div className="px-4 pt-5 pb-2 flex justify-between items-center">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                      <Stethoscope className="w-5 h-5 text-white" />
                     </div>
-                    <button type="button" className="-m-2 p-2 rounded-md inline-flex items-center justify-center text-gray-400 hover:text-gray-500" onClick={() => setIsMobileMenuOpen(false)}>
-                        <span className="sr-only">Close menu</span>
-                        <X className="h-6 w-6" aria-hidden="true" />
-                    </button>
-                </div>
-            <div className="px-2 pt-2 pb-3 space-y-1">
-              {navigation.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div key={item.name} className="space-y-1">
-                    <button
-                      className="w-full flex items-center justify-between space-x-3 px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800"
-                      onClick={() => handleMegaMenuToggle(item.megaMenu)}
-                      aria-expanded={showMegaMenu === item.megaMenu}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <Icon className="w-5 h-5" />
-                        <span>{item.name}</span>
-                      </div>
-                      <span className="text-gray-400">
-                        {showMegaMenu === item.megaMenu ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        )}
-                      </span>
-                    </button>
-                    
-                    {/* Mobile Submenu */}
-                    {showMegaMenu === item.megaMenu && item.items && (
-                      <div className="ml-4 space-y-1 pl-4">
-                        {item.items.map((subItem) => (
-                          <Link
-                            key={subItem.name}
-                            to={subItem.href}
-                            className="block px-3 py-2 rounded-md text-sm text-gray-600 dark:text-gray-400 hover:text-primary hover:bg-light dark:hover:bg-gray-800"
-                            onClick={() => {
-                              setShowMegaMenu(null);
-                              setIsMobileMenuOpen(false);
-                            }}
-                          >
-                            {subItem.name}
-                          </Link>
-                        ))}
-                      </div>
-                    )}
+                    <span className="text-lg font-bold text-gray-900 dark:text-white">CareConnect</span>
                   </div>
-                );
-              })}
-              
-              {/* Quick Access */}
-              <div className="pt-2 pb-1 border-t border-gray-200 dark:border-gray-700">
-                <p className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Quick Access
-                </p>
-                <div className="grid grid-cols-2 gap-1 mt-2">
-                  <Link
-                    to="/health-talk-podcast"
-                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <Headphones className="w-4 h-4" />
-                    <span>Podcast</span>
-                  </Link>
-                  <Link
-                    to="/health-news-feed"
-                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <Newspaper className="w-4 h-4" />
-                    <span>News</span>
-                  </Link>
-                  <Link
-                    to="/weekly-tips"
-                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <Calendar className="w-4 h-4" />
-                    <span>Weekly Tips</span>
-                  </Link>
-                  <Link
-                    to="/timeless-facts"
-                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <Star className="w-4 h-4" />
-                    <span>Facts</span>
-                  </Link>
-                </div>
-              </div>
-              
-              {/* Mobile Theme and Account Access */}
-              <div className="pt-2 pb-1 border-t border-gray-200 dark:border-gray-700">
-                <p className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Settings & Account
-                </p>
-                <div className="grid grid-cols-2 gap-1 mt-2">
-                  <button
-                    onClick={() => {
-                      // Open theme settings
-                      setIsMobileMenuOpen(false);
-                    }}
-                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
-                  >
-                    <Sun className="w-4 h-4" />
-                    <span>Theme</span>
+                  <button type="button" className="-m-2 p-2 rounded-md inline-flex items-center justify-center text-gray-400 hover:text-gray-500" onClick={() => setIsMobileMenuOpen(false)}>
+                      <span className="sr-only">Close menu</span>
+                      <X className="h-6 w-6" aria-hidden="true" />
                   </button>
-                  {!user && (
-                    <Link
-                      to="/login"
-                      className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <User className="w-4 h-4" />
-                      <span>Sign In</span>
-                    </Link>
+              </div>
+          <div className="px-2 pt-2 pb-3 space-y-1">
+            {navigation.map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.name} className="space-y-1">
+                  <button
+                    className="w-full flex items-center justify-between space-x-3 px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800"
+                    onClick={() => handleMegaMenuToggle(item.megaMenu)}
+                    aria-expanded={showMegaMenu === item.megaMenu}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Icon className="w-5 h-5" />
+                      <span>{item.name}</span>
+                    </div>
+                    <span className="text-gray-400">
+                      {showMegaMenu === item.megaMenu ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </span>
+                  </button>
+                  
+                  {/* Mobile Submenu */}
+                  {showMegaMenu === item.megaMenu && item.items && (
+                    <div className="ml-4 space-y-1 pl-4">
+                      {item.items.map((subItem) => (
+                        <Link
+                          key={subItem.name}
+                          to={subItem.href}
+                          className="block px-3 py-2 rounded-md text-sm text-gray-600 dark:text-gray-400 hover:text-primary hover:bg-light dark:hover:bg-gray-800"
+                          onClick={() => {
+                            setShowMegaMenu(null);
+                            setIsMobileMenuOpen(false);
+                          }}
+                        >
+                          {subItem.name}
+                        </Link>
+                      ))}
+                    </div>
                   )}
                 </div>
+              );
+            })}
+            
+            {/* Quick Access */}
+            <div className="pt-2 pb-1 border-t border-gray-200 dark:border-gray-700">
+              <p className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Quick Access
+              </p>
+              <div className="grid grid-cols-2 gap-1 mt-2">
+                <Link
+                  to="/health-talk-podcast"
+                  className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <Headphones className="w-4 h-4" />
+                  <span>Podcast</span>
+                </Link>
+                <Link
+                  to="/health-news-feed"
+                  className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <Newspaper className="w-4 h-4" />
+                  <span>News</span>
+                </Link>
+                <Link
+                  to="/weekly-tips"
+                  className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <Calendar className="w-4 h-4" />
+                  <span>Weekly Tips</span>
+                </Link>
+                <Link
+                  to="/timeless-facts"
+                  className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <Star className="w-4 h-4" />
+                  <span>Facts</span>
+                </Link>
+              </div>
+            </div>
+            
+            {/* Mobile Theme and Account Access */}
+            <div className="pt-2 pb-1 border-t border-gray-200 dark:border-gray-700">
+              <p className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Settings & Account
+              </p>
+              <div className="grid grid-cols-2 gap-1 mt-2">
+                <button
+                  onClick={() => {
+                    // Open theme settings
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                >
+                  <Sun className="w-4 h-4" />
+                  <span>Theme</span>
+                </button>
                 {!user && (
-                  <>
-                    <Link
-                      to="/login"
-                      className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <User className="w-4 h-4" />
-                      <span>Sign In</span>
-                    </Link>
-                    <div className="mt-2">
-                      <Link
-                        to="/register"
-                        className="block px-3 py-2 text-base font-medium bg-primary text-white rounded-md hover:bg-primary/90 mx-3 text-center"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                      >
-                        Get Started
-                      </Link>
-                    </div>
-                  </>
+                  <Link
+                    to="/login"
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <User className="w-4 h-4" />
+                    <span>Sign In</span>
+                  </Link>
                 )}
               </div>
-              
-              {/* User Profile Section for Mobile */}
-              {user && (
-                <div className="pt-2 pb-1 border-t border-gray-200 dark:border-gray-700">
-                  <p className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Account
-                  </p>
-                  <div className="mt-2 space-y-1">
+              {!user && (
+                <>
+                  <Link
+                    to="/login"
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <User className="w-4 h-4" />
+                    <span>Sign In</span>
+                  </Link>
+                  <div className="mt-2">
                     <Link
-                      to={getDashboardPath(user.user_type)}
-                      className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                      to="/register"
+                      className="block px-3 py-2 text-base font-medium bg-primary text-white rounded-md hover:bg-primary/90 mx-3 text-center"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      <Settings className="w-4 h-4" />
-                      <span>Dashboard</span>
+                      Get Started
                     </Link>
-                    <Link
-                      to="/profile"
-                      className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      <User className="w-4 h-4" />
-                      <span>Profile</span>
-                    </Link>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md text-left"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>Sign Out</span>
-                    </button>
                   </div>
-                </div>
+                </>
               )}
             </div>
+            
+            {/* User Profile Section for Mobile */}
+            {user && (
+              <div className="pt-2 pb-1 border-t border-gray-200 dark:border-gray-700">
+                <p className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Account
+                </p>
+                <div className="mt-2 space-y-1">
+                  <Link
+                    to={getDashboardPath(user.user_type)}
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <Settings className="w-4 h-4" />
+                    <span>Dashboard</span>
+                  </Link>
+                  <Link
+                    to="/profile"
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <User className="w-4 h-4" />
+                    <span>Profile</span>
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md text-left"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-</div>
-        )}
-      </header>
+        </div>
+      </div>
+      )}
 
       {/* Search Modal */}
       <SearchModal 

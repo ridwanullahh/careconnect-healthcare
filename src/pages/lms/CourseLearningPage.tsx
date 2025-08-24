@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Course, CourseModule, Lesson, CourseEnrollment, LMSService } from '../../lib/lms';
 import { githubDB, collections } from '../../lib/database';
+import { useAuth } from '../../lib/auth';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 interface QuizAnswer {
@@ -32,7 +33,7 @@ const CourseLearningPage = () => {
   const [quizScore, setQuizScore] = useState<number | null>(null);
   const [lessonCompleted, setLessonCompleted] = useState(false);
 
-  const currentUserId = 'user-123'; // In real app, from auth context
+  const { user: currentUser, isAuthenticated } = useAuth();
 
   useEffect(() => {
     const loadLearningData = async () => {
@@ -43,23 +44,39 @@ const CourseLearningPage = () => {
       }
 
       try {
+        // Check authentication first
+        if (!isAuthenticated || !currentUser) {
+          setError('Please log in to access course content');
+          setLoading(false);
+          navigate('/auth/login', { state: { returnTo: `/courses/${courseId}/learn/${moduleId}/${lessonId}` } });
+          return;
+        }
+
         // Load course and enrollment data
         const [courseData, enrollmentData] = await Promise.all([
-          githubDB.findById(collections.courses, courseId),
+          LMSService.getCourse(courseId),
           githubDB.find(collections.course_enrollments, {
             course_id: courseId,
-            user_id: currentUserId
+            user_id: currentUser.id
           })
         ]);
 
         setCourse(courseData);
-        if (enrollmentData.length > 0) {
-          setEnrollment(enrollmentData[0]);
-          setLessonCompleted(enrollmentData[0].lessons_completed.includes(lessonId));
+        
+        // Check if user is enrolled
+        if (enrollmentData.length === 0) {
+          setError('You are not enrolled in this course');
+          setLoading(false);
+          navigate(`/courses/${courseId}`);
+          return;
         }
+        
+        const enrollment = enrollmentData[0];
+        setEnrollment(enrollment);
+        setLessonCompleted(enrollment.lessons_completed.includes(lessonId));
 
         // Find current module and lesson
-        const module = courseData.modules?.find(m => m.id === moduleId);
+        const module = courseData?.modules?.find(m => m.id === moduleId);
         if (module) {
           setCurrentModule(module);
           const lesson = module.lessons?.find(l => l.id === lessonId);
@@ -154,7 +171,7 @@ const CourseLearningPage = () => {
         navigate(`/courses/${courseId}/learn/${nextModule.id}/${nextModule.lessons[0].id}`);
       } else {
         // Course completed
-        navigate(`/courses/${courseId}/complete`);
+        navigate(`/courses/${courseId}/completion`);
       }
     }
   };

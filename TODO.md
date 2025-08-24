@@ -1,6 +1,6 @@
 # CareConnect Platform – Production Readiness Master TODO
 
-Bismillah Ar-Rahman Ar-Raheem. This document inventories all gaps and defines actionable, production-ready tasks for the CareConnect Platform under the constraint of a React-only frontend with GitHub Repo DB as the single data store. All integrations must operate without an external backend. Where third-party services are unavoidable (AI, Maps, payments), security must be addressed via a Bring-Your-Own-Key (BYOK) pattern with client-side encryption and strict governance.
+Bismillah Ar-Rahman Ar-Raheem. This document inventories all gaps and defines actionable, production-ready tasks for the CareConnect Platform under the constraint of a React-only frontend with GitHub Repo DB as the single data store. All integrations must operate without an external backend. Where third-party services are unavoidable (AI, Maps, payments).
 
 Guiding principles
 - Single stack: React app + GitHub Repo DB (githubDB SDK)
@@ -20,7 +20,7 @@ Global platform hardening
 - Add minimal performance beacons (FCP/LCP/TTI) captured in analytics_events.
 - Write critical actions to audit_logs.
 
-[ ] Compliance and privacy (PIPEDA-minded within constraints)
+[ ] Compliance and privacy (PIPEDA-minded and others within constraints)
 - Pending: render ConsentBanner globally; add DataExportDialog to dashboard; ensure disclaimers on AI tool UIs.
 - Consent banner and preferences stored in user profile; basic cookie/localStorage policy and toggles.
 - Medical disclaimers globally visible in AI tools and Health content pages.
@@ -68,15 +68,11 @@ Files:
 - src/lib/working-health-tools.ts (remove or merge)
 - src/pages/tools/HealthToolsPage.tsx
 
-4) Aggregated Health News Feed
-- Replace placeholder: add sources (RSS/API) catalog collection news_sources.
-- Client-side aggregator job (on dashboard/admin open) fetches feeds anonymously where possible; normalize and store to news_articles with de-dup.
-- Optional: AI summarization via BYOK Gemini; store ai_summary; backoff if quota missing.
-- Newsletter subscriptions: create newsletter_subscriptions; integrate with email-events flow to send digest using GitHub DB (no external ESP). Keep volume low.
-- Enhanced News CMS with full CRUD operations for admin
-- AI-generated news approval workflow implemented
-- News sources management system created
-- Admin-only AI aggregation with pending approval status
+4) Aggregated Health News Feed (Deprecated)
+[ ] Replace placeholder: add sources (RSS/API) catalog collection news_sources.
+[ ] Client-side aggregator job (on dashboard/admin open) fetches feeds anonymously where possible; normalize and store to news_articles with de-dup.
+[ ] Optional: AI summarization via BYOK Gemini; store ai_summary; backoff if quota missing.
+✓ Newsletter subscriptions: create newsletter_subscriptions; integrate with email-events flow to send digest using GitHub DB (no external ESP). Keep volume low.
 Files:
 - src/lib/news.ts
 - src/pages/HealthNewsFeedPage.tsx
@@ -108,7 +104,7 @@ Files:
     - Create payment intent record in GitHub DB.
     - Redirect users to provider-hosted checkout pages using public-only initialization (if gateway supports without exposing secrets) or mark as "external payment reference required" and process manually in admin.
     - On return/callback (client), record transaction reference; mark status as pending_review; allow super admin to reconcile/status update.
-✓ If gateway requires secrets to initialize client-side, mandate BYOK per-entity with encryption; warn about risk.
+✓ If gateway requires secrets to initialize client-side, mandate BYOK per-entity with encryption.
 ✓ Refunds: mark requested in DB; handle manual processing + status update.
 Files:
 - src/lib/payments.ts
@@ -204,7 +200,7 @@ MVP hardening priorities
 ✓ Replace all mock data with GitHub DB sources; fix import/schema mismatches.
 ✓ Health Tools consolidation and safe AI execution.
 ✓ Directory filters/geosearch; Booking rule enforcement.
-✓ Health News aggregator basics and Podcast admin CRUD.
+✓ Health News aggregator basics (Deprecated) and Podcast admin CRUD.
 ✓ Payments record-and-reconcile model.
 ✓ Super Admin verification/moderation queues; Observability logging.
 [ ] UI/UX brand system and accessibility pass.
@@ -216,7 +212,7 @@ Acceptance criteria per epic
 ✓ Directory: search, filters, geosearch functioning; map cluster; save/compare.
 ✓ Booking: double-book prevention; reminders; status transitions; telehealth flag.
 ✓ Tools: AI tools require BYOK; non-AI calculators compute accurately; results persisted.
-✓ News: sources defined; aggregator populates news_articles; newsletter writes subscriptions.
+✓ News: sources defined; aggregator populates news_articles; newsletter writes subscriptions with admin CMS.
 ✓ Podcast: episodes managed via DB; live schedule; RSS data available.
 ✓ Payments: intents recorded; manual reconciliation UIs; statuses updated; notifications sent.
 ✓ Accessibility: key pages pass basic a11y checks; keyboard nav; aria where needed.
