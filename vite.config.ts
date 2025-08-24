@@ -28,13 +28,7 @@ export default defineConfig({
         }
       }
     },
-    // Additional minification to remove any remaining console statements
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true
-      }
-    }
+    // Use default esbuild minification in CI (no terser required)
+    minify: 'esbuild'
   }
 })
