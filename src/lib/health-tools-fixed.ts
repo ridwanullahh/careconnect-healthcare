@@ -100,9 +100,16 @@ export interface HealthTool {
 // Fixed Health Tools Service
 export class FixedHealthToolsService {
   private static getApiKey(): string {
-    const envKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (envKey && envKey !== 'your_gemini_api_key_here') return envKey;
-    throw new Error('No Gemini API key available. Please configure your API key in settings.');
+    const envKeys = import.meta.env.VITE_GEMINI_API_KEYS;
+    if (!envKeys || envKeys === 'your_gemini_api_key_here') {
+      throw new Error('No Gemini API key available. Please configure your API key in settings.');
+    }
+    const keys = envKeys.split(',').map(key => key.trim());
+    if (keys.length === 0) {
+      throw new Error('No Gemini API key available. Please configure your API key in settings.');
+    }
+    const randomIndex = Math.floor(Math.random() * keys.length);
+    return keys[randomIndex];
   }
   
   // Get all active tools
@@ -328,7 +335,7 @@ export class FixedHealthToolsService {
     const apiKey = this.getApiKey();
     const fullPrompt = `${safetyGuidelines.join('\n')}\n\nIMPORTANT: You are a healthcare AI assistant. Always prioritize user safety and recommend professional medical care when appropriate.\n\n${prompt}`;
     
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
