@@ -1,7 +1,7 @@
 // Lab Management Service for Hospital Management System
 import { githubDB, collections } from './database';
 import { logger } from './observability';
-import { EmailNotificationService } from './email-notifications';
+import { emailService, NotificationType } from './email-notifications';
 
 // Lab Order Interface
 export interface LabOrder {
@@ -622,11 +622,20 @@ export class LabService {
       });
       
       // Send email notification
-      await EmailNotificationService.sendNotification({
-        type: 'lab_results_ready',
-        recipient: `patient-${result.patient_id}@placeholder.com`,
-        data: { resultId: resultId, testName: result.test_name }
-      });
+      const patient = await githubDB.findById(collections.patients, result.patient_id);
+      if (patient) {
+        await emailService.sendNotification({
+          type: NotificationType.TEST_RESULTS_AVAILABLE,
+          recipient: patient.email,
+          recipientName: `${patient.firstName} ${patient.lastName}`,
+          data: {
+            patientName: `${patient.firstName} ${patient.lastName}`,
+            testName: result.test_name,
+            resultsUrl: `/labs/results/${result.id}`
+          },
+          priority: 'high'
+        });
+      }
       
     } catch (error) {
       logger.error('notify_patient_results_ready_failed', 'Failed to notify patient', { error: error.message });

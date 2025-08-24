@@ -46,7 +46,7 @@ const HealthNewsArticlePage: React.FC = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-light text-center px-4">
         <h2 className="text-2xl font-bold text-red-600 mb-4">{error}</h2>
-        <Link to="/health-news" className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors">
+        <Link to="/health-news-feed" className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors">
           Back to News Feed
         </Link>
       </div>
@@ -60,7 +60,7 @@ const HealthNewsArticlePage: React.FC = () => {
   return (
     <div className="bg-light py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <Link to="/health-news" className="inline-flex items-center text-primary mb-6 hover:underline">
+        <Link to="/health-news-feed" className="inline-flex items-center text-primary mb-6 hover:underline">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to News Feed
         </Link>

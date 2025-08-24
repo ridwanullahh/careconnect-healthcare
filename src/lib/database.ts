@@ -16,6 +16,11 @@ export const collections = {
   entity_staff: 'entity_staff',
   entity_services: 'entity_services',
   entity_specialties: 'entity_specialties',
+  coaching_programs: 'coaching_programs',
+  coaching_sessions: 'coaching_sessions',
+  coaching_clients: 'coaching_clients',
+  entity_integrations: 'entity_integrations',
+  entity_analytics: 'entity_analytics',
   specialties: 'specialties',
   insurance_providers: 'insurance_providers',
   languages: 'languages',
@@ -33,6 +38,7 @@ export const collections = {
   // Learning Management
   courses: 'courses',
   course_modules: 'course_modules',
+  course_lessons: 'course_lessons',
   course_enrollments: 'course_enrollments',
   course_progress: 'course_progress',
   certificates: 'certificates',
@@ -128,7 +134,10 @@ export const collections = {
   insurance_claims: 'insurance_claims',
   billing_items: 'billing_items',
   consents: 'consents',
-  access_grants: 'access_grants'
+  access_grants: 'access_grants',
+  
+  // AI Chatbot
+  ai_chatbot_support: 'ai_chatbot_support'
 };
 
 // Auto-initialize all collections

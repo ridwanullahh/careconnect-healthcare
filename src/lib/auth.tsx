@@ -130,7 +130,7 @@ interface AuthState {
   profile: UserProfile | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
   register: (userData: any) => Promise<boolean>;
   logout: () => void;
   updateProfile: (updates: Partial<UserProfile>) => Promise<boolean>;
@@ -141,10 +141,10 @@ interface AuthState {
 export const useAuth = create<AuthState>((set, get) => ({
   user: null,
   profile: null,
-  isLoading: false,
+  isLoading: false, // Start with false, will be set to true during operations
   isAuthenticated: false,
 
-  login: async (email: string, password: string) => {
+  login: async (email: string, password: string, rememberMe: boolean = false) => {
     set({ isLoading: true });
     
     try {
@@ -175,11 +175,40 @@ export const useAuth = create<AuthState>((set, get) => ({
       const profiles = await dbHelpers.find(collections.profiles, { user_id: user.id });
       const profile = profiles[0];
       
-      // Store session
-      localStorage.setItem('careconnect_token', encrypt(user.id));
+      // Store session with a fixed 7-day expiration
+      const expirationTime = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days
+      
+      const sessionData = {
+        userId: user.id,
+        expires: expirationTime,
+        rememberMe
+      };
+      
+      console.log('Login: Creating session', {
+        userId: user.id,
+        email: user.email,
+        rememberMe,
+        expiresAt: new Date(expirationTime).toISOString(),
+        storageType: rememberMe ? 'localStorage' : 'sessionStorage'
+      });
+      
+      // Use localStorage for both cases to ensure persistence
+      const encryptedToken = encrypt(JSON.stringify(sessionData));
+      console.log('Login: Encrypted token created, length:', encryptedToken.length);
+      
+      // Always use localStorage for now to ensure persistence
+      localStorage.setItem('careconnect_token', encryptedToken);
+      
+      // Clear sessionStorage to avoid conflicts
+      sessionStorage.removeItem('careconnect_token');
+      
+      console.log('Login: Token stored in localStorage');
+      
+      const cleanUser = { ...user };
+      delete cleanUser.password_hash;
       
       set({ 
-        user: { ...user, password_hash: undefined }, 
+        user: cleanUser, 
         profile,
         isAuthenticated: true,
         isLoading: false 
@@ -219,20 +248,43 @@ export const useAuth = create<AuthState>((set, get) => ({
         throw new Error('User already exists');
       }
       
+      let entityId = null;
+      
+      // Create entity for health centers and pharmacies
+      if ([UserType.HEALTH_CENTER, UserType.PHARMACY].includes(userData.user_type)) {
+        const newEntity = await dbHelpers.insert(collections.entities, {
+          name: userData.entity_name,
+          entity_type: userData.user_type,
+          description: userData.entity_description,
+          address: userData.entity_address,
+          phone: userData.entity_phone,
+          email: userData.entity_email || userData.email,
+          verification_status: 'pending',
+          is_active: true,
+          services: userData.entity_services || [],
+          specialties: userData.specialties || [],
+          rating: 0,
+          review_count: 0,
+          badges: []
+        });
+        entityId = newEntity.id;
+      }
+      
       // Create user
       const hashedPassword = await hashPassword(userData.password);
-      const newUser = await dbHelpers.create(collections.users, {
+      const newUser = await dbHelpers.insert(collections.users, {
         email: userData.email,
         phone: userData.phone,
         user_type: userData.user_type,
         password_hash: hashedPassword,
         is_verified: false,
         is_active: true,
+        entity_id: entityId,
         permissions: getDefaultPermissions(userData.user_type)
       });
       
       // Create profile
-      const newProfile = await dbHelpers.create(collections.profiles, {
+      const newProfile = await dbHelpers.insert(collections.profiles, {
         user_id: newUser.id,
         first_name: userData.first_name,
         last_name: userData.last_name,
@@ -247,10 +299,11 @@ export const useAuth = create<AuthState>((set, get) => ({
         }
       });
       
+      // Don't auto-login after registration
       set({ 
-        user: { ...newUser, password_hash: undefined },
-        profile: newProfile,
-        isAuthenticated: true,
+        user: null,
+        profile: null,
+        isAuthenticated: false,
         isLoading: false 
       });
       
@@ -283,11 +336,14 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
+    console.log('Logout: Clearing session data');
     localStorage.removeItem('careconnect_token');
+    sessionStorage.removeItem('careconnect_token');
     set({ 
       user: null, 
       profile: null, 
-      isAuthenticated: false 
+      isAuthenticated: false,
+      isLoading: false
     });
   },
 
@@ -311,28 +367,117 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
 
   refreshUser: async () => {
-    const token = localStorage.getItem('careconnect_token');
-    if (!token) return;
+    set({ isLoading: true });
     
     try {
-      const userId = decrypt(token);
-      const user = await dbHelpers.findById(collections.users, userId);
+      // Check localStorage for token (we're storing everything there now)
+      let token = localStorage.getItem('careconnect_token');
+      let storageType = 'localStorage';
+      
+      console.log('RefreshUser: Checking for token...', { 
+        hasToken: !!token, 
+        storageType,
+        tokenLength: token?.length 
+      });
+      
+      if (!token) {
+        console.log('RefreshUser: No token found, setting unauthenticated');
+        set({ 
+          user: null, 
+          profile: null, 
+          isAuthenticated: false, 
+          isLoading: false 
+        });
+        return;
+      }
+      
+      console.log('RefreshUser: Attempting to decrypt token...');
+      const decryptedData = decrypt(token);
+      
+      if (!decryptedData) {
+        console.log('RefreshUser: Failed to decrypt token');
+        localStorage.removeItem('careconnect_token');
+        sessionStorage.removeItem('careconnect_token');
+        set({ 
+          user: null, 
+          profile: null, 
+          isAuthenticated: false, 
+          isLoading: false 
+        });
+        return;
+      }
+      
+      const sessionData = JSON.parse(decryptedData);
+      console.log('RefreshUser: Session data parsed', { 
+        userId: sessionData.userId, 
+        expires: new Date(sessionData.expires).toISOString(),
+        isExpired: Date.now() > sessionData.expires 
+      });
+      
+      // Check if session has expired
+      if (Date.now() > sessionData.expires) {
+        console.log('RefreshUser: Session expired, clearing tokens');
+        localStorage.removeItem('careconnect_token');
+        sessionStorage.removeItem('careconnect_token');
+        set({ 
+          user: null, 
+          profile: null, 
+          isAuthenticated: false, 
+          isLoading: false 
+        });
+        return;
+      }
+      
+      console.log('RefreshUser: Fetching user data for ID:', sessionData.userId);
+      const user = await dbHelpers.findById(collections.users, sessionData.userId);
       
       if (user && user.is_active) {
-        const profiles = await dbHelpers.find(collections.profiles, { user_id: userId });
+        console.log('RefreshUser: User found and active, fetching profile...');
+        const profiles = await dbHelpers.find(collections.profiles, { user_id: sessionData.userId });
         const profile = profiles[0];
         
-        set({ 
-          user: { ...user, password_hash: undefined },
+        const cleanUser = { ...user };
+        delete cleanUser.password_hash;
+        
+        console.log('RefreshUser: Successfully restored session for user:', cleanUser.email);
+
+        // Extend the session by updating the token with a new expiration
+        const newExpirationTime = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days from now
+        const newSessionData = {
+          ...sessionData,
+          expires: newExpirationTime,
+        };
+        const newEncryptedToken = encrypt(JSON.stringify(newSessionData));
+        localStorage.setItem('careconnect_token', newEncryptedToken);
+        console.log('RefreshUser: Session extended for another 7 days.');
+
+        set({
+          user: cleanUser,
           profile,
-          isAuthenticated: true 
+          isAuthenticated: true,
+          isLoading: false
         });
       } else {
-        get().logout();
+        console.log('RefreshUser: User not found or inactive, clearing session');
+        localStorage.removeItem('careconnect_token');
+        sessionStorage.removeItem('careconnect_token');
+        set({ 
+          user: null, 
+          profile: null, 
+          isAuthenticated: false, 
+          isLoading: false 
+        });
       }
     } catch (error) {
-      console.error('Token refresh error:', error);
-      get().logout();
+      console.error('RefreshUser: Error during token refresh:', error);
+      localStorage.removeItem('careconnect_token');
+      sessionStorage.removeItem('careconnect_token');
+      set({ 
+        user: null, 
+        profile: null, 
+        isAuthenticated: false, 
+        isLoading: false 
+      });
     }
   }
 }));

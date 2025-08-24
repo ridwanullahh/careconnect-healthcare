@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Course, COURSE_CATEGORIES, STARTER_COURSES, LMSService } from '../../lib/lms';
+import { Course, COURSE_CATEGORIES, PRODUCTION_COURSES, LMSService } from '../../lib/lms';
 import { githubDB, collections } from '../../lib/database';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { Link } from 'react-router-dom';
@@ -24,7 +24,7 @@ const CoursesPage = () => {
         });
         if (fetchedCourses.length === 0) {
           console.log('Initializing starter courses...');
-          for (const course of STARTER_COURSES) {
+          for (const course of PRODUCTION_COURSES) {
             await githubDB.insert(collections.courses, course);
           }
           const allCourses = await LMSService.searchCourses({});
@@ -35,7 +35,7 @@ const CoursesPage = () => {
       } catch (err) {
         // Fallback to starter courses if database fails
         console.warn('Database error, using starter courses:', err);
-        setCourses(STARTER_COURSES);
+        setCourses(PRODUCTION_COURSES);
       } finally {
         setLoading(false);
       }

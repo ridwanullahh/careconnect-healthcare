@@ -1,7 +1,7 @@
 // Medication Management Service for Hospital Management System
 import { githubDB, collections } from './database';
 import { logger } from './observability';
-import { EmailNotificationService } from './email-notifications';
+import { emailService, NotificationType } from './email-notifications';
 
 // Medication Request Interface (eRx)
 export interface MedicationRequest {
@@ -526,11 +526,20 @@ export class MedicationService {
       });
       
       // Send email notification (if email service is configured)
-      await EmailNotificationService.sendNotification({
-        type: 'prescription_received',
-        recipient: `pharmacy-${pharmacyEntityId}@placeholder.com`,
-        data: { requestId: requestId }
-      });
+      const pharmacy = await githubDB.findById(collections.entities, pharmacyEntityId);
+      if (pharmacy) {
+        await emailService.sendNotification({
+          type: NotificationType.BOOKING_REQUEST,
+          recipient: pharmacy.email,
+          recipientName: pharmacy.name,
+          data: {
+            patientName: 'A patient',
+            serviceName: 'Prescription Refill',
+            requestId: requestId
+          },
+          priority: 'medium'
+        });
+      }
       
     } catch (error) {
       logger.error('notify_pharmacy_failed', 'Failed to notify pharmacy', { error: error.message });
@@ -556,11 +565,20 @@ export class MedicationService {
       });
       
       // Send email notification
-      await EmailNotificationService.sendNotification({
-        type: 'medication_ready',
-        recipient: `patient-${dispense.patient_id}@placeholder.com`,
-        data: { dispenseId: dispenseId }
-      });
+      const patient = await githubDB.findById(collections.patients, dispense.patient_id);
+      if (patient) {
+        await emailService.sendNotification({
+          type: NotificationType.PRESCRIPTION_READY,
+          recipient: patient.email,
+          recipientName: `${patient.firstName} ${patient.lastName}`,
+          data: {
+            patientName: `${patient.firstName} ${patient.lastName}`,
+            medication: dispense.dispensed_medications.map(m => m.drug_name).join(', '),
+            pickupUrl: `/pharmacy/dispense/${dispense.id}`
+          },
+          priority: 'high'
+        });
+      }
       
     } catch (error) {
       logger.error('notify_patient_medication_ready_failed', 'Failed to notify patient', { error: error.message });

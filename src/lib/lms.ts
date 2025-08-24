@@ -365,7 +365,17 @@ export class LMSService {
   }
 
   static async getCourse(courseId: string): Promise<Course | null> {
-    return await dbHelpers.findById(collections.courses, courseId);
+    const course = await githubDB.findById<Course>(collections.courses, courseId);
+    if (!course) return null;
+
+    // Manually populate modules and lessons for the course
+    const modules = await githubDB.find<CourseModule>(collections.course_modules, { course_id: courseId });
+    for (const module of modules) {
+      module.lessons = await githubDB.find<Lesson>(collections.course_lessons, { module_id: module.id });
+    }
+    course.modules = modules;
+
+    return course;
   }
   
   // Module Management
@@ -686,90 +696,148 @@ export const COURSE_CATEGORIES = [
   'Continuing Education'
 ];
 
-// Comprehensive Starter Courses with Rich Content
-export const STARTER_COURSES: Course[] = [
+// Comprehensive Production-Ready Courses with Rich Content
+export const PRODUCTION_COURSES: Course[] = [
   {
-    id: 'course-fundamentals-anatomy',
+    id: 'course-healthcare-communication',
     entity_id: 'entity-careconnect',
-    instructor_id: 'instructor-dr-smith',
-    title: 'Human Anatomy Fundamentals',
-    description: 'Comprehensive introduction to human anatomy covering all major body systems. This course provides a thorough understanding of anatomical structures, physiological functions, and their clinical significance. Perfect for healthcare students, professionals, and anyone interested in understanding the human body.',
-    short_description: 'Master the fundamentals of human anatomy with interactive lessons, 3D visualizations, and clinical applications.',
-    thumbnail_url: '/images/courses/anatomy-fundamentals.jpg',
-    banner_url: '/images/courses/anatomy-banner.jpg',
-    category: 'Medical Fundamentals',
-    subcategory: 'Human Anatomy',
+    instructor_id: 'instructor-dr-communication',
+    title: 'Healthcare Communication Essentials',
+    description: 'Master the art of effective communication in healthcare settings. This comprehensive course covers patient communication, interdisciplinary collaboration, difficult conversations, cultural competency, and digital communication tools. Learn evidence-based strategies to improve patient outcomes through better communication.',
+    short_description: 'Essential communication skills for healthcare professionals to enhance patient care and team collaboration.',
+    thumbnail_url: '/images/courses/healthcare-communication.jpg',
+    banner_url: '/images/courses/healthcare-communication-banner.jpg',
+    category: 'Patient Care',
+    subcategory: 'Communication Skills',
     level: CourseLevel.BEGINNER,
     type: CourseType.SELF_PACED,
     language: 'English',
-    price: 199,
-    discounted_price: 149,
+    price: 149,
+    discounted_price: 99,
     currency: 'USD',
     is_free: false,
-    estimated_duration: 40,
+    estimated_duration: 25,
     modules_count: 8,
     lessons_count: 32,
     quizzes_count: 8,
-    prerequisites: ['Basic biology knowledge', 'Medical terminology basics'],
-    requirements: ['Computer with internet access', 'Notebook for taking notes'],
-    target_audience: ['Pre-med students', 'Nursing students', 'Healthcare professionals', 'Medical assistants'],
+    prerequisites: ['Basic healthcare knowledge', 'Interest in patient care'],
+    requirements: ['Computer with internet access', 'Notebook for practice exercises'],
+    target_audience: ['Healthcare professionals', 'Nursing students', 'Medical students', 'Healthcare administrators'],
     learning_objectives: [
-      'Identify and describe major anatomical structures',
-      'Understand the relationship between structure and function',
-      'Apply anatomical knowledge to clinical scenarios',
-      'Use proper medical terminology for anatomical descriptions'
+      'Demonstrate effective patient communication techniques',
+      'Handle difficult conversations with empathy and professionalism',
+      'Apply cultural competency in diverse healthcare settings',
+      'Utilize digital communication tools effectively',
+      'Collaborate effectively with interdisciplinary teams',
+      'Implement evidence-based communication strategies'
     ],
     skills_gained: [
-      'Anatomical knowledge',
-      'Medical terminology',
-      'Clinical reasoning',
-      'Visual-spatial understanding'
+      'Active listening',
+      'Empathetic communication',
+      'Conflict resolution',
+      'Cultural competency',
+      'Digital communication',
+      'Team collaboration'
     ],
     provides_certificate: true,
-    certificate_template_id: 'cert-template-anatomy',
-    ceu_credits: 20,
-    accreditation_body: 'American Medical Education Association',
+    certificate_template_id: 'cert-template-communication',
+    ceu_credits: 15,
+    accreditation_body: 'Healthcare Communication Institute',
     modules: [
       {
-        id: 'module-intro-anatomy',
-        course_id: 'course-fundamentals-anatomy',
-        title: 'Introduction to Human Anatomy',
-        description: 'Overview of anatomical terminology, body systems, and basic structures',
+        id: 'module-communication-fundamentals',
+        course_id: 'course-healthcare-communication',
+        title: 'Communication Fundamentals in Healthcare',
+        description: 'Core principles of effective healthcare communication',
         order: 1,
         lessons: [
           {
-            id: 'lesson-anatomical-position',
-            module_id: 'module-intro-anatomy',
-            title: 'Anatomical Position and Terminology',
-            description: 'Learn the standard anatomical position and directional terms',
+            id: 'lesson-communication-principles',
+            module_id: 'module-communication-fundamentals',
+            title: 'Principles of Effective Healthcare Communication',
+            description: 'Understanding the foundation of good communication in healthcare',
             type: ModuleType.VIDEO,
             order: 1,
             content: {
-              video_url: '/videos/anatomical-position.mp4',
-              video_duration: 15,
-              text_content: 'The anatomical position is the standard reference position used in anatomy...'
+              video_url: '/videos/communication-principles.mp4',
+              video_duration: 18,
+              text_content: 'Effective healthcare communication is built on trust, respect, and clear understanding. This lesson explores the fundamental principles that guide all successful healthcare interactions...'
             },
             is_preview: true,
+            estimated_duration: 25,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'lesson-active-listening-skills',
+            module_id: 'module-communication-fundamentals',
+            title: 'Active Listening Skills',
+            description: 'Developing advanced listening skills for better patient understanding',
+            type: ModuleType.TEXT,
+            order: 2,
+            content: {
+              text_content: 'Active listening is more than just hearing words. It involves fully concentrating on what the patient is saying, understanding their message, and responding thoughtfully. This lesson provides practical techniques for improving your listening skills...'
+            },
+            is_preview: false,
             estimated_duration: 20,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           },
           {
-            id: 'lesson-body-planes',
-            module_id: 'module-intro-anatomy',
-            title: 'Body Planes and Sections',
-            description: 'Understanding sagittal, coronal, and transverse planes',
-            type: ModuleType.INTERACTIVE,
-            order: 2,
+            id: 'lesson-nonverbal-communication',
+            module_id: 'module-communication-fundamentals',
+            title: 'Nonverbal Communication in Healthcare',
+            description: 'Understanding body language, facial expressions, and tone',
+            type: ModuleType.VIDEO,
+            order: 3,
             content: {
-              interactive_content: {
-                type: '3d_model',
-                model_url: '/models/body-planes.obj',
-                controls: ['rotate', 'zoom', 'section']
+              video_url: '/videos/nonverbal-communication.mp4',
+              video_duration: 22,
+              text_content: 'Research shows that 55% of communication is body language, 38% is tone of voice, and only 7% is actual words. In healthcare, nonverbal communication can significantly impact patient trust and comfort...'
+            },
+            is_preview: false,
+            estimated_duration: 30,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'quiz-communication-fundamentals',
+            module_id: 'module-communication-fundamentals',
+            title: 'Communication Fundamentals Quiz',
+            description: 'Test your understanding of basic communication principles',
+            type: ModuleType.QUIZ,
+            order: 4,
+            content: {
+              quiz_data: {
+                questions: [
+                  {
+                    id: 'q1-comm-fund',
+                    type: 'multiple_choice',
+                    question: 'What percentage of communication is attributed to body language according to research?',
+                    options: ['7%', '38%', '55%', '93%'],
+                    correct_answer: '55%',
+                    explanation: 'According to Albert Mehrabian\'s research, 55% of communication is body language, 38% is tone of voice, and 7% is words.',
+                    points: 10
+                  },
+                  {
+                    id: 'q2-comm-fund',
+                    type: 'true_false',
+                    question: 'Active listening only involves hearing what the patient says.',
+                    options: ['True', 'False'],
+                    correct_answer: 'False',
+                    explanation: 'Active listening involves fully concentrating, understanding, and responding thoughtfully, not just hearing.',
+                    points: 10
+                  }
+                ],
+                passing_score: 70,
+                time_limit: 10,
+                attempts_allowed: 3,
+                randomize_questions: false,
+                show_correct_answers: true
               }
             },
             is_preview: false,
-            estimated_duration: 25,
+            estimated_duration: 15,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           }
@@ -779,305 +847,26 @@ export const STARTER_COURSES: Course[] = [
         updated_at: new Date().toISOString()
       },
       {
-        id: 'module-skeletal-system',
-        course_id: 'course-fundamentals-anatomy',
-        title: 'The Skeletal System',
-        description: 'Comprehensive study of bones, joints, and skeletal structure',
+        id: 'module-patient-communication',
+        course_id: 'course-healthcare-communication',
+        title: 'Patient Communication Strategies',
+        description: 'Effective techniques for communicating with patients and families',
         order: 2,
         lessons: [
           {
-            id: 'lesson-bone-structure',
-            module_id: 'module-skeletal-system',
-            title: 'Bone Structure and Function',
-            description: 'Understanding bone composition, types, and functions',
+            id: 'lesson-patient-interviews',
+            module_id: 'module-patient-communication',
+            title: 'Conducting Effective Patient Interviews',
+            description: 'Structured approaches to gathering patient information',
             type: ModuleType.VIDEO,
             order: 1,
             content: {
-              video_url: '/videos/bone-structure.mp4',
-              video_duration: 20,
-              text_content: 'Bones are living tissues composed of collagen and calcium phosphate...'
+              video_url: '/videos/patient-interviews.mp4',
+              video_duration: 25,
+              text_content: 'A well-conducted patient interview is the foundation of quality healthcare. This lesson covers structured interview techniques, open-ended questioning, and creating a comfortable environment for patients to share their concerns...'
             },
             is_preview: false,
-            estimated_duration: 30,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-        ],
-        is_locked: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-    ],
-    enrollment_limit: 500,
-    enrollment_deadline: '2025-12-31',
-    access_duration: 365,
-    allow_preview: true,
-    discussion_enabled: true,
-    status: CourseStatus.PUBLISHED,
-    published_at: '2025-01-01T00:00:00Z',
-    enrolled_count: 247,
-    completed_count: 189,
-    rating: 4.8,
-    review_count: 156,
-    seo_title: 'Human Anatomy Fundamentals - Complete Online Course',
-    seo_description: 'Master human anatomy with our comprehensive online course featuring interactive 3D models, expert instruction, and certification.',
-    tags: ['anatomy', 'medical', 'healthcare', 'education', 'fundamentals'],
-    created_at: '2025-01-01T00:00:00Z',
-    updated_at: '2025-01-15T00:00:00Z'
-  },
-  {
-    id: 'course-patient-care-basics',
-    entity_id: 'entity-careconnect',
-    instructor_id: 'instructor-nurse-johnson',
-    title: 'Patient Care Fundamentals',
-    description: 'Essential skills for providing compassionate, effective patient care. This comprehensive course covers communication techniques, basic nursing skills, patient safety protocols, and ethical considerations in healthcare. Designed for healthcare professionals at all levels.',
-    short_description: 'Learn essential patient care skills including communication, safety protocols, and ethical practices.',
-    thumbnail_url: '/images/courses/patient-care.jpg',
-    banner_url: '/images/courses/patient-care-banner.jpg',
-    category: 'Patient Care',
-    subcategory: 'Nursing Fundamentals',
-    level: CourseLevel.BEGINNER,
-    type: CourseType.SELF_PACED,
-    language: 'English',
-    price: 0,
-    currency: 'USD',
-    is_free: true,
-    estimated_duration: 25,
-    modules_count: 5,
-    lessons_count: 20,
-    quizzes_count: 5,
-    prerequisites: [],
-    requirements: ['Interest in healthcare', 'Basic English proficiency'],
-    target_audience: ['New healthcare workers', 'Nursing students', 'Healthcare volunteers', 'Family caregivers'],
-    learning_objectives: [
-      'Demonstrate effective communication with patients and families',
-      'Apply basic patient safety principles',
-      'Understand ethical considerations in patient care',
-      'Perform basic patient care techniques'
-    ],
-    skills_gained: [
-      'Patient communication',
-      'Safety protocols',
-      'Ethical decision making',
-      'Basic care techniques'
-    ],
-    provides_certificate: true,
-    certificate_template_id: 'cert-template-patient-care',
-    ceu_credits: 15,
-    modules: [
-      {
-        id: 'module-communication',
-        course_id: 'course-patient-care-basics',
-        title: 'Effective Patient Communication',
-        description: 'Learn techniques for clear, compassionate communication with patients and families',
-        order: 1,
-        lessons: [
-          {
-            id: 'lesson-active-listening',
-            module_id: 'module-communication',
-            title: 'Active Listening Techniques',
-            description: 'Master the art of active listening in healthcare settings',
-            type: ModuleType.VIDEO,
-            order: 1,
-            content: {
-              video_url: '/videos/active-listening.mp4',
-              video_duration: 12,
-              text_content: 'Active listening is a crucial skill that involves fully concentrating on what the patient is saying...'
-            },
-            is_preview: true,
-            estimated_duration: 18,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          },
-          {
-            id: 'lesson-difficult-conversations',
-            module_id: 'module-communication',
-            title: 'Handling Difficult Conversations',
-            description: 'Strategies for managing challenging patient interactions',
-            type: ModuleType.TEXT,
-            order: 2,
-            content: {
-              text_content: 'Difficult conversations in healthcare are inevitable. This lesson provides frameworks and techniques for managing these situations with empathy and professionalism...'
-            },
-            is_preview: false,
-            estimated_duration: 22,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-        ],
-        is_locked: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-    ],
-    enrollment_limit: 1000,
-    access_duration: 180,
-    allow_preview: true,
-    discussion_enabled: true,
-    status: CourseStatus.PUBLISHED,
-    published_at: '2025-01-01T00:00:00Z',
-    enrolled_count: 892,
-    completed_count: 734,
-    rating: 4.9,
-    review_count: 445,
-    seo_title: 'Patient Care Fundamentals - Free Healthcare Course',
-    seo_description: 'Learn essential patient care skills with our free comprehensive course. Perfect for healthcare professionals and students.',
-    tags: ['patient care', 'nursing', 'communication', 'healthcare', 'free course'],
-    created_at: '2025-01-01T00:00:00Z',
-    updated_at: '2025-01-10T00:00:00Z'
-  },
-  {
-    id: 'course-mental-health-first-aid',
-    entity_id: 'entity-careconnect',
-    instructor_id: 'instructor-dr-martinez',
-    title: 'Mental Health First Aid Certification',
-    description: 'Comprehensive training in mental health first aid techniques. Learn to recognize signs of mental health crises, provide initial support, and connect individuals with appropriate professional help. This course meets national certification standards.',
-    short_description: 'Get certified in mental health first aid and learn to support people in mental health crises.',
-    thumbnail_url: '/images/courses/mental-health.jpg',
-    banner_url: '/images/courses/mental-health-banner.jpg',
-    category: 'Mental Health',
-    subcategory: 'Crisis Intervention',
-    level: CourseLevel.INTERMEDIATE,
-    type: CourseType.CERTIFICATION,
-    language: 'English',
-    price: 299,
-    discounted_price: 249,
-    currency: 'USD',
-    is_free: false,
-    estimated_duration: 30,
-    modules_count: 6,
-    lessons_count: 24,
-    quizzes_count: 6,
-    prerequisites: ['Must be 18 years or older', 'Basic understanding of mental health concepts'],
-    requirements: ['Stable internet connection', 'Ability to complete practical exercises'],
-    target_audience: ['Healthcare workers', 'Teachers', 'Community leaders', 'HR professionals'],
-    learning_objectives: [
-      'Identify signs and symptoms of mental health challenges',
-      'Apply the Mental Health First Aid Action Plan',
-      'Provide appropriate initial support and comfort',
-      'Connect individuals with professional help and resources'
-    ],
-    skills_gained: [
-      'Crisis recognition',
-      'De-escalation techniques',
-      'Resource awareness',
-      'Supportive communication'
-    ],
-    provides_certificate: true,
-    certificate_template_id: 'cert-template-mhfa',
-    ceu_credits: 25,
-    accreditation_body: 'National Mental Health First Aid Council',
-    modules: [
-      {
-        id: 'module-introduction-mhfa',
-        course_id: 'course-mental-health-first-aid',
-        title: 'Introduction to Mental Health First Aid',
-        description: 'Overview of mental health first aid principles and the ALGEE action plan',
-        order: 1,
-        lessons: [
-          {
-            id: 'lesson-mhfa-overview',
-            module_id: 'module-introduction-mhfa',
-            title: 'What is Mental Health First Aid?',
-            description: 'Understanding the role and importance of mental health first aid',
-            type: ModuleType.VIDEO,
-            order: 1,
-            content: {
-              video_url: '/videos/mhfa-overview.mp4',
-              video_duration: 18,
-              text_content: 'Mental Health First Aid is the initial support provided to a person experiencing a mental health challenge or crisis...'
-            },
-            is_preview: true,
-            estimated_duration: 25,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-        ],
-        is_locked: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-    ],
-    enrollment_limit: 200,
-    enrollment_deadline: '2025-12-15',
-    access_duration: 365,
-    allow_preview: true,
-    discussion_enabled: true,
-    status: CourseStatus.PUBLISHED,
-    published_at: '2025-01-01T00:00:00Z',
-    enrolled_count: 156,
-    completed_count: 98,
-    rating: 4.7,
-    review_count: 78,
-    seo_title: 'Mental Health First Aid Certification Course',
-    seo_description: 'Get certified in Mental Health First Aid with our comprehensive online course. Nationally recognized certification.',
-    tags: ['mental health', 'first aid', 'certification', 'crisis intervention', 'healthcare'],
-    created_at: '2025-01-01T00:00:00Z',
-    updated_at: '2025-01-12T00:00:00Z'
-  },
-  {
-    id: 'course-healthcare-technology',
-    entity_id: 'entity-careconnect',
-    instructor_id: 'instructor-tech-chen',
-    title: 'Healthcare Technology Essentials',
-    description: 'Explore the latest healthcare technologies including Electronic Health Records (EHR), telemedicine platforms, medical imaging systems, and AI applications in healthcare. Learn how technology is transforming patient care and healthcare delivery.',
-    short_description: 'Discover how technology is revolutionizing healthcare with hands-on experience in modern healthcare systems.',
-    thumbnail_url: '/images/courses/healthcare-tech.jpg',
-    banner_url: '/images/courses/healthcare-tech-banner.jpg',
-    category: 'Healthcare Technology',
-    subcategory: 'Digital Health',
-    level: CourseLevel.INTERMEDIATE,
-    type: CourseType.HYBRID,
-    language: 'English',
-    price: 399,
-    discounted_price: 299,
-    currency: 'USD',
-    is_free: false,
-    estimated_duration: 35,
-    modules_count: 7,
-    lessons_count: 28,
-    quizzes_count: 7,
-    prerequisites: ['Basic computer skills', 'Healthcare industry knowledge'],
-    requirements: ['Computer with internet access', 'Access to practice systems (provided)'],
-    target_audience: ['Healthcare administrators', 'IT professionals in healthcare', 'Healthcare providers', 'Students in health informatics'],
-    learning_objectives: [
-      'Navigate and utilize Electronic Health Record systems',
-      'Understand telemedicine platforms and best practices',
-      'Evaluate healthcare AI and automation tools',
-      'Implement technology solutions for improved patient care'
-    ],
-    skills_gained: [
-      'EHR proficiency',
-      'Telemedicine skills',
-      'Health informatics knowledge',
-      'Technology assessment'
-    ],
-    provides_certificate: true,
-    certificate_template_id: 'cert-template-health-tech',
-    ceu_credits: 30,
-    accreditation_body: 'Healthcare Information Management Systems Society',
-    modules: [
-      {
-        id: 'module-ehr-systems',
-        course_id: 'course-healthcare-technology',
-        title: 'Electronic Health Records (EHR)',
-        description: 'Comprehensive training on EHR systems, data entry, and clinical workflows',
-        order: 1,
-        lessons: [
-          {
-            id: 'lesson-ehr-basics',
-            module_id: 'module-ehr-systems',
-            title: 'EHR System Fundamentals',
-            description: 'Introduction to EHR systems, benefits, and basic navigation',
-            type: ModuleType.VIDEO,
-            order: 1,
-            content: {
-              video_url: '/videos/ehr-fundamentals.mp4',
-              video_duration: 22,
-              text_content: 'Electronic Health Records have transformed healthcare documentation and patient care coordination...'
-            },
-            is_preview: true,
-            estimated_duration: 30,
+            estimated_duration: 35,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           }
@@ -1088,19 +877,409 @@ export const STARTER_COURSES: Course[] = [
       }
     ],
     enrollment_limit: 300,
-    enrollment_deadline: '2025-11-30',
+    enrollment_deadline: '2025-12-31',
     access_duration: 365,
     allow_preview: true,
     discussion_enabled: true,
     status: CourseStatus.PUBLISHED,
     published_at: '2025-01-01T00:00:00Z',
-    enrolled_count: 198,
+    enrolled_count: 189,
     completed_count: 142,
-    rating: 4.6,
-    review_count: 89,
-    seo_title: 'Healthcare Technology Essentials - EHR and Digital Health',
-    seo_description: 'Master healthcare technology with our comprehensive course covering EHR systems, telemedicine, and AI in healthcare.',
-    tags: ['healthcare technology', 'EHR', 'telemedicine', 'health informatics', 'digital health'],
+    rating: 4.9,
+    review_count: 98,
+    seo_title: 'Healthcare Communication Essentials - Professional Development Course',
+    seo_description: 'Master essential communication skills for healthcare professionals. Learn patient communication, team collaboration, and cultural competency.',
+    tags: ['communication', 'patient care', 'healthcare', 'professional development', 'soft skills'],
+    created_at: '2025-01-01T00:00:00Z',
+    updated_at: '2025-01-15T00:00:00Z'
+  },
+  {
+    id: 'course-medical-ethics',
+    entity_id: 'entity-careconnect',
+    instructor_id: 'instructor-dr-ethics',
+    title: 'Medical Ethics and Patient Care',
+    description: 'Explore the fundamental principles of medical ethics and their application in modern healthcare. This course covers bioethical principles, informed consent, end-of-life care, research ethics, and contemporary ethical dilemmas in medicine. Develop critical thinking skills to navigate complex ethical situations in healthcare practice.',
+    short_description: 'Master medical ethics principles and apply them to real-world healthcare scenarios and decision-making.',
+    thumbnail_url: '/images/courses/medical-ethics.jpg',
+    banner_url: '/images/courses/medical-ethics-banner.jpg',
+    category: 'Medical Ethics',
+    subcategory: 'Bioethics',
+    level: CourseLevel.INTERMEDIATE,
+    type: CourseType.SELF_PACED,
+    language: 'English',
+    price: 199,
+    discounted_price: 149,
+    currency: 'USD',
+    is_free: false,
+    estimated_duration: 30,
+    modules_count: 9,
+    lessons_count: 36,
+    quizzes_count: 9,
+    prerequisites: ['Basic healthcare knowledge', 'Understanding of medical terminology'],
+    requirements: ['Computer with internet access', 'Notebook for case study analysis'],
+    target_audience: ['Healthcare professionals', 'Medical students', 'Nursing students', 'Healthcare administrators', 'Ethics committee members'],
+    learning_objectives: [
+      'Apply the four principles of biomedical ethics to clinical scenarios',
+      'Analyze complex ethical dilemmas using structured frameworks',
+      'Understand legal and ethical requirements for informed consent',
+      'Navigate end-of-life care decisions with sensitivity and professionalism',
+      'Evaluate research ethics and human subjects protection',
+      'Develop personal ethical frameworks for professional practice'
+    ],
+    skills_gained: [
+      'Ethical reasoning',
+      'Critical thinking',
+      'Decision-making frameworks',
+      'Professional judgment',
+      'Conflict resolution',
+      'Legal compliance'
+    ],
+    provides_certificate: true,
+    certificate_template_id: 'cert-template-ethics',
+    ceu_credits: 20,
+    accreditation_body: 'American Society for Bioethics and Humanities',
+    modules: [
+      {
+        id: 'module-bioethics-principles',
+        course_id: 'course-medical-ethics',
+        title: 'Fundamental Principles of Bioethics',
+        description: 'Explore the four core principles: autonomy, beneficence, non-maleficence, and justice',
+        order: 1,
+        lessons: [
+          {
+            id: 'lesson-four-principles',
+            module_id: 'module-bioethics-principles',
+            title: 'The Four Principles of Biomedical Ethics',
+            description: 'Understanding autonomy, beneficence, non-maleficence, and justice',
+            type: ModuleType.VIDEO,
+            order: 1,
+            content: {
+              video_url: '/videos/four-principles.mp4',
+              video_duration: 20,
+              text_content: 'The four principles of biomedical ethics, developed by Beauchamp and Childress, provide a framework for analyzing ethical issues in healthcare. These principles are: autonomy (respect for persons), beneficence (doing good), non-maleficence (do no harm), and justice (fairness)...'
+            },
+            is_preview: true,
+            estimated_duration: 30,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'lesson-autonomy-practice',
+            module_id: 'module-bioethics-principles',
+            title: 'Autonomy in Clinical Practice',
+            description: 'Respecting patient autonomy and decision-making capacity',
+            type: ModuleType.TEXT,
+            order: 2,
+            content: {
+              text_content: 'Patient autonomy is the right of patients to make decisions about their medical care without their healthcare provider trying to influence the decision. This principle requires that healthcare providers respect patients as individuals and honor their right to make choices about their care...'
+            },
+            is_preview: false,
+            estimated_duration: 25,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'lesson-beneficence-nonmaleficence',
+            module_id: 'module-bioethics-principles',
+            title: 'Beneficence and Non-maleficence in Action',
+            description: 'Balancing doing good while avoiding harm',
+            type: ModuleType.VIDEO,
+            order: 3,
+            content: {
+              video_url: '/videos/beneficence-nonmaleficence.mp4',
+              video_duration: 18,
+              text_content: 'Beneficence requires healthcare providers to act in the best interest of their patients, while non-maleficence requires them to "do no harm." These principles often work together but can sometimes conflict, requiring careful ethical analysis...'
+            },
+            is_preview: false,
+            estimated_duration: 28,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'quiz-bioethics-principles',
+            module_id: 'module-bioethics-principles',
+            title: 'Bioethics Principles Assessment',
+            description: 'Test your understanding of the four principles',
+            type: ModuleType.QUIZ,
+            order: 4,
+            content: {
+              quiz_data: {
+                questions: [
+                  {
+                    id: 'q1-bioethics',
+                    type: 'multiple_choice',
+                    question: 'Which principle of bioethics emphasizes respect for patient decision-making?',
+                    options: ['Beneficence', 'Non-maleficence', 'Autonomy', 'Justice'],
+                    correct_answer: 'Autonomy',
+                    explanation: 'Autonomy is the principle that emphasizes respect for patients as individuals and their right to make decisions about their care.',
+                    points: 10
+                  },
+                  {
+                    id: 'q2-bioethics',
+                    type: 'true_false',
+                    question: 'Beneficence and non-maleficence never conflict in clinical practice.',
+                    options: ['True', 'False'],
+                    correct_answer: 'False',
+                    explanation: 'These principles can sometimes conflict, such as when a beneficial treatment also carries significant risks.',
+                    points: 10
+                  }
+                ],
+                passing_score: 75,
+                time_limit: 15,
+                attempts_allowed: 3,
+                randomize_questions: true,
+                show_correct_answers: true
+              }
+            },
+            is_preview: false,
+            estimated_duration: 20,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ],
+        is_locked: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      },
+      {
+        id: 'module-informed-consent',
+        course_id: 'course-medical-ethics',
+        title: 'Informed Consent and Shared Decision Making',
+        description: 'Understanding the legal and ethical requirements for informed consent',
+        order: 2,
+        lessons: [
+          {
+            id: 'lesson-consent-elements',
+            module_id: 'module-informed-consent',
+            title: 'Elements of Valid Informed Consent',
+            description: 'The essential components of informed consent process',
+            type: ModuleType.VIDEO,
+            order: 1,
+            content: {
+              video_url: '/videos/informed-consent.mp4',
+              video_duration: 22,
+              text_content: 'Valid informed consent requires three essential elements: information (disclosure of relevant information), comprehension (patient understanding), and voluntariness (freedom from coercion). This lesson explores each element in detail...'
+            },
+            is_preview: false,
+            estimated_duration: 32,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ],
+        is_locked: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    ],
+    enrollment_limit: 200,
+    enrollment_deadline: '2025-12-31',
+    access_duration: 365,
+    allow_preview: true,
+    discussion_enabled: true,
+    status: CourseStatus.PUBLISHED,
+    published_at: '2025-01-01T00:00:00Z',
+    enrolled_count: 156,
+    completed_count: 98,
+    rating: 4.8,
+    review_count: 67,
+    seo_title: 'Medical Ethics and Patient Care - Professional Ethics Course',
+    seo_description: 'Master medical ethics principles and apply them to real-world healthcare scenarios. Essential for healthcare professionals.',
+    tags: ['medical ethics', 'bioethics', 'patient care', 'professional development', 'healthcare'],
+    created_at: '2025-01-01T00:00:00Z',
+    updated_at: '2025-01-12T00:00:00Z'
+  },
+  {
+    id: 'course-healthcare-technology',
+    entity_id: 'entity-careconnect',
+    instructor_id: 'instructor-tech-specialist',
+    title: 'Healthcare Technology and Digital Literacy',
+    description: 'Comprehensive training in modern healthcare technology systems and digital tools. This course covers Electronic Health Records (EHR), telemedicine platforms, healthcare apps, data security, artificial intelligence in healthcare, and emerging technologies. Learn to leverage technology to improve patient care and operational efficiency.',
+    short_description: 'Master essential healthcare technologies and digital tools to enhance patient care and practice efficiency.',
+    thumbnail_url: '/images/courses/healthcare-technology.jpg',
+    banner_url: '/images/courses/healthcare-technology-banner.jpg',
+    category: 'Healthcare Technology',
+    subcategory: 'Digital Health',
+    level: CourseLevel.INTERMEDIATE,
+    type: CourseType.SELF_PACED,
+    language: 'English',
+    price: 249,
+    discounted_price: 199,
+    currency: 'USD',
+    is_free: false,
+    estimated_duration: 35,
+    modules_count: 10,
+    lessons_count: 40,
+    quizzes_count: 10,
+    prerequisites: ['Basic computer skills', 'Healthcare industry knowledge', 'Understanding of healthcare workflows'],
+    requirements: ['Computer with internet access', 'Access to practice systems (provided)', 'Notebook for hands-on exercises'],
+    target_audience: ['Healthcare administrators', 'IT professionals in healthcare', 'Healthcare providers', 'Students in health informatics', 'Practice managers'],
+    learning_objectives: [
+      'Navigate and optimize Electronic Health Record systems',
+      'Implement telemedicine solutions effectively',
+      'Understand healthcare data security and privacy requirements',
+      'Evaluate and implement healthcare AI and automation tools',
+      'Design digital workflows to improve patient care',
+      'Assess emerging technologies for healthcare applications'
+    ],
+    skills_gained: [
+      'EHR proficiency',
+      'Telemedicine implementation',
+      'Health informatics',
+      'Data security compliance',
+      'Technology assessment',
+      'Digital workflow design'
+    ],
+    provides_certificate: true,
+    certificate_template_id: 'cert-template-health-tech',
+    ceu_credits: 25,
+    accreditation_body: 'Healthcare Information Management Systems Society',
+    modules: [
+      {
+        id: 'module-ehr-systems',
+        course_id: 'course-healthcare-technology',
+        title: 'Electronic Health Records (EHR) Mastery',
+        description: 'Comprehensive training on EHR systems, optimization, and best practices',
+        order: 1,
+        lessons: [
+          {
+            id: 'lesson-ehr-fundamentals',
+            module_id: 'module-ehr-systems',
+            title: 'EHR System Fundamentals and Benefits',
+            description: 'Introduction to EHR systems, benefits, and basic navigation',
+            type: ModuleType.VIDEO,
+            order: 1,
+            content: {
+              video_url: '/videos/ehr-fundamentals.mp4',
+              video_duration: 22,
+              text_content: 'Electronic Health Records have transformed healthcare documentation and patient care coordination. This lesson explores the fundamental concepts, benefits, and basic navigation of modern EHR systems...'
+            },
+            is_preview: true,
+            estimated_duration: 30,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'lesson-ehr-data-entry',
+            module_id: 'module-ehr-systems',
+            title: 'Efficient Data Entry and Documentation',
+            description: 'Best practices for accurate and efficient EHR documentation',
+            type: ModuleType.TEXT,
+            order: 2,
+            content: {
+              text_content: 'Efficient data entry in EHR systems is crucial for maintaining accurate patient records while optimizing workflow. This lesson covers templates, shortcuts, voice recognition, and structured data entry techniques...'
+            },
+            is_preview: false,
+            estimated_duration: 25,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'lesson-ehr-interoperability',
+            module_id: 'module-ehr-systems',
+            title: 'EHR Interoperability and Data Exchange',
+            description: 'Understanding how EHR systems communicate and share data',
+            type: ModuleType.VIDEO,
+            order: 3,
+            content: {
+              video_url: '/videos/ehr-interoperability.mp4',
+              video_duration: 20,
+              text_content: 'Interoperability allows different EHR systems to communicate and exchange patient data seamlessly. This lesson covers HL7 standards, FHIR protocols, and practical implementation strategies...'
+            },
+            is_preview: false,
+            estimated_duration: 28,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'quiz-ehr-systems',
+            module_id: 'module-ehr-systems',
+            title: 'EHR Systems Knowledge Check',
+            description: 'Test your understanding of EHR fundamentals and best practices',
+            type: ModuleType.QUIZ,
+            order: 4,
+            content: {
+              quiz_data: {
+                questions: [
+                  {
+                    id: 'q1-ehr',
+                    type: 'multiple_choice',
+                    question: 'What is the primary benefit of EHR interoperability?',
+                    options: ['Reduced costs', 'Seamless data exchange between systems', 'Faster data entry', 'Better user interface'],
+                    correct_answer: 'Seamless data exchange between systems',
+                    explanation: 'Interoperability allows different EHR systems to communicate and share patient data, improving care coordination.',
+                    points: 10
+                  },
+                  {
+                    id: 'q2-ehr',
+                    type: 'true_false',
+                    question: 'HL7 FHIR is a standard for healthcare data exchange.',
+                    options: ['True', 'False'],
+                    correct_answer: 'True',
+                    explanation: 'HL7 FHIR (Fast Healthcare Interoperability Resources) is indeed a standard for exchanging healthcare information electronically.',
+                    points: 10
+                  }
+                ],
+                passing_score: 80,
+                time_limit: 12,
+                attempts_allowed: 3,
+                randomize_questions: true,
+                show_correct_answers: true
+              }
+            },
+            is_preview: false,
+            estimated_duration: 18,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ],
+        is_locked: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      },
+      {
+        id: 'module-telemedicine',
+        course_id: 'course-healthcare-technology',
+        title: 'Telemedicine and Remote Care Technologies',
+        description: 'Implementation and optimization of telemedicine solutions',
+        order: 2,
+        lessons: [
+          {
+            id: 'lesson-telemedicine-platforms',
+            module_id: 'module-telemedicine',
+            title: 'Telemedicine Platform Selection and Setup',
+            description: 'Choosing and implementing the right telemedicine solution',
+            type: ModuleType.VIDEO,
+            order: 1,
+            content: {
+              video_url: '/videos/telemedicine-platforms.mp4',
+              video_duration: 25,
+              text_content: 'Selecting the right telemedicine platform is crucial for successful remote care delivery. This lesson covers platform evaluation criteria, implementation strategies, and best practices for virtual consultations...'
+            },
+            is_preview: false,
+            estimated_duration: 35,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ],
+        is_locked: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    ],
+    enrollment_limit: 150,
+    enrollment_deadline: '2025-12-31',
+    access_duration: 365,
+    allow_preview: true,
+    discussion_enabled: true,
+    status: CourseStatus.PUBLISHED,
+    published_at: '2025-01-01T00:00:00Z',
+    enrolled_count: 124,
+    completed_count: 89,
+    rating: 4.7,
+    review_count: 56,
+    seo_title: 'Healthcare Technology and Digital Literacy - Professional Development',
+    seo_description: 'Master healthcare technology systems including EHR, telemedicine, and emerging digital health tools. Essential for modern healthcare professionals.',
+    tags: ['healthcare technology', 'EHR', 'telemedicine', 'digital health', 'health informatics', 'professional development'],
     created_at: '2025-01-01T00:00:00Z',
     updated_at: '2025-01-08T00:00:00Z'
   }
@@ -1185,14 +1364,36 @@ export class CourseBuilder {
   }
 }
 
-// Initialize starter courses in database
-export const initializeStarterCourses = async () => {
+// Initialize production courses in database
+export const initializeProductionCourses = async () => {
   try {
-    for (const course of STARTER_COURSES) {
-      await dbHelpers.create(collections.courses, course);
+    for (const course of PRODUCTION_COURSES) {
+      // Separate modules and lessons from the main course object
+      const { modules, ...courseData } = course;
+      
+      // Create the course document
+      const newCourse = await githubDB.insert(collections.courses, courseData);
+
+      if (modules) {
+        for (const module of modules) {
+          const { lessons, ...moduleData } = module;
+          moduleData.course_id = newCourse.id;
+          
+          // Create the module document
+          const newModule = await githubDB.insert(collections.course_modules, moduleData);
+
+          if (lessons) {
+            for (const lesson of lessons) {
+              const lessonData = { ...lesson, module_id: newModule.id };
+              // Create the lesson document
+              await githubDB.insert(collections.course_lessons, lessonData);
+            }
+          }
+        }
+      }
     }
-    console.log('Starter courses initialized successfully');
+    console.log('Production courses initialized successfully');
   } catch (error) {
-    console.error('Error initializing starter courses:', error);
+    console.error('Error initializing production courses:', error);
   }
 };

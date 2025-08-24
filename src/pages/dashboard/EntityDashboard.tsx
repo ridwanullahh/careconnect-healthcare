@@ -263,12 +263,374 @@ const ServiceModal = ({ service, onClose, onSave }: { service: any, onClose: () 
   );
 };
 
+// New Section Components
+const LocationsSection = ({ entityId }: { entityId: string | null }) => {
+  const [locations, setLocations] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<any>(null);
+
+  const fetchLocations = async () => {
+    if (!entityId) return;
+    try {
+      const entityLocations = await githubDB.find(collections.entity_locations, { entityId });
+      setLocations(entityLocations);
+    } catch (error) {
+      console.error("Failed to fetch locations:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLocations();
+  }, [entityId]);
+
+  const handleSaveLocation = async (locationData: any) => {
+    if (!entityId) return;
+    try {
+      if (currentLocation) {
+        await githubDB.update(collections.entity_locations, currentLocation.id, locationData);
+      } else {
+        await githubDB.insert(collections.entity_locations, { ...locationData, entityId });
+      }
+      fetchLocations();
+      setIsModalOpen(false);
+      setCurrentLocation(null);
+    } catch (error) {
+      console.error("Failed to save location:", error);
+    }
+  };
+
+  if (isLoading) return <LoadingSpinner />;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-dark">Location Management</h2>
+        <button 
+          onClick={() => setIsModalOpen(true)}
+          className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90"
+        >
+          Add Location
+        </button>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {locations.map((location) => (
+          <div key={location.id} className="bg-white rounded-lg shadow-sm p-6">
+            <h3 className="font-semibold text-lg mb-2">{location.name}</h3>
+            <p className="text-gray-600 mb-4">{location.address}</p>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => { setCurrentLocation(location); setIsModalOpen(true); }}
+                className="bg-primary text-white px-3 py-1 rounded text-sm"
+              >
+                Edit
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {isModalOpen && (
+        <LocationModal
+          location={currentLocation}
+          onClose={() => { setIsModalOpen(false); setCurrentLocation(null); }}
+          onSave={handleSaveLocation}
+        />
+      )}
+    </div>
+  );
+};
+
+const LocationModal = ({ location, onClose, onSave }: any) => {
+  const [formData, setFormData] = useState({
+    name: location?.name || '',
+    address: location?.address || '',
+    phone: location?.phone || '',
+    email: location?.email || '',
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <h3 className="text-lg font-semibold mb-4">{location ? 'Edit Location' : 'Add Location'}</h3>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="text"
+            placeholder="Location Name"
+            value={formData.name}
+            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+            className="w-full p-2 border border-gray-300 rounded"
+            required
+          />
+          <input
+            type="text"
+            placeholder="Address"
+            value={formData.address}
+            onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+            className="w-full p-2 border border-gray-300 rounded"
+            required
+          />
+          <input
+            type="tel"
+            placeholder="Phone"
+            value={formData.phone}
+            onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+            className="w-full p-2 border border-gray-300 rounded"
+          />
+          <input
+            type="email"
+            placeholder="Email"
+            value={formData.email}
+            onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+            className="w-full p-2 border border-gray-300 rounded"
+          />
+          <div className="flex gap-4 pt-4">
+            <button type="button" onClick={onClose} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded">
+              Cancel
+            </button>
+            <button type="submit" className="flex-1 bg-primary text-white py-2 rounded">
+              Save
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const TeamSection = ({ entityId }: { entityId: string | null }) => {
+  const [staff, setStaff] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStaff = async () => {
+      if (!entityId) return;
+      try {
+        const entityStaff = await githubDB.find(collections.entity_staff, { entityId });
+        setStaff(entityStaff);
+      } catch (error) {
+        console.error("Failed to fetch staff:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchStaff();
+  }, [entityId]);
+
+  if (isLoading) return <LoadingSpinner />;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-dark">Team & Staff Management</h2>
+        <button className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90">
+          Add Staff Member
+        </button>
+      </div>
+      
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {staff.map((member) => (
+            <div key={member.id} className="border border-gray-200 rounded-lg p-4">
+              <h3 className="font-semibold">{member.name}</h3>
+              <p className="text-gray-600">{member.role}</p>
+              <p className="text-sm text-gray-500">{member.email}</p>
+            </div>
+          ))}
+          {staff.length === 0 && (
+            <div className="col-span-full text-center py-8 text-gray-500">
+              No staff members added yet.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CoachingSection = ({ entityId }: { entityId: string | null }) => {
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPrograms = async () => {
+      if (!entityId) return;
+      try {
+        const entityPrograms = await githubDB.find(collections.coaching_programs, { entityId });
+        setPrograms(entityPrograms);
+      } catch (error) {
+        console.error("Failed to fetch coaching programs:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchPrograms();
+  }, [entityId]);
+
+  if (isLoading) return <LoadingSpinner />;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-dark">Coaching Programs</h2>
+        <button className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90">
+          Create Program
+        </button>
+      </div>
+      
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {programs.map((program) => (
+            <div key={program.id} className="border border-gray-200 rounded-lg p-4">
+              <h3 className="font-semibold text-lg">{program.title}</h3>
+              <p className="text-gray-600 mb-2">{program.description}</p>
+              <p className="text-primary font-semibold">${program.price}</p>
+            </div>
+          ))}
+          {programs.length === 0 && (
+            <div className="col-span-full text-center py-8 text-gray-500">
+              No coaching programs created yet.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ReviewsSection = ({ entityId }: { entityId: string | null }) => {
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchReviews = async () => {
+      if (!entityId) return;
+      try {
+        const entityReviews = await githubDB.find(collections.reviews, { entity_id: entityId });
+        setReviews(entityReviews);
+      } catch (error) {
+        console.error("Failed to fetch reviews:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchReviews();
+  }, [entityId]);
+
+  if (isLoading) return <LoadingSpinner />;
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-dark">Reviews & Ratings</h2>
+      
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="space-y-4">
+          {reviews.map((review) => (
+            <div key={review.id} className="border-b border-gray-200 pb-4 last:border-b-0">
+              <div className="flex justify-between items-start mb-2">
+                <h4 className="font-semibold">{review.reviewer_name}</h4>
+                <div className="flex items-center">
+                  <span className="text-yellow-400">{'★'.repeat(review.rating)}</span>
+                  <span className="text-gray-300">{'★'.repeat(5 - review.rating)}</span>
+                </div>
+              </div>
+              <p className="text-gray-600">{review.comment}</p>
+              <p className="text-sm text-gray-400 mt-2">{new Date(review.created_at).toLocaleDateString()}</p>
+            </div>
+          ))}
+          {reviews.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              No reviews yet.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MessagesSection = ({ entityId }: { entityId: string | null }) => {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-dark">Messages</h2>
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="text-center py-8 text-gray-500">
+          Message system will be implemented here.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AnalyticsSection = ({ entityId }: { entityId: string | null }) => {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-dark">Analytics Dashboard</h2>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h3 className="text-sm font-medium text-gray-500 mb-2">Total Bookings</h3>
+          <p className="text-3xl font-bold text-primary">156</p>
+          <p className="text-sm text-green-600 mt-1">+23% from last month</p>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h3 className="text-sm font-medium text-gray-500 mb-2">Revenue</h3>
+          <p className="text-3xl font-bold text-primary">$12,450</p>
+          <p className="text-sm text-green-600 mt-1">+18% from last month</p>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h3 className="text-sm font-medium text-gray-500 mb-2">New Patients</h3>
+          <p className="text-3xl font-bold text-primary">43</p>
+          <p className="text-sm text-blue-600 mt-1">+12% from last month</p>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h3 className="text-sm font-medium text-gray-500 mb-2">Satisfaction Rate</h3>
+          <p className="text-3xl font-bold text-primary">98%</p>
+          <p className="text-sm text-green-600 mt-1">+2% from last month</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const IntegrationsSection = ({ entityId }: { entityId: string | null }) => {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-dark">Integrations</h2>
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="text-center py-8 text-gray-500">
+          Integration management will be implemented here.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const BillingSection = ({ entityId }: { entityId: string | null }) => {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-dark">Billing & Plans</h2>
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="text-center py-8 text-gray-500">
+          Billing management will be implemented here.
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const EntityDashboard = () => {
   const { user } = useAuth();
   const [entity, setEntity] = useState<HealthcareEntity | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const location = useLocation();
-  const currentPath = location.pathname.split('/').pop() || 'overview';
   
   const fetchEntity = async () => {
     if (user?.entity_id) {
@@ -292,69 +654,38 @@ const EntityDashboard = () => {
     }
   }, [user]);
 
-  const navigation = [
-    { name: 'Overview', path: 'overview' },
-    { name: 'Profile', path: 'profile' },
-    { name: 'Bookings', path: 'bookings' },
-    { name: 'Services', path: 'services' },
-    { name: 'Reviews', path: 'reviews' },
-    { name: 'LMS', path: 'lms' },
-    { name: 'Blog', path: 'blog' },
-    { name: 'Causes', path: 'causes' },
-    { name: 'Shop', path: 'shop' },
-    { name: 'Analytics', path: 'analytics' },
-    { name: 'Settings', path: 'settings' }
-  ];
-
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center"><LoadingSpinner size="lg" /></div>;
   }
 
   if (!user?.entity_id) {
-    return <div>User is not associated with an entity.</div>;
+    return (
+      <div className="text-center py-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">No Entity Associated</h2>
+        <p className="text-gray-600">User is not associated with an entity.</p>
+      </div>
+    );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex flex-col lg:flex-row gap-8">
-        <div className="lg:w-64">
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-semibold text-dark mb-4">Entity Admin</h3>
-            <nav className="space-y-2">
-              {navigation.map((item) => (
-                <Link
-                  key={item.path}
-                  to={`/dashboard/entity/${item.path}`}
-                  className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
-                    currentPath === item.path
-                      ? 'bg-primary text-white'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  {item.name}
-                </Link>
-              ))}
-            </nav>
-          </div>
-        </div>
-        <div className="flex-1">
-          <Routes>
-            <Route path="overview" element={<OverviewSection entity={entity} />} />
-            <Route path="profile" element={<ProfileManagementSection entity={entity} onUpdate={fetchEntity} />} />
-            <Route path="bookings" element={<BookingsSection entityId={user.entity_id} />} />
-            <Route path="services" element={<ServicesSection entityId={user.entity_id} />} />
-            <Route path="reviews" element={<div>Reviews section coming soon...</div>} />
-            <Route path="lms" element={<LmsManagementPage />} />
-            <Route path="blog" element={<BlogManagementPage />} />
-            <Route path="causes" element={<CausesManagementPage />} />
-            <Route path="shop" element={<ShopManagementPage />} />
-            <Route path="analytics" element={<div>Analytics section coming soon...</div>} />
-            <Route path="settings" element={<div>Settings section coming soon...</div>} />
-            <Route path="" element={<OverviewSection entity={entity} />} />
-          </Routes>
-        </div>
-      </div>
-    </div>
+    <Routes>
+      <Route path="overview" element={<OverviewSection entity={entity} />} />
+      <Route path="details" element={<ProfileManagementSection entity={entity} onUpdate={fetchEntity} />} />
+      <Route path="locations" element={<LocationsSection entityId={user.entity_id} />} />
+      <Route path="team" element={<TeamSection entityId={user.entity_id} />} />
+      <Route path="services" element={<ServicesSection entityId={user.entity_id} />} />
+      <Route path="coaching" element={<CoachingSection entityId={user.entity_id} />} />
+      <Route path="lms" element={<LmsManagementPage />} />
+      <Route path="blog" element={<BlogManagementPage />} />
+      <Route path="causes" element={<CausesManagementPage />} />
+      <Route path="ecommerce" element={<ShopManagementPage />} />
+      <Route path="reviews" element={<ReviewsSection entityId={user.entity_id} />} />
+      <Route path="messages" element={<MessagesSection entityId={user.entity_id} />} />
+      <Route path="analytics" element={<AnalyticsSection entityId={user.entity_id} />} />
+      <Route path="integrations" element={<IntegrationsSection entityId={user.entity_id} />} />
+      <Route path="billing" element={<BillingSection entityId={user.entity_id} />} />
+      <Route path="" element={<OverviewSection entity={entity} />} />
+    </Routes>
   );
 };
 

@@ -1,7 +1,7 @@
 // Referral Management Service for Hospital Management System
 import { githubDB, collections } from './database';
 import { logger } from './observability';
-import { EmailNotificationService } from './email-notifications';
+import { emailService, NotificationType } from './email-notifications';
 
 // Referral Interface
 export interface Referral {
@@ -398,15 +398,20 @@ export class ReferralService {
       });
       
       // Send email notification
-      await EmailNotificationService.sendNotification({
-        type: 'referral_received',
-        recipient: `entity-${referral.to_entity_id}@placeholder.com`,
-        data: { 
-          referralId: referralId,
-          referralNumber: referral.referral_number,
-          priority: referral.priority
-        }
-      });
+      const toEntity = await githubDB.findById(collections.entities, referral.to_entity_id);
+      if (toEntity) {
+        await emailService.sendNotification({
+          type: NotificationType.BOOKING_REQUEST,
+          recipient: toEntity.email,
+          recipientName: toEntity.name,
+          data: {
+            referralId: referralId,
+            referralNumber: referral.referral_number,
+            priority: referral.priority
+          },
+          priority: 'normal'
+        });
+      }
       
     } catch (error) {
       logger.error('notify_receiving_entity_failed', 'Failed to notify receiving entity', { error: error.message });

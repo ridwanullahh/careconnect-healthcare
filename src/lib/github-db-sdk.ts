@@ -194,6 +194,50 @@ class UniversalSDK {
         }
       },
       ...config.schemas,
+      course_modules: {
+        required: ['course_id', 'title'],
+        types: {
+          course_id: 'string',
+          title: 'string',
+        },
+        defaults: {
+          lessons: [],
+        }
+      },
+      course_lessons: {
+        required: ['module_id', 'title', 'type'],
+        types: {
+          module_id: 'string',
+          title: 'string',
+          type: 'string',
+        },
+        defaults: {
+          is_preview: false,
+        }
+      },
+      chat_sessions: {
+        required: ['userId', 'name', 'messages'],
+        types: {
+          userId: 'string',
+          name: 'string',
+        },
+        defaults: {
+          messages: [],
+          createdAt: new Date().toISOString(),
+          lastActivity: new Date().toISOString(),
+        }
+      },
+      ai_chatbot_support: {
+        required: ['topic', 'keywords'],
+        types: {
+          topic: 'string',
+          keywords: 'array',
+          response: 'string',
+        },
+        defaults: {
+          keywords: [],
+        }
+      },
       blog_posts: {
         required: ['title', 'content', 'author'],
         types: {
@@ -252,6 +296,380 @@ class UniversalSDK {
           product_id: 'string',
           quantity: 'number',
           unit_price: 'number',
+        }
+      },
+      
+      // Hospital Management System collections
+      patients: {
+        required: ['patient_code', 'primary_entity_id', 'created_by'],
+        types: {
+          patient_code: 'string',
+          primary_entity_id: 'string',
+          is_active: 'boolean',
+          verification_status: 'string'
+        },
+        defaults: {
+          is_active: true,
+          verification_status: 'pending',
+          preferences: {
+            language: 'en',
+            communication_method: 'email',
+            privacy_level: 'standard'
+          }
+        }
+      },
+      patient_identifiers: {
+        required: ['patient_id', 'type', 'encrypted_value'],
+        types: {
+          patient_id: 'string',
+          type: 'string',
+          is_primary: 'boolean'
+        },
+        defaults: {
+          is_primary: false
+        }
+      },
+      patient_entity_links: {
+        required: ['patient_id', 'entity_id', 'relationship_type', 'linked_by'],
+        types: {
+          patient_id: 'string',
+          entity_id: 'string',
+          relationship_type: 'string',
+          status: 'string'
+        },
+        defaults: {
+          status: 'active'
+        }
+      },
+      encounters: {
+        required: ['patient_id', 'entity_id', 'encounter_code', 'type', 'reason_for_visit', 'created_by'],
+        types: {
+          patient_id: 'string',
+          entity_id: 'string',
+          encounter_code: 'string',
+          type: 'string',
+          status: 'string',
+          priority: 'string'
+        },
+        defaults: {
+          status: 'scheduled',
+          priority: 'routine'
+        }
+      },
+      vitals: {
+        required: ['patient_id', 'entity_id', 'type', 'display_name', 'performer_id'],
+        types: {
+          patient_id: 'string',
+          entity_id: 'string',
+          type: 'string',
+          is_abnormal: 'boolean'
+        },
+        defaults: {
+          is_abnormal: false
+        }
+      },
+      conditions: {
+        required: ['patient_id', 'entity_id', 'condition_name', 'category', 'recorded_by'],
+        types: {
+          patient_id: 'string',
+          entity_id: 'string',
+          condition_name: 'string',
+          category: 'string',
+          clinical_status: 'string',
+          verification_status: 'string'
+        },
+        defaults: {
+          clinical_status: 'active',
+          verification_status: 'provisional'
+        }
+      },
+      allergies: {
+        required: ['patient_id', 'entity_id', 'allergen', 'recorded_by'],
+        types: {
+          patient_id: 'string',
+          entity_id: 'string',
+          allergen: 'string',
+          criticality: 'string',
+          status: 'string'
+        },
+        defaults: {
+          criticality: 'low',
+          status: 'active'
+        }
+      },
+      medication_requests: {
+        required: ['patient_id', 'entity_id', 'prescriber_id', 'prescription_number', 'medications'],
+        types: {
+          patient_id: 'string',
+          entity_id: 'string',
+          prescriber_id: 'string',
+          prescription_number: 'string',
+          status: 'string',
+          intent: 'string',
+          priority: 'string'
+        },
+        defaults: {
+          status: 'active',
+          intent: 'order',
+          priority: 'routine'
+        }
+      },
+      medication_dispenses: {
+        required: ['medication_request_id', 'pharmacy_entity_id', 'patient_id'],
+        types: {
+          medication_request_id: 'string',
+          pharmacy_entity_id: 'string',
+          patient_id: 'string',
+          status: 'string',
+          type: 'string'
+        },
+        defaults: {
+          status: 'preparation',
+          type: 'trial_fill',
+          counseling_provided: false,
+          patient_acknowledged: false
+        }
+      },
+      lab_orders: {
+        required: ['patient_id', 'entity_id', 'orderer_id', 'order_number', 'tests', 'reason_for_test'],
+        types: {
+          patient_id: 'string',
+          entity_id: 'string',
+          orderer_id: 'string',
+          order_number: 'string',
+          status: 'string',
+          priority: 'string',
+          category: 'string'
+        },
+        defaults: {
+          status: 'requested',
+          priority: 'routine',
+          category: 'chemistry',
+          specimen_collected: false
+        }
+      },
+      lab_results: {
+        required: ['lab_order_id', 'patient_id', 'test_name', 'analytes', 'resulted_by'],
+        types: {
+          lab_order_id: 'string',
+          patient_id: 'string',
+          test_name: 'string',
+          status: 'string',
+          critical_value: 'boolean'
+        },
+        defaults: {
+          status: 'preliminary',
+          critical_value: false,
+          released_to_patient: false
+        }
+      },
+      imaging_orders: {
+        required: ['patient_id', 'entity_id', 'orderer_id', 'order_number', 'modality', 'study_description', 'body_part', 'clinical_info', 'reason_for_study'],
+        types: {
+          patient_id: 'string',
+          entity_id: 'string',
+          orderer_id: 'string',
+          order_number: 'string',
+          status: 'string',
+          priority: 'string',
+          modality: 'string'
+        },
+        defaults: {
+          status: 'requested',
+          priority: 'routine',
+          contrast_required: false
+        }
+      },
+      documents: {
+        required: ['patient_id', 'document_type', 'title'],
+        types: {
+          patient_id: 'string',
+          document_type: 'string',
+          title: 'string',
+          file_size: 'number'
+        },
+        defaults: {
+          file_size: 0,
+          is_encrypted: false
+        }
+      },
+      care_plans: {
+        required: ['patient_id', 'entity_id', 'title', 'description', 'category', 'created_by'],
+        types: {
+          patient_id: 'string',
+          entity_id: 'string',
+          title: 'string',
+          category: 'string',
+          status: 'string',
+          intent: 'string'
+        },
+        defaults: {
+          status: 'draft',
+          intent: 'plan',
+          goals: [],
+          activities: [],
+          care_team: []
+        }
+      },
+      referrals: {
+        required: ['patient_id', 'from_entity_id', 'to_entity_id', 'referring_provider_id', 'referral_number', 'type', 'reason_for_referral', 'clinical_summary', 'created_by'],
+        types: {
+          patient_id: 'string',
+          from_entity_id: 'string',
+          to_entity_id: 'string',
+          referral_number: 'string',
+          type: 'string',
+          priority: 'string',
+          status: 'string'
+        },
+        defaults: {
+          status: 'draft',
+          priority: 'routine',
+          follow_up_required: false
+        }
+      },
+      bed_management: {
+        required: ['entity_id', 'ward', 'room_number', 'bed_number', 'bed_type'],
+        types: {
+          entity_id: 'string',
+          ward: 'string',
+          room_number: 'string',
+          bed_number: 'string',
+          bed_type: 'string',
+          status: 'string'
+        },
+        defaults: {
+          status: 'available',
+          features: []
+        }
+      },
+      staff_schedules: {
+        required: ['entity_id', 'staff_id', 'schedule_date', 'shift_start', 'shift_end'],
+        types: {
+          entity_id: 'string',
+          staff_id: 'string',
+          schedule_date: 'string',
+          shift_start: 'string',
+          shift_end: 'string',
+          is_available: 'boolean'
+        },
+        defaults: {
+          is_available: true
+        }
+      },
+      triage_notes: {
+        required: ['patient_id', 'encounter_id', 'entity_id', 'acuity_level', 'chief_complaint', 'triage_nurse_id'],
+        types: {
+          patient_id: 'string',
+          encounter_id: 'string',
+          entity_id: 'string',
+          acuity_level: 'string'
+        },
+        defaults: {
+          acuity_level: 'routine'
+        }
+      },
+      pharmacy_inventory: {
+        required: ['entity_id', 'drug_name', 'strength', 'dosage_form', 'quantity_on_hand', 'unit_of_measure', 'minimum_stock_level', 'unit_cost', 'selling_price'],
+        types: {
+          entity_id: 'string',
+          drug_name: 'string',
+          quantity_on_hand: 'number',
+          unit_cost: 'number',
+          selling_price: 'number',
+          is_active: 'boolean',
+          is_controlled_substance: 'boolean'
+        },
+        defaults: {
+          is_active: true,
+          is_controlled_substance: false,
+          lot_batches: []
+        }
+      },
+      pharmacy_orders: {
+        required: ['entity_id', 'order_number', 'supplier_name', 'order_date', 'expected_delivery', 'items', 'ordered_by'],
+        types: {
+          entity_id: 'string',
+          order_number: 'string',
+          supplier_name: 'string',
+          status: 'string',
+          subtotal: 'number',
+          total_amount: 'number'
+        },
+        defaults: {
+          status: 'pending',
+          subtotal: 0,
+          tax_amount: 0,
+          shipping_cost: 0,
+          total_amount: 0
+        }
+      },
+      insurance_claims: {
+        required: ['patient_id', 'entity_id', 'encounter_id', 'claim_number', 'claim_type', 'insurance_provider', 'policy_number', 'member_id', 'claimed_amount', 'services', 'created_by'],
+        types: {
+          patient_id: 'string',
+          entity_id: 'string',
+          claim_number: 'string',
+          claim_type: 'string',
+          status: 'string',
+          claimed_amount: 'number'
+        },
+        defaults: {
+          status: 'draft'
+        }
+      },
+      billing_items: {
+        required: ['encounter_id', 'patient_id', 'entity_id', 'service_name', 'category', 'quantity', 'unit_price', 'created_by'],
+        types: {
+          encounter_id: 'string',
+          patient_id: 'string',
+          entity_id: 'string',
+          service_name: 'string',
+          category: 'string',
+          quantity: 'number',
+          unit_price: 'number',
+          total_amount: 'number',
+          status: 'string'
+        },
+        defaults: {
+          status: 'pending',
+          discount_amount: 0,
+          tax_amount: 0
+        }
+      },
+      consents: {
+        required: ['patient_id', 'entity_id', 'consent_type', 'scope', 'purpose', 'consent_text', 'granted_by', 'obtained_by'],
+        types: {
+          patient_id: 'string',
+          entity_id: 'string',
+          consent_type: 'string',
+          scope: 'string',
+          status: 'string'
+        },
+        defaults: {
+          status: 'pending'
+        }
+      },
+      access_grants: {
+        required: ['patient_id', 'grantee_type', 'grantee_name', 'encrypted_grantee_contact', 'access_level', 'scope', 'granted_by'],
+        types: {
+          patient_id: 'string',
+          grantee_type: 'string',
+          grantee_name: 'string',
+          access_level: 'string',
+          status: 'string',
+          emergency_only: 'boolean',
+          require_patient_approval: 'boolean'
+        },
+        defaults: {
+          status: 'pending',
+          emergency_only: false,
+          require_patient_approval: false,
+          can_view_records: false,
+          can_schedule_appointments: false,
+          can_receive_notifications: false,
+          can_communicate_with_providers: false,
+          pin_required: false
         }
       },
     };
@@ -446,11 +864,22 @@ class UniversalSDK {
     return arr.find((x: any) => x.id === id || x.uid === id) || null;
   }
 
-  async find<T = any>(collection: string, filters: any = {}): Promise<T[]> {
+  async find<T = any>(collection: string, filterFnOrObject?: ((item: T) => boolean) | Record<string, any>): Promise<T[]> {
     const arr = await this.get<T>(collection);
+
+    // If no filter provided, return all
+    if (filterFnOrObject === undefined || filterFnOrObject === null) {
+      return arr;
+    }
+
+    if (typeof filterFnOrObject === 'function') {
+      return arr.filter(filterFnOrObject as (item: T) => boolean);
+    }
+    
+    // Object-based filter
     return arr.filter(record => {
-      for (const [key, value] of Object.entries(filters)) {
-        if (record[key as keyof T] !== value) {
+      for (const [key, value] of Object.entries(filterFnOrObject || {})) {
+        if ((record as any)[key] !== value) {
           return false;
         }
       }

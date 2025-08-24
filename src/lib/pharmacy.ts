@@ -1,7 +1,7 @@
 // Pharmacy Management Service for Hospital Management System
 import { githubDB, collections } from './database';
 import { logger } from './observability';
-import { EmailNotificationService } from './email-notifications';
+import { emailService, NotificationType } from './email-notifications';
 
 // Pharmacy Inventory Interface
 export interface PharmacyInventory {
