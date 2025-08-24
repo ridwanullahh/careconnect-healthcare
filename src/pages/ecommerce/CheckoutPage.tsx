@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { useNavigate } from 'react-router-dom';
 import { ECommerceService, OrderItem, Address } from '../../lib/ecommerce';
 import { useAuth } from '../../lib/auth';
@@ -9,6 +10,7 @@ interface CartViewItem extends OrderItem {
 }
 
 const CheckoutPage = () => {
+  const toast = useToastService();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [cartItems, setCartItems] = useState<CartViewItem[]>([]);
@@ -70,7 +72,7 @@ const CheckoutPage = () => {
     setProcessing(true);
 
     if (!user) {
-      alert('You must be logged in to place an order.');
+      toast.showSuccess('You must be logged in to place an order.');
       setProcessing(false);
       return;
     }
@@ -111,7 +113,7 @@ const CheckoutPage = () => {
       navigate(`/order-success/${newOrder.id}`);
     } catch (error) {
       console.error('Order creation failed:', error);
-      alert('Failed to create order. Please try again.');
+      toast.showSuccess('Failed to create order. Please try again.');
     } finally {
       setProcessing(false);
     }

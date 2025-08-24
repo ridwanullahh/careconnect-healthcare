@@ -1,7 +1,7 @@
 // Billing Management Service for Hospital Management System
 import { githubDB, collections } from './database';
 import { logger } from './observability';
-import { EnhancedPaymentService } from './payments-enhanced';
+import PaymentService from './payments-enhanced';
 
 // Billing Item Interface
 export interface BillingItem {
@@ -284,7 +284,7 @@ export class BillingService {
       });
       
       // Create payment intent
-      await EnhancedPaymentService.createPaymentIntent({
+      await PaymentService.createPaymentIntent({
         amount: invoice.total_amount,
         currency: 'USD',
         metadata: {

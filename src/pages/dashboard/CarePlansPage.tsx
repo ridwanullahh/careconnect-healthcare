@@ -1,5 +1,6 @@
 // Care Plans Management Page - HMS Care Plan Operations
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,7 +54,7 @@ export default function CarePlansPage() {
 
   const handleCreatePlan = async (planData: any) => {
     if (!hasPermission(Permission.MANAGE_CARE_PLANS)) {
-      alert('You do not have permission to manage care plans');
+      toast.showSuccess('You do not have permission to manage care plans');
       return;
     }
 
@@ -72,7 +73,7 @@ export default function CarePlansPage() {
       loadCarePlansData();
     } catch (error) {
       console.error('Failed to create care plan:', error);
-      alert('Failed to create care plan');
+      toast.showSuccess('Failed to create care plan');
     }
   };
 

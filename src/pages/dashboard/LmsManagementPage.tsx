@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { useNavigate } from 'react-router-dom';
 import { Course, LMSService, CourseStatus, CourseLevel, CourseType } from '../../lib/lms';
 import { useAuth } from '../../lib/auth';
@@ -6,6 +7,7 @@ import { githubDB, collections } from '../../lib/database';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const LmsManagementPage = () => {
+  const toast = useToastService();
   const navigate = useNavigate();
   const { user: currentUser, isAuthenticated } = useAuth();
   
@@ -18,7 +20,7 @@ const LmsManagementPage = () => {
 
   useEffect(() => {
     if (!isAuthenticated || !currentUser) {
-      navigate('/auth/login');
+      navigate('/login');
       return;
     }
     loadCourses();
@@ -72,10 +74,10 @@ const LmsManagementPage = () => {
     try {
       await LMSService.publishCourse(courseId);
       await loadCourses();
-      alert('Course published successfully!');
+      toast.showSuccess('Course published successfully!');
     } catch (error) {
       console.error('Error publishing course:', error);
-      alert('Failed to publish course');
+      toast.showSuccess('Failed to publish course');
     }
   };
 
@@ -84,10 +86,10 @@ const LmsManagementPage = () => {
       try {
         await LMSService.deleteCourse(courseId);
         await loadCourses();
-        alert('Course deleted successfully!');
+        toast.showSuccess('Course deleted successfully!');
       } catch (error) {
         console.error('Error deleting course:', error);
-        alert('Failed to delete course');
+        toast.showSuccess('Failed to delete course');
       }
     }
   };

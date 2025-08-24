@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
 import { githubDB, collections } from '../../lib/database';
@@ -51,11 +52,11 @@ const ProfileManagementSection = ({ entity, onUpdate }: { entity: HealthcareEnti
     setIsLoading(true);
     try {
       await EntityService.updateEntity(entity.id, formData);
-      alert('Profile updated successfully!');
+      toast.showSuccess('Profile updated successfully!');
       onUpdate();
     } catch (error) {
       console.error("Failed to update profile:", error);
-      alert('Failed to update profile.');
+      toast.showSuccess('Failed to update profile.');
     } finally {
       setIsLoading(false);
     }
@@ -156,6 +157,7 @@ const ServicesSection = ({ entityId }: { entityId: string | null }) => {
   };
 
   const handleCloseModal = () => {
+  const toast = useToastService();
     setIsModalOpen(false);
     setCurrentService(null);
   };

@@ -137,7 +137,43 @@ export const collections = {
   access_grants: 'access_grants',
   
   // AI Chatbot
-  ai_chatbot_support: 'ai_chatbot_support'
+  ai_chatbot_support: 'ai_chatbot_support',
+  
+  // AILab Collections
+  ai_care_paths: 'ai_care_paths',
+  ai_lab_explanations: 'ai_lab_explanations',
+  ai_procedure_navigators: 'ai_procedure_navigators',
+  ai_emergency_plans: 'ai_emergency_plans',
+  ai_medical_timelines: 'ai_medical_timelines',
+  ai_cultural_guidance: 'ai_cultural_guidance',
+  ai_photo_analyses: 'ai_photo_analyses',
+  ai_care_coordination: 'ai_care_coordination',
+  ai_health_goals: 'ai_health_goals',
+  ai_family_genetics: 'ai_family_genetics',
+  
+  // TODO5 Required Collections
+  verification_requests: 'verification_requests',
+  verification_documents: 'verification_documents',
+  services: 'services',
+  slot_locks: 'slot_locks',
+  scheduled_emails: 'scheduled_emails',
+  carts: 'carts',
+  forum_posts: 'forum_posts',
+  forum_replies: 'forum_replies',
+  podcast_series: 'podcast_series',
+  podcast_episodes: 'podcast_episodes',
+  podcast_rss_feeds: 'podcast_rss_feeds',
+  disbursements: 'disbursements',
+  tool_incidents: 'tool_incidents',
+  tool_versions: 'tool_versions',
+  unsubscribe_records: 'unsubscribe_records',
+  session_tokens: 'session_tokens',
+  consent_records: 'consent_records',
+  data_export_requests: 'data_export_requests',
+  data_deletion_requests: 'data_deletion_requests',
+  search_analytics: 'search_analytics',
+  uptime_checks: 'uptime_checks',
+  error_logs: 'error_logs'
 };
 
 // Auto-initialize all collections

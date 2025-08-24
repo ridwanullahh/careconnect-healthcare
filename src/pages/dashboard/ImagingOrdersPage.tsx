@@ -1,5 +1,6 @@
 // Imaging Orders Management Page - HMS Imaging Operations
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,7 +57,7 @@ export default function ImagingOrdersPage() {
 
   const handleCreateOrder = async (orderData: any) => {
     if (!hasPermission(Permission.ORDER_IMAGING)) {
-      alert('You do not have permission to order imaging studies');
+      toast.showSuccess('You do not have permission to order imaging studies');
       return;
     }
 
@@ -79,7 +80,7 @@ export default function ImagingOrdersPage() {
       loadImagingData();
     } catch (error) {
       console.error('Failed to create imaging order:', error);
-      alert('Failed to create imaging order');
+      toast.showSuccess('Failed to create imaging order');
     }
   };
 

@@ -1,667 +1,529 @@
-// Enhanced Booking System with Production-Ready Features
-import { dbHelpers, collections } from './database';
-import { PaymentService, PaymentType } from './payments';
-import { 
-  emailEventHandler, 
-  EmailEvent,
-  triggerAppointmentBooked
-} from './email-events';
-import { logger } from './observability';
+// Enhanced Booking System with Slot Locks and Calendar Generation
+import { githubDB, collections } from './database';
 
-// Enhanced Booking Types
-export enum BookingType {
-  IN_PERSON = 'in_person',
-  TELEHEALTH = 'telehealth',
-  PHONE_CONSULTATION = 'phone_consultation',
-  HOME_VISIT = 'home_visit',
-  EMERGENCY = 'emergency'
-}
-
-export enum BookingStatus {
-  PENDING = 'pending',
-  CONFIRMED = 'confirmed',
-  CHECKED_IN = 'checked_in',
-  IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
-  CANCELLED = 'cancelled',
-  NO_SHOW = 'no_show',
-  RESCHEDULED = 'rescheduled'
-}
-
-export enum SlotStatus {
-  AVAILABLE = 'available',
-  BOOKED = 'booked',
-  BLOCKED = 'blocked',
-  UNAVAILABLE = 'unavailable'
-}
-
-export interface BookingRules {
-  lead_time_hours: number; // Minimum hours before appointment
-  buffer_before_minutes: number; // Buffer before appointment
-  buffer_after_minutes: number; // Buffer after appointment
-  max_per_day: number; // Maximum bookings per day
-  cancellation_hours: number; // Hours before cancellation allowed
-  no_show_policy: string;
-  requires_deposit: boolean;
-  deposit_percentage?: number;
-}
-
-export interface TimeSlot {
+export interface Service {
   id: string;
-  entity_id: string;
-  service_id: string;
-  provider_id?: string;
-  date: string; // YYYY-MM-DD
-  start_time: string; // HH:MM
-  end_time: string; // HH:MM
-  status: SlotStatus;
-  booking_id?: string;
-  resource_requirements?: string[]; // Rooms, equipment needed
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Booking {
-  id: string;
-  entity_id: string;
-  service_id: string;
-  patient_id: string;
-  provider_id?: string;
-  type: BookingType;
-  status: BookingStatus;
-  appointment_date: string;
-  appointment_time: string;
-  duration_minutes: number;
-  
-  // Patient details
-  patient_name: string;
-  patient_email: string;
-  patient_phone: string;
-  patient_notes?: string;
-  
-  // Booking details
-  booking_reference: string;
-  booking_rules: BookingRules;
-  total_amount: number;
-  paid_amount: number;
-  payment_status: 'pending' | 'paid' | 'partially_paid' | 'refunded';
-  
-  // Telehealth
-  telehealth_info?: {
-    meeting_url?: string;
-    meeting_id?: string;
-    waiting_room_enabled: boolean;
-    recording_enabled: boolean;
-    consent_given: boolean;
+  entityId: string;
+  name: string;
+  description: string;
+  duration: number; // in minutes
+  price: number;
+  currency: string;
+  availability: {
+    dayOfWeek: number; // 0-6 (Sunday-Saturday)
+    startTime: string; // HH:MM format
+    endTime: string; // HH:MM format
+  }[];
+  bufferTime: number; // minutes between appointments
+  advanceBookingDays: number;
+  cancellationPolicy: {
+    allowedHours: number;
+    refundPercentage: number;
   };
-  
-  // Timestamps
-  created_at: string;
-  updated_at: string;
-  confirmed_at?: string;
-  completed_at?: string;
-  cancelled_at?: string;
+  reschedulePolicy: {
+    allowedHours: number;
+    feeAmount: number;
+  };
+  maxBookingsPerDay: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SlotLock {
+  id: string;
+  serviceId: string;
+  entityId: string;
+  slotDateTime: string;
+  lockedBy: string;
+  lockedAt: string;
+  expiresAt: string;
+  bookingId?: string;
+  status: 'active' | 'expired' | 'converted' | 'released';
+}
+
+export interface BookingReminder {
+  id: string;
+  bookingId: string;
+  reminderType: '24h' | '2h' | '30m';
+  scheduledFor: string;
+  status: 'pending' | 'sent' | 'failed';
+  attempts: number;
+  lastAttemptAt?: string;
+  createdAt: string;
+}
+
+export interface EnhancedBooking {
+  id: string;
+  serviceId: string;
+  entityId: string;
+  patientId: string;
+  appointmentDateTime: string;
+  duration: number;
+  status: 'confirmed' | 'cancelled' | 'completed' | 'no_show' | 'rescheduled';
+  bookingReference: string;
+  paymentStatus: 'pending' | 'paid' | 'refunded' | 'failed';
+  paymentId?: string;
+  totalAmount: number;
+  currency: string;
+  cancellationReason?: string;
+  cancelledAt?: string;
+  rescheduleHistory: {
+    originalDateTime: string;
+    newDateTime: string;
+    rescheduledAt: string;
+    reason: string;
+  }[];
+  remindersSent: string[];
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export class EnhancedBookingService {
-  // Generate available time slots with advanced rules
-  static async generateTimeSlots(
-    entityId: string,
-    serviceId: string,
-    startDate: string,
-    endDate: string,
-    providerId?: string
-  ): Promise<TimeSlot[]> {
-    try {
-      await logger.info('generate_slots_started', 'Generating time slots', {
-        entity_id: entityId,
-        service_id: serviceId,
-        date_range: `${startDate} to ${endDate}`
-      });
+  // Create service
+  static async createService(serviceData: Omit<Service, 'id' | 'createdAt' | 'updatedAt'>): Promise<Service> {
+    const service: Service = {
+      id: `srv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      ...serviceData,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
 
-      // Get service details and booking rules
-      const service = await dbHelpers.findById(collections.entity_services, serviceId);
-      if (!service) {
-        throw new Error('Service not found');
-      }
-
-      // Get entity availability rules
-      const entity = await dbHelpers.findById(collections.entities, entityId);
-      if (!entity) {
-        throw new Error('Entity not found');
-      }
-
-      // Get existing slots to avoid duplicates
-      const existingSlots = await dbHelpers.find(collections.appointment_slots, {
-        entity_id: entityId,
-        service_id: serviceId,
-        date: { $gte: startDate, $lte: endDate }
-      });
-
-      const existingSlotKeys = new Set(
-        existingSlots.map(slot => `${slot.date}_${slot.start_time}`)
-      );
-
-      const slots: TimeSlot[] = [];
-      const currentDate = new Date(startDate);
-      const finalDate = new Date(endDate);
-
-      while (currentDate <= finalDate) {
-        const dateStr = currentDate.toISOString().split('T')[0];
-        const daySlots = await this.generateDaySlots(
-          entityId,
-          serviceId,
-          dateStr,
-          entity,
-          service,
-          providerId,
-          existingSlotKeys
-        );
-        
-        slots.push(...daySlots);
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      // Save new slots to database
-      for (const slot of slots) {
-        await dbHelpers.create(collections.appointment_slots, slot);
-      }
-
-      await logger.info('generate_slots_completed', 'Time slots generated successfully', {
-        slots_created: slots.length
-      });
-
-      return slots;
-    } catch (error) {
-      await logger.error('generate_slots_failed', 'Failed to generate time slots', {
-        error: error.message,
-        entity_id: entityId,
-        service_id: serviceId
-      });
-      throw error;
-    }
+    await githubDB.create(collections.services, service);
+    return service;
   }
 
-  private static async generateDaySlots(
-    entityId: string,
+  // Get available slots for a service
+  static async getAvailableSlots(
     serviceId: string,
-    date: string,
-    entity: any,
-    service: any,
-    providerId?: string,
-    existingSlotKeys?: Set<string>
-  ): Promise<TimeSlot[]> {
-    const slots: TimeSlot[] = [];
-    const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'lowercase' });
-    
-    // Get working hours for this day
-    const workingHours = entity.hours?.[dayOfWeek];
-    if (!workingHours || workingHours === 'closed') {
-      return slots;
-    }
+    startDate: string,
+    endDate: string
+  ): Promise<{ dateTime: string; available: boolean }[]> {
+    const service = await githubDB.findById(collections.services, serviceId);
+    if (!service) throw new Error('Service not found');
 
-    // Parse working hours (e.g., "09:00-17:00")
-    const [openTime, closeTime] = workingHours.split('-');
-    const serviceDuration = service.duration_minutes || 30;
-    const bufferMinutes = service.buffer_minutes || 15;
+    const slots: { dateTime: string; available: boolean }[] = [];
+    const start = new Date(startDate);
+    const end = new Date(endDate);
 
-    let currentTime = this.parseTime(openTime);
-    const endTime = this.parseTime(closeTime);
+    // Get existing bookings and locks
+    const [bookings, locks] = await Promise.all([
+      githubDB.findMany(collections.bookings, {
+        serviceId,
+        appointmentDateTime: { $gte: startDate, $lte: endDate },
+        status: { $ne: 'cancelled' }
+      }),
+      githubDB.findMany(collections.slot_locks, {
+        serviceId,
+        slotDateTime: { $gte: startDate, $lte: endDate },
+        status: 'active',
+        expiresAt: { $gt: new Date().toISOString() }
+      })
+    ]);
 
-    while (currentTime + serviceDuration <= endTime) {
-      const startTimeStr = this.formatTime(currentTime);
-      const endTimeStr = this.formatTime(currentTime + serviceDuration);
-      const slotKey = `${date}_${startTimeStr}`;
+    const bookedSlots = new Set(bookings.map(b => b.appointmentDateTime));
+    const lockedSlots = new Set(locks.map(l => l.slotDateTime));
 
-      // Skip if slot already exists
-      if (existingSlotKeys && existingSlotKeys.has(slotKey)) {
-        currentTime += serviceDuration + bufferMinutes;
-        continue;
+    // Generate slots based on service availability
+    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+      const dayOfWeek = date.getDay();
+      const availability = service.availability.find(a => a.dayOfWeek === dayOfWeek);
+      
+      if (availability) {
+        const startTime = new Date(date);
+        const [startHour, startMinute] = availability.startTime.split(':').map(Number);
+        startTime.setHours(startHour, startMinute, 0, 0);
+
+        const endTime = new Date(date);
+        const [endHour, endMinute] = availability.endTime.split(':').map(Number);
+        endTime.setHours(endHour, endMinute, 0, 0);
+
+        for (let slotTime = new Date(startTime); slotTime < endTime; 
+             slotTime.setMinutes(slotTime.getMinutes() + service.duration + service.bufferTime)) {
+          
+          const slotDateTime = slotTime.toISOString();
+          const isBooked = bookedSlots.has(slotDateTime);
+          const isLocked = lockedSlots.has(slotDateTime);
+          
+          slots.push({
+            dateTime: slotDateTime,
+            available: !isBooked && !isLocked
+          });
+        }
       }
-
-      // Check for conflicts with existing bookings
-      const hasConflict = await this.checkSlotConflict(
-        entityId,
-        date,
-        startTimeStr,
-        endTimeStr,
-        providerId
-      );
-
-      if (!hasConflict) {
-        slots.push({
-          id: crypto.randomUUID(),
-          entity_id: entityId,
-          service_id: serviceId,
-          provider_id: providerId,
-          date,
-          start_time: startTimeStr,
-          end_time: endTimeStr,
-          status: SlotStatus.AVAILABLE,
-          resource_requirements: service.resource_requirements || [],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
-      }
-
-      currentTime += serviceDuration + bufferMinutes;
     }
 
     return slots;
   }
 
-  private static parseTime(timeStr: string): number {
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    return hours * 60 + minutes;
-  }
-
-  private static formatTime(minutes: number): string {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-  }
-
-  private static async checkSlotConflict(
-    entityId: string,
-    date: string,
-    startTime: string,
-    endTime: string,
-    providerId?: string
-  ): Promise<boolean> {
-    const conflicts = await dbHelpers.find(collections.appointment_slots, {
-      entity_id: entityId,
-      date,
-      status: { $in: [SlotStatus.BOOKED, SlotStatus.BLOCKED] },
-      ...(providerId && { provider_id: providerId })
-    });
-
-    return conflicts.some(slot => {
-      const slotStart = this.parseTime(slot.start_time);
-      const slotEnd = this.parseTime(slot.end_time);
-      const newStart = this.parseTime(startTime);
-      const newEnd = this.parseTime(endTime);
-
-      return (newStart < slotEnd && newEnd > slotStart);
-    });
-  }
-
-  // Enhanced booking creation with atomic slot claiming
-  static async createBooking(bookingData: {
-    entity_id: string;
-    service_id: string;
-    patient_id: string;
-    provider_id?: string;
-    type: BookingType;
-    appointment_date: string;
-    appointment_time: string;
-    patient_name: string;
-    patient_email: string;
-    patient_phone: string;
-    patient_notes?: string;
-    payment_method?: string;
-  }): Promise<Booking> {
-    try {
-      await logger.info('booking_creation_started', 'Starting booking creation', bookingData);
-
-      // Get service and validate
-      const service = await dbHelpers.findById(collections.entity_services, bookingData.service_id);
-      if (!service) {
-        throw new Error('Service not found');
-      }
-
-      // Check lead time requirement
-      const appointmentDateTime = new Date(`${bookingData.appointment_date}T${bookingData.appointment_time}`);
-      const now = new Date();
-      const leadTimeHours = service.booking_rules?.lead_time_hours || 24;
-      const leadTimeMs = leadTimeHours * 60 * 60 * 1000;
-
-      if (appointmentDateTime.getTime() - now.getTime() < leadTimeMs) {
-        throw new Error(`Booking requires ${leadTimeHours} hours advance notice`);
-      }
-
-      // Find and claim available slot atomically
-      const slot = await this.claimTimeSlot(
-        bookingData.entity_id,
-        bookingData.service_id,
-        bookingData.appointment_date,
-        bookingData.appointment_time,
-        bookingData.provider_id
-      );
-
-      if (!slot) {
-        throw new Error('Time slot not available');
-      }
-
-      // Create booking record
-      const booking: Partial<Booking> = {
-        entity_id: bookingData.entity_id,
-        service_id: bookingData.service_id,
-        patient_id: bookingData.patient_id,
-        provider_id: bookingData.provider_id,
-        type: bookingData.type,
-        status: BookingStatus.PENDING,
-        appointment_date: bookingData.appointment_date,
-        appointment_time: bookingData.appointment_time,
-        duration_minutes: service.duration_minutes || 30,
-        patient_name: bookingData.patient_name,
-        patient_email: bookingData.patient_email,
-        patient_phone: bookingData.patient_phone,
-        patient_notes: bookingData.patient_notes,
-        booking_reference: this.generateBookingReference(),
-        booking_rules: service.booking_rules || this.getDefaultBookingRules(),
-        total_amount: service.price || 0,
-        paid_amount: 0,
-        payment_status: 'pending',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      const savedBooking = await dbHelpers.create(collections.bookings, booking);
-
-      // Update slot with booking ID
-      await dbHelpers.update(collections.appointment_slots, slot.id, {
-        booking_id: savedBooking.id,
-        status: SlotStatus.BOOKED,
-        updated_at: new Date().toISOString()
-      });
-
-      // Setup telehealth if needed
-      if (bookingData.type === BookingType.TELEHEALTH) {
-        const telehealthInfo = await this.setupTelehealthMeeting(savedBooking.id);
-        await dbHelpers.update(collections.bookings, savedBooking.id, {
-          telehealth_info: telehealthInfo
-        });
-      }
-
-      // Handle payment if required
-      if (booking.booking_rules?.requires_deposit && booking.total_amount > 0) {
-        const depositAmount = booking.total_amount * (booking.booking_rules.deposit_percentage || 0.5);
-        // Payment handling would be implemented here
-      }
-
-      // Schedule reminders
-      await this.scheduleReminders(savedBooking.id);
-
-      // Send confirmation
-      await this.sendBookingConfirmation(savedBooking.id);
-
-      await logger.info('booking_created_successfully', 'Booking created successfully', {
-        booking_id: savedBooking.id,
-        booking_reference: savedBooking.booking_reference
-      }, bookingData.patient_id);
-
-      return savedBooking as Booking;
-    } catch (error) {
-      await logger.error('booking_creation_failed', 'Booking creation failed', {
-        error: error.message,
-        booking_data: bookingData
-      }, bookingData.patient_id);
-      throw error;
-    }
-  }
-
-  private static async claimTimeSlot(
-    entityId: string,
+  // Lock a slot for booking
+  static async lockSlot(
     serviceId: string,
-    date: string,
-    time: string,
-    providerId?: string
-  ): Promise<TimeSlot | null> {
-    // Find available slot
-    const slots = await dbHelpers.find(collections.appointment_slots, {
-      entity_id: entityId,
-      service_id: serviceId,
-      date,
-      start_time: time,
-      status: SlotStatus.AVAILABLE,
-      ...(providerId && { provider_id: providerId })
+    slotDateTime: string,
+    lockedBy: string,
+    lockDurationMinutes: number = 15
+  ): Promise<SlotLock> {
+    // Check if slot is already locked or booked
+    const [existingLock, existingBooking] = await Promise.all([
+      githubDB.findOne(collections.slot_locks, {
+        serviceId,
+        slotDateTime,
+        status: 'active',
+        expiresAt: { $gt: new Date().toISOString() }
+      }),
+      githubDB.findOne(collections.bookings, {
+        serviceId,
+        appointmentDateTime: slotDateTime,
+        status: { $ne: 'cancelled' }
+      })
+    ]);
+
+    if (existingLock) throw new Error('Slot is already locked');
+    if (existingBooking) throw new Error('Slot is already booked');
+
+    const slotLock: SlotLock = {
+      id: `lock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      serviceId,
+      entityId: (await githubDB.findById(collections.services, serviceId))?.entityId || '',
+      slotDateTime,
+      lockedBy,
+      lockedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + lockDurationMinutes * 60 * 1000).toISOString(),
+      status: 'active'
+    };
+
+    await githubDB.create(collections.slot_locks, slotLock);
+    return slotLock;
+  }
+
+  // Release slot lock
+  static async releaseSlotLock(lockId: string): Promise<void> {
+    await githubDB.update(collections.slot_locks, lockId, {
+      status: 'released',
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  // Create booking with slot lock conversion
+  static async createBooking(
+    bookingData: Omit<EnhancedBooking, 'id' | 'bookingReference' | 'createdAt' | 'updatedAt' | 'remindersSent' | 'rescheduleHistory'>,
+    lockId?: string
+  ): Promise<EnhancedBooking> {
+    const bookingReference = `BK${Date.now().toString().slice(-8)}`;
+    
+    const booking: EnhancedBooking = {
+      id: `booking_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      ...bookingData,
+      bookingReference,
+      remindersSent: [],
+      rescheduleHistory: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await githubDB.create(collections.bookings, booking);
+
+    // Convert slot lock to booking
+    if (lockId) {
+      await githubDB.update(collections.slot_locks, lockId, {
+        status: 'converted',
+        bookingId: booking.id,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    // Schedule reminders
+    await this.scheduleReminders(booking.id, booking.appointmentDateTime);
+
+    return booking;
+  }
+
+  // Schedule booking reminders
+  static async scheduleReminders(bookingId: string, appointmentDateTime: string): Promise<void> {
+    const appointmentDate = new Date(appointmentDateTime);
+    
+    const reminders: Omit<BookingReminder, 'id'>[] = [
+      {
+        bookingId,
+        reminderType: '24h',
+        scheduledFor: new Date(appointmentDate.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+        status: 'pending',
+        attempts: 0,
+        createdAt: new Date().toISOString()
+      },
+      {
+        bookingId,
+        reminderType: '2h',
+        scheduledFor: new Date(appointmentDate.getTime() - 2 * 60 * 60 * 1000).toISOString(),
+        status: 'pending',
+        attempts: 0,
+        createdAt: new Date().toISOString()
+      },
+      {
+        bookingId,
+        reminderType: '30m',
+        scheduledFor: new Date(appointmentDate.getTime() - 30 * 60 * 1000).toISOString(),
+        status: 'pending',
+        attempts: 0,
+        createdAt: new Date().toISOString()
+      }
+    ];
+
+    for (const reminder of reminders) {
+      await githubDB.create(collections.booking_reminders, {
+        id: `rem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        ...reminder
+      });
+    }
+  }
+
+  // Generate ICS calendar file
+  static generateICSFile(booking: EnhancedBooking, service: Service, entity: any): string {
+    const startDate = new Date(booking.appointmentDateTime);
+    const endDate = new Date(startDate.getTime() + booking.duration * 60 * 1000);
+    
+    const formatDate = (date: Date): string => {
+      return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    };
+
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//CareConnect//Booking System//EN
+CALSCALE:GREGORIAN
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:${booking.id}@careconnect.com
+DTSTART:${formatDate(startDate)}
+DTEND:${formatDate(endDate)}
+DTSTAMP:${formatDate(new Date())}
+SUMMARY:${service.name} - ${entity.name}
+DESCRIPTION:Appointment for ${service.name}\\nBooking Reference: ${booking.bookingReference}\\nProvider: ${entity.name}\\nAmount: ${booking.currency} ${booking.totalAmount}
+LOCATION:${entity.address || 'Online'}
+STATUS:CONFIRMED
+SEQUENCE:0
+TRANSP:OPAQUE
+END:VEVENT
+END:VCALENDAR`;
+
+    return icsContent;
+  }
+
+  // Download ICS file
+  static downloadICSFile(booking: EnhancedBooking, service: Service, entity: any): void {
+    const icsContent = this.generateICSFile(booking, service, entity);
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `appointment-${booking.bookingReference}.ics`;
+    link.click();
+  }
+
+  // Cancel booking with policy enforcement
+  static async cancelBooking(
+    bookingId: string,
+    reason: string,
+    cancelledBy: string
+  ): Promise<{ success: boolean; refundAmount?: number; message: string }> {
+    const booking = await githubDB.findById(collections.bookings, bookingId);
+    if (!booking) throw new Error('Booking not found');
+
+    const service = await githubDB.findById(collections.services, booking.serviceId);
+    if (!service) throw new Error('Service not found');
+
+    const appointmentDate = new Date(booking.appointmentDateTime);
+    const now = new Date();
+    const hoursUntilAppointment = (appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+    // Check cancellation policy
+    if (hoursUntilAppointment < service.cancellationPolicy.allowedHours) {
+      return {
+        success: false,
+        message: `Cancellation not allowed. Must cancel at least ${service.cancellationPolicy.allowedHours} hours before appointment.`
+      };
+    }
+
+    // Calculate refund
+    const refundAmount = (booking.totalAmount * service.cancellationPolicy.refundPercentage) / 100;
+
+    // Update booking
+    await githubDB.update(collections.bookings, bookingId, {
+      status: 'cancelled',
+      cancellationReason: reason,
+      cancelledAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     });
 
-    if (slots.length === 0) {
-      return null;
-    }
-
-    // Attempt to claim the first available slot
-    const slot = slots[0];
+    // Cancel reminders
+    const reminders = await githubDB.findMany(collections.booking_reminders, { 
+      bookingId, 
+      status: 'pending' 
+    });
     
-    try {
-      // Atomic update to claim slot
-      await dbHelpers.update(collections.appointment_slots, slot.id, {
-        status: SlotStatus.BOOKED,
-        updated_at: new Date().toISOString()
+    for (const reminder of reminders) {
+      await githubDB.update(collections.booking_reminders, reminder.id, {
+        status: 'cancelled',
+        updatedAt: new Date().toISOString()
       });
-
-      return slot;
-    } catch (error) {
-      // Slot might have been claimed by another request
-      return null;
     }
-  }
 
-  private static generateBookingReference(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substr(2, 5);
-    return `BK${timestamp}${random}`.toUpperCase();
-  }
-
-  private static getDefaultBookingRules(): BookingRules {
     return {
-      lead_time_hours: 24,
-      buffer_before_minutes: 15,
-      buffer_after_minutes: 15,
-      max_per_day: 10,
-      cancellation_hours: 24,
-      no_show_policy: 'Charge 50% fee for no-shows without 24h notice',
-      requires_deposit: false
+      success: true,
+      refundAmount,
+      message: `Booking cancelled successfully. Refund amount: ${booking.currency} ${refundAmount.toFixed(2)}`
     };
   }
 
-  private static async setupTelehealthMeeting(bookingId: string): Promise<any> {
-    // Generate unique meeting details
-    const meetingId = crypto.randomUUID();
-    const meetingUrl = `${window.location.origin}/telehealth/join/${meetingId}`;
+  // Reschedule booking with policy enforcement
+  static async rescheduleBooking(
+    bookingId: string,
+    newDateTime: string,
+    reason: string,
+    rescheduledBy: string
+  ): Promise<{ success: boolean; feeAmount?: number; message: string }> {
+    const booking = await githubDB.findById(collections.bookings, bookingId);
+    if (!booking) throw new Error('Booking not found');
+
+    const service = await githubDB.findById(collections.services, booking.serviceId);
+    if (!service) throw new Error('Service not found');
+
+    const appointmentDate = new Date(booking.appointmentDateTime);
+    const now = new Date();
+    const hoursUntilAppointment = (appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+    // Check reschedule policy
+    if (hoursUntilAppointment < service.reschedulePolicy.allowedHours) {
+      return {
+        success: false,
+        message: `Rescheduling not allowed. Must reschedule at least ${service.reschedulePolicy.allowedHours} hours before appointment.`
+      };
+    }
+
+    // Check if new slot is available
+    const availableSlots = await this.getAvailableSlots(
+      service.id,
+      newDateTime,
+      newDateTime
+    );
+    
+    const newSlot = availableSlots.find(slot => slot.dateTime === newDateTime);
+    if (!newSlot || !newSlot.available) {
+      return {
+        success: false,
+        message: 'Selected slot is not available.'
+      };
+    }
+
+    // Lock new slot
+    const lock = await this.lockSlot(service.id, newDateTime, rescheduledBy);
+
+    // Update booking
+    const originalDateTime = booking.appointmentDateTime;
+    await githubDB.update(collections.bookings, bookingId, {
+      appointmentDateTime: newDateTime,
+      status: 'rescheduled',
+      rescheduleHistory: [
+        ...booking.rescheduleHistory,
+        {
+          originalDateTime,
+          newDateTime,
+          rescheduledAt: new Date().toISOString(),
+          reason
+        }
+      ],
+      updatedAt: new Date().toISOString()
+    });
+
+    // Convert lock
+    await githubDB.update(collections.slot_locks, lock.id, {
+      status: 'converted',
+      bookingId: booking.id
+    });
+
+    // Cancel old reminders and schedule new ones
+    const oldReminders = await githubDB.findMany(collections.booking_reminders, {
+      bookingId,
+      status: 'pending'
+    });
+
+    for (const reminder of oldReminders) {
+      await githubDB.update(collections.booking_reminders, reminder.id, {
+        status: 'cancelled'
+      });
+    }
+
+    await this.scheduleReminders(bookingId, newDateTime);
 
     return {
-      meeting_url: meetingUrl,
-      meeting_id: meetingId,
-      waiting_room_enabled: true,
-      recording_enabled: false,
-      consent_given: false
+      success: true,
+      feeAmount: service.reschedulePolicy.feeAmount,
+      message: `Booking rescheduled successfully. Reschedule fee: ${booking.currency} ${service.reschedulePolicy.feeAmount}`
     };
-  }
-
-  private static async scheduleReminders(bookingId: string): Promise<void> {
-    try {
-      const booking = await dbHelpers.findById(collections.bookings, bookingId);
-      if (!booking) return;
-
-      const appointmentTime = new Date(`${booking.appointment_date}T${booking.appointment_time}`);
-      
-      // Schedule reminders (24h, 2h, 15m before)
-      const reminders = [
-        { type: '24h', time: new Date(appointmentTime.getTime() - 24 * 60 * 60 * 1000) },
-        { type: '2h', time: new Date(appointmentTime.getTime() - 2 * 60 * 60 * 1000) },
-        { type: '15m', time: new Date(appointmentTime.getTime() - 15 * 60 * 1000) }
-      ];
-
-      await dbHelpers.create(collections.booking_reminders, {
-        booking_id: bookingId,
-        reminders: reminders.map(r => ({
-          type: r.type,
-          scheduled_time: r.time.toISOString(),
-          sent: false,
-          created_at: new Date().toISOString()
-        }))
-      });
-
-      await logger.info('reminders_scheduled', 'Booking reminders scheduled', {
-        booking_id: bookingId,
-        reminder_count: reminders.length
-      });
-    } catch (error) {
-      await logger.error('reminder_scheduling_failed', 'Failed to schedule reminders', {
-        booking_id: bookingId,
-        error: error.message
-      });
-    }
-  }
-
-  private static async sendBookingConfirmation(bookingId: string): Promise<void> {
-    try {
-      const booking = await dbHelpers.findById(collections.bookings, bookingId);
-      const entity = await dbHelpers.findById(collections.entities, booking.entity_id);
-      const service = await dbHelpers.findById(collections.entity_services, booking.service_id);
-
-      // Create notification
-      await dbHelpers.create(collections.notifications, {
-        user_id: booking.patient_id,
-        type: 'booking_confirmation',
-        title: 'Appointment Confirmed',
-        message: `Your appointment with ${entity.name} has been confirmed for ${booking.appointment_date} at ${booking.appointment_time}.`,
-        data: {
-          booking_id: bookingId,
-          booking_reference: booking.booking_reference,
-          entity_name: entity.name,
-          service_name: service.name,
-          appointment_date: booking.appointment_date,
-          appointment_time: booking.appointment_time,
-          telehealth_url: booking.telehealth_info?.meeting_url
-        },
-        is_read: false,
-        created_at: new Date().toISOString()
-      });
-
-      await logger.info('booking_confirmation_sent', 'Booking confirmation sent', {
-        booking_id: bookingId,
-        patient_id: booking.patient_id
-      });
-    } catch (error) {
-      await logger.error('booking_confirmation_failed', 'Failed to send booking confirmation', {
-        booking_id: bookingId,
-        error: error.message
-      });
-    }
   }
 
   // Process due reminders
   static async processDueReminders(): Promise<void> {
-    try {
-      const now = new Date();
-      const reminderSchedules = await dbHelpers.find(collections.booking_reminders, {});
+    const now = new Date().toISOString();
+    const dueReminders = await githubDB.findMany(collections.booking_reminders, {
+      status: 'pending',
+      scheduledFor: { $lte: now }
+    });
 
-      let processed = 0;
-
-      for (const schedule of reminderSchedules) {
-        const reminders = schedule.reminders || [];
-        let updated = false;
-
-        for (const reminder of reminders) {
-          if (!reminder.sent && new Date(reminder.scheduled_time) <= now) {
-            try {
-              const booking = await dbHelpers.findById(collections.bookings, schedule.booking_id);
-              if (booking && booking.status === BookingStatus.CONFIRMED) {
-                await this.sendReminder(booking, reminder.type);
-                reminder.sent = true;
-                updated = true;
-                processed++;
-              }
-            } catch (error) {
-              await logger.error('reminder_send_failed', 'Failed to send individual reminder', {
-                booking_id: schedule.booking_id,
-                reminder_type: reminder.type,
-                error: error.message
-              });
-            }
-          }
-        }
-
-        if (updated) {
-          await dbHelpers.update(collections.booking_reminders, schedule.id, {
-            reminders,
-            updated_at: new Date().toISOString()
+    for (const reminder of dueReminders) {
+      try {
+        const booking = await githubDB.findById(collections.bookings, reminder.bookingId);
+        if (!booking || booking.status === 'cancelled') {
+          await githubDB.update(collections.booking_reminders, reminder.id, {
+            status: 'cancelled'
           });
+          continue;
         }
-      }
 
-      if (processed > 0) {
-        await logger.info('reminders_processed', 'Booking reminders processed', {
-          processed_count: processed
+        // Send notification
+        await githubDB.create(collections.notifications, {
+          id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          userId: booking.patientId,
+          type: 'booking_reminder',
+          title: 'Appointment Reminder',
+          message: `You have an upcoming appointment in ${reminder.reminderType.replace('h', ' hours').replace('m', ' minutes')}`,
+          data: { bookingId: booking.id, reminderType: reminder.reminderType },
+          createdAt: new Date().toISOString(),
+          read: false,
+          priority: 'normal'
+        });
+
+        await githubDB.update(collections.booking_reminders, reminder.id, {
+          status: 'sent',
+          lastAttemptAt: new Date().toISOString(),
+          attempts: reminder.attempts + 1
+        });
+
+      } catch (error) {
+        console.error('Failed to send reminder:', error);
+        await githubDB.update(collections.booking_reminders, reminder.id, {
+          status: 'failed',
+          lastAttemptAt: new Date().toISOString(),
+          attempts: reminder.attempts + 1
         });
       }
-    } catch (error) {
-      await logger.error('reminder_processing_failed', 'Failed to process reminders', {
-        error: error.message
-      });
     }
   }
 
-  private static async sendReminder(booking: Booking, reminderType: string): Promise<void> {
-    const entity = await dbHelpers.findById(collections.entities, booking.entity_id);
-    
-    await dbHelpers.create(collections.notifications, {
-      user_id: booking.patient_id,
-      type: 'appointment_reminder',
-      title: `Appointment Reminder (${reminderType})`,
-      message: `Reminder: You have an appointment with ${entity.name} on ${booking.appointment_date} at ${booking.appointment_time}.`,
-      data: {
-        booking_id: booking.id,
-        reminder_type: reminderType,
-        telehealth_url: booking.telehealth_info?.meeting_url
-      },
-      is_read: false,
-      created_at: new Date().toISOString()
+  // Clean up expired locks
+  static async cleanupExpiredLocks(): Promise<void> {
+    const now = new Date().toISOString();
+    const expiredLocks = await githubDB.findMany(collections.slot_locks, {
+      status: 'active',
+      expiresAt: { $lt: now }
     });
-  }
 
-  // Get available slots with enhanced filtering
-  static async getAvailableSlots(filters: {
-    entity_id: string;
-    service_id?: string;
-    date_from: string;
-    date_to: string;
-    provider_id?: string;
-    time_preferences?: 'morning' | 'afternoon' | 'evening';
-  }): Promise<TimeSlot[]> {
-    try {
-      let query: Record<string, any> = {
-        entity_id: filters.entity_id,
-        status: SlotStatus.AVAILABLE,
-        date: { $gte: filters.date_from, $lte: filters.date_to }
-      };
-
-      if (filters.service_id) {
-        query.service_id = filters.service_id;
-      }
-
-      if (filters.provider_id) {
-        query.provider_id = filters.provider_id;
-      }
-
-      let slots = await dbHelpers.find(collections.appointment_slots, query);
-
-      // Apply time preferences
-      if (filters.time_preferences) {
-        slots = slots.filter(slot => {
-          const hour = parseInt(slot.start_time.split(':')[0]);
-          switch (filters.time_preferences) {
-            case 'morning': return hour >= 6 && hour < 12;
-            case 'afternoon': return hour >= 12 && hour < 17;
-            case 'evening': return hour >= 17 && hour < 22;
-            default: return true;
-          }
-        });
-      }
-
-      return slots.sort((a, b) => {
-        if (a.date !== b.date) return a.date.localeCompare(b.date);
-        return a.start_time.localeCompare(b.start_time);
+    for (const lock of expiredLocks) {
+      await githubDB.update(collections.slot_locks, lock.id, {
+        status: 'expired',
+        updatedAt: new Date().toISOString()
       });
-    } catch (error) {
-      await logger.error('get_available_slots_failed', 'Failed to get available slots', {
-        error: error.message,
-        filters
-      });
-      throw error;
     }
   }
 }
+
+export default EnhancedBookingService;

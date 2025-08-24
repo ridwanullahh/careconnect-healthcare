@@ -48,7 +48,7 @@ const CourseLearningPage = () => {
         if (!isAuthenticated || !currentUser) {
           setError('Please log in to access course content');
           setLoading(false);
-          navigate('/auth/login', { state: { returnTo: `/courses/${courseId}/learn/${moduleId}/${lessonId}` } });
+          navigate('/login', { state: { returnTo: `/courses/${courseId}/learn/${moduleId}/${lessonId}` } });
           return;
         }
 
@@ -150,7 +150,8 @@ const CourseLearningPage = () => {
       }
     } catch (err) {
       console.error('Error submitting quiz:', err);
-      alert('Failed to submit quiz. Please try again.');
+      // Use toast notification instead of alert
+      console.error('Failed to submit quiz. Please try again.');
     }
   };
 

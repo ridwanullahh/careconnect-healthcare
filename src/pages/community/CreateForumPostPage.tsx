@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { useNavigate } from 'react-router-dom';
 import { CommunityService } from '../../lib/community';
 import { useAuth } from '../../lib/auth';
 import { ArrowLeft } from 'lucide-react';
 
 const CreateForumPostPage: React.FC = () => {
+  const toast = useToastService();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
@@ -16,7 +18,7 @@ const CreateForumPostPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
-      alert('You must be logged in to create a post.');
+      toast.showSuccess('You must be logged in to create a post.');
       return;
     }
     setIsSubmitting(true);
@@ -37,7 +39,7 @@ const CreateForumPostPage: React.FC = () => {
       navigate(`/community/${newPost.id}`);
     } catch (error) {
       console.error('Failed to create post:', error);
-      alert('Failed to create post. Please try again.');
+      toast.showSuccess('Failed to create post. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../lib/toast-service';
 import { Link } from 'react-router-dom';
 import { JobService, JobPosting, JobCategory } from '../lib/jobs';
 import { useAuth } from '../lib/auth';
@@ -10,6 +11,7 @@ import {
 } from 'lucide-react';
 
 const JobsPage: React.FC = () => {
+  const toast = useToastService();
   const { user } = useAuth();
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [categories, setCategories] = useState<JobCategory[]>([]);
@@ -106,7 +108,7 @@ const JobsPage: React.FC = () => {
 
   const handleSaveJob = async (jobId: string) => {
     if (!user) {
-      alert('Please sign in to save jobs');
+      toast.showSuccess('Please sign in to save jobs');
       return;
     }
 

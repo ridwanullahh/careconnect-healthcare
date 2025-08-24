@@ -1,5 +1,6 @@
 // Encounter Board - HMS Encounter Management
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -108,7 +109,7 @@ export default function EncounterBoard() {
 
   const updateEncounterStatus = async (encounterId: string, newStatus: string) => {
     if (!hasPermission(Permission.MANAGE_ENCOUNTERS)) {
-      alert('You do not have permission to update encounter status');
+      toast.showSuccess('You do not have permission to update encounter status');
       return;
     }
 
@@ -117,7 +118,7 @@ export default function EncounterBoard() {
       loadEncounters(); // Reload to reflect changes
     } catch (error) {
       console.error('Failed to update encounter status:', error);
-      alert('Failed to update encounter status');
+      toast.showSuccess('Failed to update encounter status');
     }
   };
 

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../lib/toast-service';
 import { Link } from 'react-router-dom';
 import { NewsService, NewsArticle } from '../lib/news';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { Rss, Search, Mail } from 'lucide-react';
 
 const HealthNewsFeedPage: React.FC = () => {
+  const toast = useToastService();
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,10 +42,10 @@ const HealthNewsFeedPage: React.FC = () => {
     setIsSubscribing(true);
     try {
       await NewsService.subscribeToNewsletter(email);
-      alert('Successfully subscribed to the newsletter!');
+      toast.showSuccess('Successfully subscribed to the newsletter!');
       setEmail('');
     } catch (err) {
-      alert('Failed to subscribe. Please try again.');
+      toast.showSuccess('Failed to subscribe. Please try again.');
     } finally {
       setIsSubscribing(false);
     }

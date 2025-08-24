@@ -1,5 +1,6 @@
 // Patient Consents - Patient Portal Consent Management
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -112,7 +113,7 @@ export default function Consents() {
       loadConsentData();
     } catch (error) {
       console.error('Failed to revoke access grant:', error);
-      alert('Failed to revoke access grant');
+      toast.showSuccess('Failed to revoke access grant');
     }
   };
 
@@ -122,7 +123,7 @@ export default function Consents() {
       loadConsentData();
     } catch (error) {
       console.error('Failed to withdraw consent:', error);
-      alert('Failed to withdraw consent');
+      toast.showSuccess('Failed to withdraw consent');
     }
   };
 

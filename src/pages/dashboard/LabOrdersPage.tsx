@@ -1,5 +1,6 @@
 // Lab Orders Management Page - HMS Lab Operations
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,7 +60,7 @@ export default function LabOrdersPage() {
 
   const handleCreateOrder = async (orderData: any) => {
     if (!hasPermission(Permission.ORDER_LABS)) {
-      alert('You do not have permission to order lab tests');
+      toast.showSuccess('You do not have permission to order lab tests');
       return;
     }
 
@@ -75,7 +76,7 @@ export default function LabOrdersPage() {
       loadLabData();
     } catch (error) {
       console.error('Failed to create lab order:', error);
-      alert('Failed to create lab order');
+      toast.showSuccess('Failed to create lab order');
     }
   };
 
@@ -87,7 +88,7 @@ export default function LabOrdersPage() {
       loadLabData();
     } catch (error) {
       console.error('Failed to record specimen collection:', error);
-      alert('Failed to record specimen collection');
+      toast.showSuccess('Failed to record specimen collection');
     }
   };
 

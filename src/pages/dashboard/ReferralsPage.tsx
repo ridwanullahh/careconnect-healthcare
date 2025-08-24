@@ -1,5 +1,6 @@
 // Referrals Management Page - HMS Referral Operations
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,7 +60,7 @@ export default function ReferralsPage() {
 
   const handleCreateReferral = async (referralData: any) => {
     if (!hasPermission(Permission.CREATE_REFERRALS)) {
-      alert('You do not have permission to create referrals');
+      toast.showSuccess('You do not have permission to create referrals');
       return;
     }
 
@@ -78,7 +79,7 @@ export default function ReferralsPage() {
       loadReferralsData();
     } catch (error) {
       console.error('Failed to create referral:', error);
-      alert('Failed to create referral');
+      toast.showSuccess('Failed to create referral');
     }
   };
 
@@ -88,7 +89,7 @@ export default function ReferralsPage() {
       loadReferralsData();
     } catch (error) {
       console.error('Failed to accept referral:', error);
-      alert('Failed to accept referral');
+      toast.showSuccess('Failed to accept referral');
     }
   };
 
@@ -98,7 +99,7 @@ export default function ReferralsPage() {
       loadReferralsData();
     } catch (error) {
       console.error('Failed to decline referral:', error);
-      alert('Failed to decline referral');
+      toast.showSuccess('Failed to decline referral');
     }
   };
 

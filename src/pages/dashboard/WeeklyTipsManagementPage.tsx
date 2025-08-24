@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { WeeklyTipsService, WeeklyTip } from '../../lib/news';
 import { useAuth } from '../../lib/auth';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { Plus, Edit, Trash2, Eye, Calendar, Tag } from 'lucide-react';
 
 const WeeklyTipsManagementPage: React.FC = () => {
+  const toast = useToastService();
   const { user } = useAuth();
   const [tips, setTips] = useState<WeeklyTip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -58,7 +60,7 @@ const WeeklyTipsManagementPage: React.FC = () => {
       resetForm();
     } catch (error) {
       console.error('Failed to save tip:', error);
-      alert('Failed to save tip. Please try again.');
+      toast.showSuccess('Failed to save tip. Please try again.');
     }
   };
 
@@ -86,7 +88,7 @@ const WeeklyTipsManagementPage: React.FC = () => {
       await loadTips();
     } catch (error) {
       console.error('Failed to delete tip:', error);
-      alert('Failed to delete tip. Please try again.');
+      toast.showSuccess('Failed to delete tip. Please try again.');
     }
   };
 

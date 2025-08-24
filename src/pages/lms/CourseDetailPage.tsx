@@ -5,6 +5,7 @@ import { githubDB, collections } from '../../lib/database';
 import { useAuth } from '../../lib/auth';
 import { PaymentService } from '../../lib/payments';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { useToastService } from '../../lib/toast-service';
 
 const CourseDetailPage = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -18,6 +19,7 @@ const CourseDetailPage = () => {
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
 
   const { user: currentUser, isAuthenticated } = useAuth();
+  const toast = useToastService();
 
   useEffect(() => {
     const loadCourseData = async () => {
@@ -59,8 +61,8 @@ const CourseDetailPage = () => {
     
     // Check authentication first
     if (!isAuthenticated || !currentUser) {
-      alert('Please log in to enroll in this course.');
-      navigate('/auth/login', { state: { returnTo: `/courses/${courseId}` } });
+      toast.showWarning('Please log in to enroll in this course.');
+      navigate('/login', { state: { returnTo: `/courses/${courseId}` } });
       return;
     }
     
@@ -89,10 +91,10 @@ const CourseDetailPage = () => {
       setEnrollment(newEnrollment);
       
       // Show success message
-      alert('Successfully enrolled in the course!');
+      toast.showSuccess('Successfully enrolled in the course!');
     } catch (err: any) {
       console.error('Enrollment error:', err);
-      alert(err.message || 'Failed to enroll. Please try again.');
+      toast.showError(err.message || 'Failed to enroll. Please try again.');
     } finally {
       setEnrolling(false);
     }
@@ -100,13 +102,13 @@ const CourseDetailPage = () => {
 
   const handleStartCourse = () => {
     if (!isAuthenticated || !currentUser) {
-      alert('Please log in to start learning.');
-      navigate('/auth/login', { state: { returnTo: `/courses/${courseId}` } });
+      toast.showWarning('Please log in to start learning.');
+      navigate('/login', { state: { returnTo: `/courses/${courseId}` } });
       return;
     }
     
     if (!enrollment) {
-      alert('Please enroll in the course first.');
+      toast.showWarning('Please enroll in the course first.');
       return;
     }
     

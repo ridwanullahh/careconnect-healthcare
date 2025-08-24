@@ -1,8 +1,8 @@
 import { useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { HealthTool, ComprehensiveHealthToolsService, ToolType } from '../../lib/complete-health-tools';
+import { HealthTool, FixedHealthToolsService as ComprehensiveHealthToolsService, ToolType } from '../../lib/health-tools-fixed';
 import { githubDB, collections } from '../../lib/database';
-import { initializeAllHealthTools } from '../../lib/health-tools';
+import { initializeComprehensiveHealthTools } from '../../lib/health-tools-initializer';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { 
   Sparkles, 
@@ -35,7 +35,7 @@ const ToolDetailPage = () => {
 
       try {
         // Ensure tools are initialized first
-        await initializeAllHealthTools();
+        await initializeComprehensiveHealthTools();
         
         const toolData = await githubDB.findById(collections.health_tools, toolId);
         if (!toolData) {
