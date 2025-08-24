@@ -1,5 +1,6 @@
 // Bed Management Page - HMS Bed and Ward Operations
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,7 +69,7 @@ export default function BedManagementPage() {
 
   const handleBedStatusChange = async (bedId: string, newStatus: string) => {
     if (!hasPermission(Permission.MANAGE_BEDS)) {
-      alert('You do not have permission to manage beds');
+      toast.showSuccess('You do not have permission to manage beds');
       return;
     }
 
@@ -87,7 +88,7 @@ export default function BedManagementPage() {
       loadBedData();
     } catch (error) {
       console.error('Failed to update bed status:', error);
-      alert('Failed to update bed status');
+      toast.showSuccess('Failed to update bed status');
     }
   };
 
@@ -127,6 +128,7 @@ export default function BedManagementPage() {
   };
 
   const getUniqueWards = () => {
+  const toast = useToastService();
     const wards = [...new Set(beds.map((bed: any) => bed.ward))];
     return wards.sort();
   };

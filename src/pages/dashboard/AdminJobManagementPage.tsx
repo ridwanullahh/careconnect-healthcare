@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { JobService, JobPosting } from '../../lib/jobs';
 import { useAuth } from '../../lib/auth';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { CheckCircle, XCircle, Eye, Users, DollarSign, MapPin, Clock, Star, Zap, Building } from 'lucide-react';
 
 const AdminJobManagementPage: React.FC = () => {
+  const toast = useToastService();
   const { user } = useAuth();
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -69,7 +71,7 @@ const AdminJobManagementPage: React.FC = () => {
       await loadStats();
     } catch (error) {
       console.error('Failed to approve job:', error);
-      alert('Failed to approve job. Please try again.');
+      toast.showSuccess('Failed to approve job. Please try again.');
     }
   };
 
@@ -83,7 +85,7 @@ const AdminJobManagementPage: React.FC = () => {
       await loadStats();
     } catch (error) {
       console.error('Failed to reject job:', error);
-      alert('Failed to reject job. Please try again.');
+      toast.showSuccess('Failed to reject job. Please try again.');
     }
   };
 

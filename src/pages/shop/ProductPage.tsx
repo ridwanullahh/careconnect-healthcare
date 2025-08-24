@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { useParams, Link } from 'react-router-dom';
 import { ECommerceService, Product } from '../../lib/ecommerce';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { Star, Heart, ShoppingCart, ArrowLeft, CheckCircle, Shield } from 'lucide-react';
 
 const ProductPage: React.FC = () => {
+  const toast = useToastService();
   const { productId } = useParams<{ productId: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,11 +55,11 @@ const ProductPage: React.FC = () => {
     try {
       await ECommerceService.addToCart(userId, product.id, quantity);
       // Add toast notification for success
-      alert(`${quantity} x ${product.name} added to cart!`);
+      toast.showInfo(`${quantity} x ${product.name} added to cart!`);
     } catch (err) {
       console.error('Failed to add to cart:', err);
       // Add toast notification for error
-      alert('Failed to add item to cart.');
+      toast.showSuccess('Failed to add item to cart.');
     }
   };
 

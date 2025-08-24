@@ -1,5 +1,6 @@
 // Pharmacy Dispense Page - HMS Pharmacy Operations
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,7 +66,7 @@ export default function PharmacyDispensePage() {
 
   const handleDispense = async (requestId: string, medicationData: any) => {
     if (!hasPermission(Permission.DISPENSE_MEDICATIONS)) {
-      alert('You do not have permission to dispense medications');
+      toast.showSuccess('You do not have permission to dispense medications');
       return;
     }
 
@@ -83,7 +84,7 @@ export default function PharmacyDispensePage() {
       loadPharmacyData();
     } catch (error) {
       console.error('Failed to dispense medication:', error);
-      alert('Failed to dispense medication: ' + error.message);
+      toast.showInfo('Failed to dispense medication: ' + error.message);
     }
   };
 

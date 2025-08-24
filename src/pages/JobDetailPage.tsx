@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../lib/toast-service';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { JobService, JobPosting } from '../lib/jobs';
 import { useAuth } from '../lib/auth';
@@ -10,6 +11,7 @@ import {
 } from 'lucide-react';
 
 const JobDetailPage: React.FC = () => {
+  const toast = useToastService();
   const { jobId } = useParams<{ jobId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -62,7 +64,7 @@ const JobDetailPage: React.FC = () => {
 
   const handleSaveJob = async () => {
     if (!user) {
-      alert('Please sign in to save jobs');
+      toast.showSuccess('Please sign in to save jobs');
       return;
     }
 
@@ -90,7 +92,7 @@ const JobDetailPage: React.FC = () => {
     } else {
       // Fallback to clipboard
       navigator.clipboard.writeText(window.location.href);
-      alert('Job link copied to clipboard!');
+      toast.showSuccess('Job link copied to clipboard!');
     }
   };
 
@@ -125,14 +127,14 @@ const JobDetailPage: React.FC = () => {
         } : undefined
       });
 
-      alert('Application submitted successfully!');
+      toast.showSuccess('Application submitted successfully!');
       setShowApplicationForm(false);
       
       // Refresh job data to update application count
       await loadJob();
     } catch (error) {
       console.error('Failed to submit application:', error);
-      alert('Failed to submit application. Please try again.');
+      toast.showSuccess('Failed to submit application. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

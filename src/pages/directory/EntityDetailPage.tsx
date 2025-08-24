@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { useParams, Link } from 'react-router-dom';
 import { HealthcareEntity, getEntity } from '../../lib/entities';
 import { Course, LMSService } from '../../lib/lms';
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 
 const EntityDetailPage = () => {
+  const toast = useToastService();
   const { entityId } = useParams<{ entityId: string }>();
   const [entity, setEntity] = useState<HealthcareEntity | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -426,7 +428,7 @@ const EntityDetailPage = () => {
                       });
                     } else {
                       navigator.clipboard.writeText(window.location.href);
-                      alert('Link copied to clipboard!');
+                      toast.showSuccess('Link copied to clipboard!');
                     }
                   }}
                   className="p-2 sm:p-3 bg-white/10 backdrop-blur-sm text-white rounded-lg hover:bg-white/20 transition-colors border border-white/20"

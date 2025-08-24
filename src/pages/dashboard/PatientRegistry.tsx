@@ -1,5 +1,6 @@
 // Patient Registry - HMS Patient Management
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -83,7 +84,7 @@ export default function PatientRegistry() {
 
   const handlePatientSelect = async (patientId: string) => {
     if (!hasPermission(Permission.VIEW_PATIENT_DATA)) {
-      alert('You do not have permission to view patient details');
+      toast.showSuccess('You do not have permission to view patient details');
       return;
     }
 
@@ -92,7 +93,7 @@ export default function PatientRegistry() {
       setSelectedPatient(patientDetails);
     } catch (error) {
       console.error('Failed to load patient details:', error);
-      alert('Failed to load patient details');
+      toast.showSuccess('Failed to load patient details');
     }
   };
 

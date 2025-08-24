@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import SystemInitializer from './lib/initialization';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastProvider } from './components/ui/Toast';
 import { useAuth } from './lib/auth';
@@ -53,6 +54,13 @@ import HelpCenterPage from './pages/support/HelpCenterPage';
 import ContactPage from './pages/support/ContactPage';
 import PrivacyPolicyPage from './pages/legal/PrivacyPolicyPage';
 import TermsOfServicePage from './pages/legal/TermsOfServicePage';
+
+// AILab Pages
+import AILabPage from './pages/ailab/AILabPage';
+import CarePathPage from './pages/ailab/CarePathPage';
+import LabExplainerPage from './pages/ailab/LabExplainerPage';
+import ProcedureNavigatorPage from './pages/ailab/ProcedureNavigatorPage';
+import AILabToolsPage from './pages/ailab/AILabToolsPage';
 
 // Dashboard Components
 import PublicDashboard from './pages/dashboard/PublicDashboard';
@@ -205,6 +213,13 @@ function App() {
               <Route path="/community" element={<CommunityPage />} />
               <Route path="/community/new" element={<CreateForumPostPage />} />
               <Route path="/community/:postId" element={<ForumPostPage />} />
+              
+              {/* AILab Routes */}
+              <Route path="/ailab" element={<AILabPage />} />
+              <Route path="/ailab/care-path" element={<CarePathPage />} />
+              <Route path="/ailab/lab-explainer" element={<LabExplainerPage />} />
+              <Route path="/ailab/procedure-navigator" element={<ProcedureNavigatorPage />} />
+              <Route path="/ailab/tools" element={<AILabToolsPage />} />
               
               {/* Protected Routes */}
               {user ? (

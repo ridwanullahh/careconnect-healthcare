@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Course, LMSService, CourseLevel, CourseType, COURSE_CATEGORIES } from '../../lib/lms';
 import { useAuth } from '../../lib/auth';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const CourseCreationPage = () => {
+  const toast = useToastService();
   const navigate = useNavigate();
   const { courseId } = useParams<{ courseId?: string }>();
   const { user: currentUser, isAuthenticated } = useAuth();
@@ -45,7 +47,7 @@ const CourseCreationPage = () => {
 
   useEffect(() => {
     if (!isAuthenticated || !currentUser) {
-      navigate('/auth/login');
+      navigate('/login');
       return;
     }
     
@@ -92,7 +94,7 @@ const CourseCreationPage = () => {
       }
     } catch (error) {
       console.error('Error loading course:', error);
-      alert('Failed to load course data');
+      toast.showSuccess('Failed to load course data');
     } finally {
       setLoading(false);
     }
@@ -136,7 +138,7 @@ const CourseCreationPage = () => {
       
       // Validate required fields
       if (!courseData.title || !courseData.description || !courseData.category) {
-        alert('Please fill in all required fields');
+        toast.showSuccess('Please fill in all required fields');
         return;
       }
       
@@ -160,11 +162,11 @@ const CourseCreationPage = () => {
         result = await LMSService.createCourse(cleanedData);
       }
       
-      alert(isEditing ? 'Course updated successfully!' : 'Course created successfully!');
+      toast.showInfo(isEditing ? 'Course updated successfully!' : 'Course created successfully!');
       navigate(`/dashboard/lms/courses/${result.id}/edit`);
     } catch (error) {
       console.error('Error saving course:', error);
-      alert('Failed to save course');
+      toast.showSuccess('Failed to save course');
     } finally {
       setSaving(false);
     }

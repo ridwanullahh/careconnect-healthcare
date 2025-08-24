@@ -1,456 +1,334 @@
-// Enhanced Payment System with Record-and-Reconcile Model
+// Client-Only Payment System with Gateway Integration
 import { githubDB, collections } from './database';
-import { KeyManagementService, KeyType } from './key-management';
-import { logger } from './observability';
-
-export enum PaymentStatus {
-  PENDING = 'pending',
-  PROCESSING = 'processing',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  CANCELLED = 'cancelled',
-  REFUNDED = 'refunded',
-  PARTIALLY_REFUNDED = 'partially_refunded',
-  PENDING_REVIEW = 'pending_review'
-}
-
-export enum PaymentGateway {
-  STRIPE = 'stripe',
-  PAYSTACK = 'paystack',
-  FLUTTERWAVE = 'flutterwave',
-  RAZORPAY = 'razorpay',
-  PAYPAL = 'paypal'
-}
 
 export interface PaymentIntent {
   id: string;
-  user_id: string;
-  entity_id?: string;
   amount: number;
   currency: string;
-  gateway: PaymentGateway;
-  status: PaymentStatus;
-  
-  // Item details
-  item_type: 'booking' | 'product' | 'course' | 'donation' | 'subscription';
-  item_id: string;
-  item_name: string;
-  item_description?: string;
-  
-  // Payment details
-  gateway_payment_id?: string;
-  gateway_reference?: string;
-  external_reference?: string;
-  
-  // Metadata
-  metadata: {
-    customer_email: string;
-    customer_name: string;
-    booking_reference?: string;
-    order_number?: string;
-    notes?: string;
-  };
-  
-  // Timestamps
-  created_at: string;
-  updated_at: string;
-  completed_at?: string;
-  expires_at: string;
-}
-
-export interface PaymentMethod {
-  gateway: PaymentGateway;
-  name: string;
   description: string;
-  currencies: string[];
-  countries: string[];
-  setup_required: boolean;
-  test_mode_available: boolean;
+  customerId?: string;
+  metadata: Record<string, any>;
+  status: 'pending' | 'pending_review' | 'completed' | 'failed' | 'refunded' | 'cancelled';
+  gateway: 'paystack' | 'flutterwave' | 'stripe_checkout';
+  gatewayReference?: string;
+  gatewayResponse?: any;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  failedAt?: string;
 }
 
-export class EnhancedPaymentService {
-  private static readonly PAYMENT_EXPIRY_HOURS = 24;
-  
-  // Available payment methods
-  static getAvailablePaymentMethods(): PaymentMethod[] {
-    return [
-      {
-        gateway: PaymentGateway.STRIPE,
-        name: 'Stripe',
-        description: 'Credit/Debit Cards, Digital Wallets',
-        currencies: ['USD', 'EUR', 'GBP', 'CAD', 'AUD'],
-        countries: ['US', 'CA', 'GB', 'EU', 'AU'],
-        setup_required: true,
-        test_mode_available: true
-      },
-      {
-        gateway: PaymentGateway.PAYSTACK,
-        name: 'Paystack',
-        description: 'Cards, Bank Transfer, Mobile Money',
-        currencies: ['NGN', 'USD', 'GHS', 'ZAR'],
-        countries: ['NG', 'GH', 'ZA', 'KE'],
-        setup_required: true,
-        test_mode_available: true
-      },
-      {
-        gateway: PaymentGateway.FLUTTERWAVE,
-        name: 'Flutterwave',
-        description: 'Cards, Bank Transfer, Mobile Money',
-        currencies: ['NGN', 'USD', 'EUR', 'GBP', 'KES', 'UGX', 'TZS'],
-        countries: ['NG', 'KE', 'UG', 'TZ', 'RW', 'ZM', 'MW'],
-        setup_required: true,
-        test_mode_available: true
-      },
-      {
-        gateway: PaymentGateway.RAZORPAY,
-        name: 'Razorpay',
-        description: 'UPI, Cards, Net Banking, Wallets',
-        currencies: ['INR'],
-        countries: ['IN'],
-        setup_required: true,
-        test_mode_available: true
-      },
-      {
-        gateway: PaymentGateway.PAYPAL,
-        name: 'PayPal',
-        description: 'PayPal Balance, Cards, Bank Account',
-        currencies: ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY'],
-        countries: ['US', 'CA', 'GB', 'EU', 'AU', 'JP'],
-        setup_required: true,
-        test_mode_available: true
-      }
-    ];
-  }
+export interface PaymentReconciliation {
+  id: string;
+  paymentIntentId: string;
+  gatewayReference: string;
+  adminUserId: string;
+  action: 'mark_completed' | 'mark_failed' | 'mark_refunded';
+  evidence: {
+    receiptUrl?: string;
+    transactionId?: string;
+    notes: string;
+  };
+  performedAt: string;
+}
 
+export class PaymentService {
   // Create payment intent
-  static async createPaymentIntent(intentData: {
-    user_id: string;
-    entity_id?: string;
-    amount: number;
-    currency: string;
-    gateway: PaymentGateway;
-    item_type: PaymentIntent['item_type'];
-    item_id: string;
-    item_name: string;
-    item_description?: string;
-    customer_email: string;
-    customer_name: string;
-    metadata?: Record<string, any>;
-  }): Promise<PaymentIntent> {
-    try {
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + this.PAYMENT_EXPIRY_HOURS);
-
-      const intent: Partial<PaymentIntent> = {
-        user_id: intentData.user_id,
-        entity_id: intentData.entity_id,
-        amount: intentData.amount,
-        currency: intentData.currency,
-        gateway: intentData.gateway,
-        status: PaymentStatus.PENDING,
-        item_type: intentData.item_type,
-        item_id: intentData.item_id,
-        item_name: intentData.item_name,
-        item_description: intentData.item_description,
-        metadata: {
-          customer_email: intentData.customer_email,
-          customer_name: intentData.customer_name,
-          ...intentData.metadata
-        },
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        expires_at: expiresAt.toISOString()
-      };
-
-      const savedIntent = await githubDB.insert(collections.payment_intents, intent);
-
-      await logger.info('payment_intent_created', 'Payment intent created', {
-        intent_id: savedIntent.id,
-        amount: intentData.amount,
-        currency: intentData.currency,
-        gateway: intentData.gateway
-      }, intentData.user_id);
-
-      return savedIntent;
-    } catch (error) {
-      await logger.error('payment_intent_creation_failed', 'Payment intent creation failed', {
-        error: error.message,
-        intent_data: intentData
-      }, intentData.user_id);
-      throw error;
-    }
-  }
-
-  // Initialize gateway payment (client-side redirect approach)
-  static async initializeGatewayPayment(intentId: string): Promise<{ redirect_url: string; reference: string }> {
-    try {
-      const intent = await githubDB.findById(collections.payment_intents, intentId);
-      if (!intent) {
-        throw new Error('Payment intent not found');
-      }
-
-      if (intent.status !== PaymentStatus.PENDING) {
-        throw new Error('Payment intent not in pending status');
-      }
-
-      // Check expiry
-      if (new Date() > new Date(intent.expires_at)) {
-        await this.updatePaymentStatus(intentId, PaymentStatus.CANCELLED, 'Payment expired');
-        throw new Error('Payment intent has expired');
-      }
-
-      // Generate external reference
-      const reference = `CC_${intent.id}_${Date.now()}`;
-      
-      // Update intent with processing status
-      await githubDB.update(collections.payment_intents, intentId, {
-        status: PaymentStatus.PROCESSING,
-        external_reference: reference,
-        updated_at: new Date().toISOString()
-      });
-
-      // Generate gateway-specific redirect URL
-      const redirectUrl = await this.generateGatewayRedirectUrl(intent, reference);
-
-      await logger.info('gateway_payment_initialized', 'Gateway payment initialized', {
-        intent_id: intentId,
-        gateway: intent.gateway,
-        reference
-      }, intent.user_id);
-
-      return { redirect_url: redirectUrl, reference };
-    } catch (error) {
-      await logger.error('gateway_payment_init_failed', 'Gateway payment initialization failed', {
-        intent_id: intentId,
-        error: error.message
-      });
-      throw error;
-    }
-  }
-
-  private static async generateGatewayRedirectUrl(intent: PaymentIntent, reference: string): Promise<string> {
-    const baseUrl = window.location.origin;
-    const returnUrl = `${baseUrl}/payment/callback`;
-    const cancelUrl = `${baseUrl}/payment/cancelled`;
-
-    switch (intent.gateway) {
-      case PaymentGateway.STRIPE:
-        // For Stripe, we'd need to create a Checkout Session
-        // This is a simplified approach - in production, you'd need backend integration
-        return `https://checkout.stripe.com/pay/test_session_placeholder?success_url=${encodeURIComponent(returnUrl)}&cancel_url=${encodeURIComponent(cancelUrl)}`;
-
-      case PaymentGateway.PAYSTACK:
-        const paystackUrl = new URL('https://checkout.paystack.com/pay');
-        paystackUrl.searchParams.set('amount', (intent.amount * 100).toString()); // Paystack uses kobo
-        paystackUrl.searchParams.set('currency', intent.currency);
-        paystackUrl.searchParams.set('email', intent.metadata.customer_email);
-        paystackUrl.searchParams.set('reference', reference);
-        paystackUrl.searchParams.set('callback_url', returnUrl);
-        return paystackUrl.toString();
-
-      case PaymentGateway.FLUTTERWAVE:
-        const flutterwaveUrl = new URL('https://checkout.flutterwave.com/v3/hosted/pay');
-        flutterwaveUrl.searchParams.set('amount', intent.amount.toString());
-        flutterwaveUrl.searchParams.set('currency', intent.currency);
-        flutterwaveUrl.searchParams.set('customer_email', intent.metadata.customer_email);
-        flutterwaveUrl.searchParams.set('tx_ref', reference);
-        flutterwaveUrl.searchParams.set('redirect_url', returnUrl);
-        return flutterwaveUrl.toString();
-
-      case PaymentGateway.RAZORPAY:
-        // Razorpay typically requires backend integration for secure key handling
-        return `https://razorpay.com/payment-gateway/?amount=${intent.amount * 100}&currency=${intent.currency}&order_id=${reference}`;
-
-      case PaymentGateway.PAYPAL:
-        const paypalUrl = new URL('https://www.paypal.com/checkoutnow');
-        paypalUrl.searchParams.set('token', reference); // Simplified - needs actual PayPal integration
-        return paypalUrl.toString();
-
-      default:
-        throw new Error(`Unsupported payment gateway: ${intent.gateway}`);
-    }
-  }
-
-  // Handle payment callback (when user returns from gateway)
-  static async handlePaymentCallback(params: {
-    reference: string;
-    status?: string;
-    transaction_id?: string;
-    gateway_data?: Record<string, any>;
-  }): Promise<PaymentIntent> {
-    try {
-      // Find intent by reference
-      const intents = await githubDB.find(collections.payment_intents, {
-        external_reference: params.reference
-      });
-
-      if (intents.length === 0) {
-        throw new Error('Payment intent not found for reference');
-      }
-
-      const intent = intents[0];
-
-      // Update with gateway response
-      const updates: Partial<PaymentIntent> = {
-        gateway_reference: params.transaction_id,
-        updated_at: new Date().toISOString()
-      };
-
-      // Determine status based on gateway response
-      if (params.status === 'success' || params.status === 'completed') {
-        updates.status = PaymentStatus.PENDING_REVIEW; // Manual verification required
-        updates.completed_at = new Date().toISOString();
-      } else if (params.status === 'cancelled' || params.status === 'failed') {
-        updates.status = PaymentStatus.FAILED;
-      } else {
-        updates.status = PaymentStatus.PENDING_REVIEW; // Default for manual review
-      }
-
-      const updatedIntent = await githubDB.update(collections.payment_intents, intent.id, updates);
-
-      // Create notification for user
-      await githubDB.insert(collections.notifications, {
-        user_id: intent.user_id,
-        type: 'payment',
-        title: 'Payment Update',
-        message: `Your payment of ${intent.currency} ${intent.amount} for ${intent.item_name} is being processed.`,
-        data: {
-          payment_intent_id: intent.id,
-          reference: params.reference,
-          status: updates.status
-        },
-        priority: 'medium',
-        is_read: false,
-        created_at: new Date().toISOString()
-      });
-
-      await logger.info('payment_callback_processed', 'Payment callback processed', {
-        intent_id: intent.id,
-        reference: params.reference,
-        status: updates.status,
-        gateway_transaction_id: params.transaction_id
-      }, intent.user_id);
-
-      return updatedIntent;
-    } catch (error) {
-      await logger.error('payment_callback_failed', 'Payment callback processing failed', {
-        reference: params.reference,
-        error: error.message
-      });
-      throw error;
-    }
-  }
-
-  // Update payment status (admin function)
-  static async updatePaymentStatus(
-    intentId: string, 
-    status: PaymentStatus, 
-    notes?: string,
-    adminUserId?: string
+  static async createPaymentIntent(
+    amount: number,
+    currency: string,
+    description: string,
+    metadata: Record<string, any>,
+    customerId?: string
   ): Promise<PaymentIntent> {
-    try {
-      const updates: Partial<PaymentIntent> = {
-        status,
-        updated_at: new Date().toISOString()
-      };
+    const paymentIntent: PaymentIntent = {
+      id: `pi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      amount,
+      currency: currency.toUpperCase(),
+      description,
+      customerId,
+      metadata,
+      status: 'pending',
+      gateway: 'paystack', // Default gateway
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
 
-      if (status === PaymentStatus.COMPLETED) {
-        updates.completed_at = new Date().toISOString();
+    await githubDB.create(collections.payments, paymentIntent);
+    return paymentIntent;
+  }
+
+  // Initialize Paystack checkout
+  static initializePaystackCheckout(
+    paymentIntent: PaymentIntent,
+    customerEmail: string,
+    onSuccess: (reference: string) => void,
+    onCancel: () => void
+  ): void {
+    // @ts-ignore - Paystack script loaded externally
+    const handler = PaystackPop.setup({
+      key: process.env.REACT_APP_PAYSTACK_PUBLIC_KEY,
+      email: customerEmail,
+      amount: paymentIntent.amount * 100, // Convert to kobo
+      currency: paymentIntent.currency,
+      ref: paymentIntent.id,
+      metadata: {
+        custom_fields: [
+          {
+            display_name: "Payment Intent ID",
+            variable_name: "payment_intent_id",
+            value: paymentIntent.id
+          }
+        ]
+      },
+      callback: function(response: any) {
+        onSuccess(response.reference);
+      },
+      onClose: function() {
+        onCancel();
       }
+    });
 
-      const updatedIntent = await githubDB.update(collections.payment_intents, intentId, updates);
+    handler.openIframe();
+  }
 
-      // Log admin action
-      await githubDB.insert(collections.audit_logs, {
-        user_id: adminUserId || 'system',
-        action: 'payment_status_updated',
-        target: intentId,
-        data: { new_status: status, notes },
-        timestamp: new Date().toISOString()
-      });
-
-      // Notify user of status change
-      if (status === PaymentStatus.COMPLETED || status === PaymentStatus.FAILED) {
-        await githubDB.insert(collections.notifications, {
-          user_id: updatedIntent.user_id,
-          type: 'payment',
-          title: status === PaymentStatus.COMPLETED ? 'Payment Confirmed' : 'Payment Failed',
-          message: status === PaymentStatus.COMPLETED 
-            ? `Your payment for ${updatedIntent.item_name} has been confirmed.`
-            : `Your payment for ${updatedIntent.item_name} could not be processed. ${notes || ''}`,
-          data: { payment_intent_id: intentId, status },
-          priority: 'high',
-          is_read: false,
-          created_at: new Date().toISOString()
-        });
+  // Initialize Flutterwave checkout
+  static initializeFlutterwaveCheckout(
+    paymentIntent: PaymentIntent,
+    customerEmail: string,
+    customerName: string,
+    onSuccess: (reference: string) => void,
+    onCancel: () => void
+  ): void {
+    // @ts-ignore - Flutterwave script loaded externally
+    FlutterwaveCheckout({
+      public_key: process.env.REACT_APP_FLUTTERWAVE_PUBLIC_KEY,
+      tx_ref: paymentIntent.id,
+      amount: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      payment_options: "card,mobilemoney,ussd",
+      customer: {
+        email: customerEmail,
+        name: customerName,
+      },
+      customizations: {
+        title: "CareConnect Payment",
+        description: paymentIntent.description,
+        logo: "/logo.png",
+      },
+      callback: function (data: any) {
+        if (data.status === "successful") {
+          onSuccess(data.tx_ref);
+        } else {
+          onCancel();
+        }
+      },
+      onclose: function() {
+        onCancel();
       }
+    });
+  }
 
-      await logger.info('payment_status_updated', 'Payment status updated', {
-        intent_id: intentId,
-        old_status: updatedIntent.status,
-        new_status: status,
-        admin_user_id: adminUserId
-      }, updatedIntent.user_id);
+  // Handle payment callback (success)
+  static async handlePaymentCallback(
+    paymentIntentId: string,
+    gatewayReference: string,
+    gatewayResponse?: any
+  ): Promise<PaymentIntent> {
+    const paymentIntent = await githubDB.findById(collections.payments, paymentIntentId);
+    if (!paymentIntent) throw new Error('Payment intent not found');
 
-      return updatedIntent;
-    } catch (error) {
-      await logger.error('payment_status_update_failed', 'Payment status update failed', {
-        intent_id: intentId,
-        status,
-        error: error.message
+    const updatedIntent = {
+      ...paymentIntent,
+      status: 'pending_review' as const,
+      gatewayReference,
+      gatewayResponse,
+      updatedAt: new Date().toISOString()
+    };
+
+    await githubDB.update(collections.payments, paymentIntentId, updatedIntent);
+
+    // Create notification for admin review
+    await githubDB.create(collections.notifications, {
+      id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      userId: 'admin',
+      type: 'payment_review_required',
+      title: 'Payment Requires Review',
+      message: `Payment ${paymentIntentId} requires manual verification`,
+      data: { paymentIntentId, gatewayReference },
+      createdAt: new Date().toISOString(),
+      read: false,
+      priority: 'high'
+    });
+
+    return updatedIntent;
+  }
+
+  // Handle payment cancellation
+  static async handlePaymentCancellation(paymentIntentId: string): Promise<PaymentIntent> {
+    const paymentIntent = await githubDB.findById(collections.payments, paymentIntentId);
+    if (!paymentIntent) throw new Error('Payment intent not found');
+
+    const updatedIntent = {
+      ...paymentIntent,
+      status: 'cancelled' as const,
+      updatedAt: new Date().toISOString()
+    };
+
+    await githubDB.update(collections.payments, paymentIntentId, updatedIntent);
+    return updatedIntent;
+  }
+
+  // Admin: Reconcile payment
+  static async reconcilePayment(
+    paymentIntentId: string,
+    action: PaymentReconciliation['action'],
+    evidence: PaymentReconciliation['evidence'],
+    adminUserId: string
+  ): Promise<void> {
+    const paymentIntent = await githubDB.findById(collections.payments, paymentIntentId);
+    if (!paymentIntent) throw new Error('Payment intent not found');
+
+    // Update payment status
+    let newStatus: PaymentIntent['status'];
+    let completedAt: string | undefined;
+
+    switch (action) {
+      case 'mark_completed':
+        newStatus = 'completed';
+        completedAt = new Date().toISOString();
+        break;
+      case 'mark_failed':
+        newStatus = 'failed';
+        break;
+      case 'mark_refunded':
+        newStatus = 'refunded';
+        break;
+      default:
+        throw new Error('Invalid reconciliation action');
+    }
+
+    await githubDB.update(collections.payments, paymentIntentId, {
+      status: newStatus,
+      completedAt,
+      updatedAt: new Date().toISOString()
+    });
+
+    // Create reconciliation record
+    const reconciliation: PaymentReconciliation = {
+      id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      paymentIntentId,
+      gatewayReference: paymentIntent.gatewayReference || '',
+      adminUserId,
+      action,
+      evidence,
+      performedAt: new Date().toISOString()
+    };
+
+    await githubDB.create(collections.audit_logs, {
+      id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      action: 'payment_reconciliation',
+      entityType: 'payment',
+      entityId: paymentIntentId,
+      performedBy: adminUserId,
+      performedAt: new Date().toISOString(),
+      details: reconciliation,
+      ipAddress: 'client-side'
+    });
+
+    // Notify customer
+    if (paymentIntent.customerId) {
+      await githubDB.create(collections.notifications, {
+        id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        userId: paymentIntent.customerId,
+        type: 'payment_status_update',
+        title: 'Payment Status Updated',
+        message: `Your payment has been ${newStatus}`,
+        data: { paymentIntentId, status: newStatus },
+        createdAt: new Date().toISOString(),
+        read: false,
+        priority: 'normal'
       });
-      throw error;
     }
   }
 
-  // Get payment intents for admin review
-  static async getPaymentIntentsForReview(): Promise<PaymentIntent[]> {
-    try {
-      return await githubDB.find(collections.payment_intents, {
-        status: PaymentStatus.PENDING_REVIEW
-      });
-    } catch (error) {
-      await logger.error('get_payment_review_failed', 'Failed to get payment intents for review', {
-        error: error.message
-      });
-      return [];
-    }
+  // Generate receipt (client-side)
+  static generateReceipt(paymentIntent: PaymentIntent, customerDetails: any): string {
+    const receiptDate = new Date(paymentIntent.completedAt || paymentIntent.createdAt);
+    
+    const receiptHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Payment Receipt - ${paymentIntent.id}</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; border-bottom: 2px solid #007bff; padding-bottom: 20px; margin-bottom: 30px; }
+        .logo { font-size: 24px; font-weight: bold; color: #007bff; }
+        .receipt-info { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .amount { font-size: 24px; font-weight: bold; color: #28a745; text-align: center; margin: 20px 0; }
+        .details { margin-bottom: 20px; }
+        .details th, .details td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">CareConnect</div>
+        <h2>Payment Receipt</h2>
+    </div>
+    
+    <div class="receipt-info">
+        <strong>Receipt #:</strong> ${paymentIntent.id}<br>
+        <strong>Date:</strong> ${receiptDate.toLocaleDateString()}<br>
+        <strong>Status:</strong> ${paymentIntent.status.toUpperCase()}
+    </div>
+    
+    <div class="amount">
+        ${paymentIntent.currency} ${paymentIntent.amount.toFixed(2)}
+    </div>
+    
+    <table class="details" width="100%">
+        <tr><th>Description</th><td>${paymentIntent.description}</td></tr>
+        <tr><th>Customer</th><td>${customerDetails.name || customerDetails.email}</td></tr>
+        <tr><th>Payment Method</th><td>${paymentIntent.gateway}</td></tr>
+        ${paymentIntent.gatewayReference ? `<tr><th>Reference</th><td>${paymentIntent.gatewayReference}</td></tr>` : ''}
+    </table>
+    
+    <div class="footer">
+        <p>Thank you for your payment!</p>
+        <p>CareConnect Platform • support@careconnect.com</p>
+    </div>
+</body>
+</html>`;
+
+    return receiptHTML;
   }
 
-  // Get user payment history
-  static async getUserPaymentHistory(userId: string): Promise<PaymentIntent[]> {
-    try {
-      const intents = await githubDB.find(collections.payment_intents, { user_id: userId });
-      return intents.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    } catch (error) {
-      await logger.error('get_payment_history_failed', 'Failed to get user payment history', {
-        user_id: userId,
-        error: error.message
-      });
-      return [];
-    }
+  // Download receipt
+  static downloadReceipt(paymentIntent: PaymentIntent, customerDetails: any): void {
+    const receiptHTML = this.generateReceipt(paymentIntent, customerDetails);
+    const blob = new Blob([receiptHTML], { type: 'text/html' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `receipt-${paymentIntent.id}.html`;
+    link.click();
   }
 
-  // Clean up expired payment intents
-  static async cleanupExpiredIntents(): Promise<void> {
-    try {
-      const now = new Date();
-      const expiredIntents = await githubDB.find(collections.payment_intents, {
-        status: PaymentStatus.PENDING,
-        expires_at: { $lt: now.toISOString() }
-      });
+  // Get payments for reconciliation queue
+  static async getPaymentsForReview(): Promise<PaymentIntent[]> {
+    return await githubDB.findMany(collections.payments, {
+      status: 'pending_review'
+    });
+  }
 
-      for (const intent of expiredIntents) {
-        await this.updatePaymentStatus(intent.id, PaymentStatus.CANCELLED, 'Automatically cancelled due to expiry');
-      }
-
-      await logger.info('expired_intents_cleanup', 'Expired payment intents cleaned up', {
-        cleaned_count: expiredIntents.length
-      });
-    } catch (error) {
-      await logger.error('intent_cleanup_failed', 'Failed to cleanup expired intents', {
-        error: error.message
-      });
-    }
+  // Get payment history for customer
+  static async getCustomerPayments(customerId: string): Promise<PaymentIntent[]> {
+    return await githubDB.findMany(collections.payments, {
+      customerId
+    });
   }
 }
+
+export default PaymentService;

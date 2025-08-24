@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { NewsService, NewsArticle, NewsSource } from '../../lib/news';
 import { useAuth } from '../../lib/auth';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { Plus, Edit, Trash2, Eye, CheckCircle, XCircle, Rss, Settings } from 'lucide-react';
 
 const NewsManagementPage: React.FC = () => {
+  const toast = useToastService();
   const { user } = useAuth();
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [sources, setSources] = useState<NewsSource[]>([]);
@@ -83,7 +85,7 @@ const NewsManagementPage: React.FC = () => {
       resetForm();
     } catch (error) {
       console.error('Failed to save article:', error);
-      alert('Failed to save article. Please try again.');
+      toast.showSuccess('Failed to save article. Please try again.');
     }
   };
 
@@ -158,11 +160,11 @@ const NewsManagementPage: React.FC = () => {
   const triggerAIAggregation = async () => {
     try {
       await NewsService.aggregateNewsFromSources();
-      alert('AI news aggregation started. Check back in a few minutes for new articles.');
+      toast.showSuccess('AI news aggregation started. Check back in a few minutes for new articles.');
       await loadData();
     } catch (error) {
       console.error('Failed to trigger AI aggregation:', error);
-      alert('Failed to start AI aggregation. Please try again.');
+      toast.showSuccess('Failed to start AI aggregation. Please try again.');
     }
   };
 

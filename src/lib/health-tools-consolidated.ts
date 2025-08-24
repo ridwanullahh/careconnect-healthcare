@@ -274,6 +274,21 @@ export class ConsolidatedHealthToolsService {
         case 'Blood Pressure Analyzer':
           result = this.analyzeBP(inputs);
           break;
+        case 'Body Fat Percentage Calculator':
+          result = this.calculateBodyFat(inputs);
+          break;
+        case 'Calorie Needs Calculator':
+          result = this.calculateCalorieNeeds(inputs);
+          break;
+        case 'Heart Rate Zone Calculator':
+          result = this.calculateHeartRateZones(inputs);
+          break;
+        case 'Water Intake Calculator':
+          result = this.calculateWaterIntake(inputs);
+          break;
+        case 'Protein Needs Calculator':
+          result = this.calculateProteinNeeds(inputs);
+          break;
         default:
           throw new Error(`Calculator not implemented: ${tool.name}`);
       }
@@ -432,6 +447,263 @@ export class ConsolidatedHealthToolsService {
       'Hypertensive Crisis': ['SEEK IMMEDIATE MEDICAL ATTENTION', 'Call emergency services']
     };
     return recommendations[category as keyof typeof recommendations] || [];
+  }
+
+  // Additional calculator implementations
+  private static calculateBodyFat(inputs: any) {
+    const { gender, age, waist, neck, hip, height, unit } = inputs;
+    let bodyFat;
+    
+    // US Navy method
+    if (gender === 'male') {
+      bodyFat = 495 / (1.0324 - 0.19077 * Math.log10(waist - neck) + 0.15456 * Math.log10(height)) - 450;
+    } else {
+      bodyFat = 495 / (1.29579 - 0.35004 * Math.log10(waist + hip - neck) + 0.22100 * Math.log10(height)) - 450;
+    }
+    
+    let category;
+    if (gender === 'male') {
+      if (bodyFat < 6) category = 'Essential Fat';
+      else if (bodyFat < 14) category = 'Athletic';
+      else if (bodyFat < 18) category = 'Fitness';
+      else if (bodyFat < 25) category = 'Average';
+      else category = 'Obese';
+    } else {
+      if (bodyFat < 14) category = 'Essential Fat';
+      else if (bodyFat < 21) category = 'Athletic';
+      else if (bodyFat < 25) category = 'Fitness';
+      else if (bodyFat < 32) category = 'Average';
+      else category = 'Obese';
+    }
+    
+    return {
+      body_fat_percentage: Math.round(bodyFat * 10) / 10,
+      category,
+      health_status: this.getBodyFatHealthStatus(category),
+      recommendations: this.getBodyFatRecommendations(category)
+    };
+  }
+
+  private static calculateCalorieNeeds(inputs: any) {
+    const { weight, height, age, gender, activity_level, goal } = inputs;
+    
+    // Calculate BMR first
+    let bmr;
+    if (gender === 'male') {
+      bmr = 88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age);
+    } else {
+      bmr = 447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age);
+    }
+    
+    // Activity multipliers
+    const activityMultipliers = {
+      sedentary: 1.2,
+      light: 1.375,
+      moderate: 1.55,
+      active: 1.725,
+      very_active: 1.9
+    };
+    
+    const tdee = bmr * activityMultipliers[activity_level as keyof typeof activityMultipliers];
+    
+    // Goal adjustments
+    let targetCalories = tdee;
+    if (goal === 'lose_weight') targetCalories = tdee - 500; // 1 lb per week
+    else if (goal === 'gain_weight') targetCalories = tdee + 500; // 1 lb per week
+    
+    return {
+      bmr: Math.round(bmr),
+      tdee: Math.round(tdee),
+      target_calories: Math.round(targetCalories),
+      goal_description: this.getGoalDescription(goal),
+      macros: this.calculateMacros(targetCalories)
+    };
+  }
+
+  private static calculateHeartRateZones(inputs: any) {
+    const { age, resting_hr } = inputs;
+    const maxHR = 220 - age;
+    const hrReserve = maxHR - resting_hr;
+    
+    return {
+      max_heart_rate: maxHR,
+      resting_heart_rate: resting_hr,
+      zones: {
+        zone_1: {
+          name: 'Recovery',
+          percentage: '50-60%',
+          range: `${Math.round(resting_hr + 0.5 * hrReserve)}-${Math.round(resting_hr + 0.6 * hrReserve)}`,
+          benefits: 'Active recovery, warm-up'
+        },
+        zone_2: {
+          name: 'Aerobic Base',
+          percentage: '60-70%',
+          range: `${Math.round(resting_hr + 0.6 * hrReserve)}-${Math.round(resting_hr + 0.7 * hrReserve)}`,
+          benefits: 'Fat burning, endurance building'
+        },
+        zone_3: {
+          name: 'Aerobic',
+          percentage: '70-80%',
+          range: `${Math.round(resting_hr + 0.7 * hrReserve)}-${Math.round(resting_hr + 0.8 * hrReserve)}`,
+          benefits: 'Cardiovascular fitness'
+        },
+        zone_4: {
+          name: 'Anaerobic',
+          percentage: '80-90%',
+          range: `${Math.round(resting_hr + 0.8 * hrReserve)}-${Math.round(resting_hr + 0.9 * hrReserve)}`,
+          benefits: 'Performance improvement'
+        },
+        zone_5: {
+          name: 'Neuromuscular',
+          percentage: '90-100%',
+          range: `${Math.round(resting_hr + 0.9 * hrReserve)}-${maxHR}`,
+          benefits: 'Maximum effort, short bursts'
+        }
+      }
+    };
+  }
+
+  private static calculateWaterIntake(inputs: any) {
+    const { weight, activity_level, climate, pregnancy_nursing } = inputs;
+    
+    // Base calculation: 35ml per kg of body weight
+    let baseIntake = weight * 35;
+    
+    // Activity adjustments
+    if (activity_level === 'moderate') baseIntake *= 1.2;
+    else if (activity_level === 'active') baseIntake *= 1.4;
+    else if (activity_level === 'very_active') baseIntake *= 1.6;
+    
+    // Climate adjustments
+    if (climate === 'hot') baseIntake *= 1.2;
+    else if (climate === 'very_hot') baseIntake *= 1.4;
+    
+    // Pregnancy/nursing adjustments
+    if (pregnancy_nursing === 'pregnant') baseIntake += 300;
+    else if (pregnancy_nursing === 'nursing') baseIntake += 700;
+    
+    const glasses = Math.ceil(baseIntake / 250); // 250ml per glass
+    
+    return {
+      daily_intake_ml: Math.round(baseIntake),
+      daily_intake_liters: Math.round(baseIntake / 1000 * 10) / 10,
+      glasses_per_day: glasses,
+      recommendations: this.getWaterIntakeRecommendations(glasses)
+    };
+  }
+
+  private static calculateProteinNeeds(inputs: any) {
+    const { weight, activity_level, age, goal, health_condition } = inputs;
+    
+    // Base protein needs (g/kg body weight)
+    let proteinPerKg = 0.8; // Sedentary adult
+    
+    // Activity level adjustments
+    if (activity_level === 'light') proteinPerKg = 1.0;
+    else if (activity_level === 'moderate') proteinPerKg = 1.2;
+    else if (activity_level === 'active') proteinPerKg = 1.4;
+    else if (activity_level === 'very_active') proteinPerKg = 1.6;
+    
+    // Age adjustments
+    if (age > 65) proteinPerKg += 0.2;
+    
+    // Goal adjustments
+    if (goal === 'muscle_gain') proteinPerKg += 0.4;
+    else if (goal === 'weight_loss') proteinPerKg += 0.2;
+    
+    // Health condition adjustments
+    if (health_condition === 'recovering') proteinPerKg += 0.3;
+    
+    const dailyProtein = weight * proteinPerKg;
+    
+    return {
+      daily_protein_grams: Math.round(dailyProtein),
+      protein_per_kg: Math.round(proteinPerKg * 10) / 10,
+      protein_per_meal: Math.round(dailyProtein / 3),
+      protein_sources: this.getProteinSources(),
+      recommendations: this.getProteinRecommendations(dailyProtein)
+    };
+  }
+
+  // Helper methods for new calculators
+  private static getBodyFatHealthStatus(category: string): string {
+    const statuses = {
+      'Essential Fat': 'Below normal - may indicate health risks',
+      'Athletic': 'Excellent - typical of athletes',
+      'Fitness': 'Good - healthy and fit',
+      'Average': 'Acceptable - within normal range',
+      'Obese': 'Above normal - may increase health risks'
+    };
+    return statuses[category as keyof typeof statuses] || '';
+  }
+
+  private static getBodyFatRecommendations(category: string): string[] {
+    const recommendations = {
+      'Essential Fat': ['Consult healthcare provider', 'May need to gain healthy weight'],
+      'Athletic': ['Maintain current lifestyle', 'Continue training regimen'],
+      'Fitness': ['Maintain healthy habits', 'Regular exercise and balanced diet'],
+      'Average': ['Consider increasing physical activity', 'Focus on strength training'],
+      'Obese': ['Consult healthcare provider', 'Create weight loss plan', 'Increase physical activity']
+    };
+    return recommendations[category as keyof typeof recommendations] || [];
+  }
+
+  private static getGoalDescription(goal: string): string {
+    const descriptions = {
+      maintain: 'Maintain current weight',
+      lose_weight: 'Lose 1 pound per week',
+      gain_weight: 'Gain 1 pound per week'
+    };
+    return descriptions[goal as keyof typeof descriptions] || '';
+  }
+
+  private static calculateMacros(calories: number) {
+    return {
+      protein: Math.round(calories * 0.3 / 4), // 30% of calories, 4 cal per gram
+      carbs: Math.round(calories * 0.4 / 4), // 40% of calories, 4 cal per gram
+      fat: Math.round(calories * 0.3 / 9) // 30% of calories, 9 cal per gram
+    };
+  }
+
+  private static getWaterIntakeRecommendations(glasses: number): string[] {
+    const base = [
+      'Drink throughout the day, not all at once',
+      'Monitor urine color - should be light yellow',
+      'Increase intake during exercise and hot weather'
+    ];
+    
+    if (glasses > 12) {
+      base.push('This is a high intake - monitor for overhydration');
+    }
+    
+    return base;
+  }
+
+  private static getProteinSources(): string[] {
+    return [
+      'Lean meats (chicken, turkey, lean beef)',
+      'Fish and seafood',
+      'Eggs and dairy products',
+      'Legumes and beans',
+      'Nuts and seeds',
+      'Quinoa and whole grains',
+      'Protein supplements (if needed)'
+    ];
+  }
+
+  private static getProteinRecommendations(dailyProtein: number): string[] {
+    const base = [
+      'Distribute protein throughout the day',
+      'Include protein in every meal',
+      'Choose high-quality protein sources'
+    ];
+    
+    if (dailyProtein > 150) {
+      base.push('High protein intake - ensure adequate hydration');
+      base.push('Consider consulting a nutritionist');
+    }
+    
+    return base;
   }
 
   // Get all active tools

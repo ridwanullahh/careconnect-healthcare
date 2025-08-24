@@ -1,477 +1,486 @@
-// Enhanced HealthTalk Podcast System with Admin Management
+// Enhanced 5-Minute HealthTalk Podcast System
 import { githubDB, collections } from './database';
-import { logger } from './observability';
+
+export interface PodcastSeries {
+  id: string;
+  title: string;
+  description: string;
+  hostName: string;
+  hostBio: string;
+  hostImage?: string;
+  category: 'general_health' | 'mental_health' | 'nutrition' | 'fitness' | 'medical_research' | 'wellness' | 'chronic_conditions';
+  language: string;
+  coverImage: string;
+  isActive: boolean;
+  episodeCount: number;
+  totalDuration: number; // in minutes
+  subscriberCount: number;
+  averageRating: number;
+  ratingCount: number;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  lastEpisodeAt?: string;
+  rssUrl?: string;
+  itunesUrl?: string;
+  spotifyUrl?: string;
+}
 
 export interface PodcastEpisode {
   id: string;
+  seriesId: string;
+  episodeNumber: number;
   title: string;
   description: string;
   audioUrl: string;
-  duration: number; // in seconds
-  publishedAt: string;
-  category: 'general' | 'nutrition' | 'mental-health' | 'chronic-conditions' | 'prevention' | 'technology';
-  host: {
-    name: string;
-    credentials: string;
-    avatar?: string;
-    bio?: string;
-  };
+  duration: number; // in minutes (target: 5 minutes)
+  fileSize: number; // in bytes
   transcript?: string;
+  summary: string;
+  keyPoints: string[];
   tags: string[];
+  publishedAt: string;
+  scheduledAt?: string;
+  status: 'draft' | 'scheduled' | 'published' | 'archived';
   playCount: number;
-  likes: number;
-  isLive: boolean;
-  isFeatured: boolean;
-  seasonNumber?: number;
-  episodeNumber?: number;
-  guests?: {
-    name: string;
-    credentials: string;
-    bio?: string;
-  }[];
-  resources?: {
-    title: string;
-    url: string;
-    type: 'article' | 'study' | 'tool' | 'website';
-  }[];
-  status: 'draft' | 'published' | 'archived';
-  created_at: string;
-  updated_at: string;
+  downloadCount: number;
+  likeCount: number;
+  shareCount: number;
+  averageRating: number;
+  ratingCount: number;
+  guestName?: string;
+  guestBio?: string;
+  guestImage?: string;
+  showNotes: string;
+  resources: EpisodeResource[];
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface LiveSession {
+export interface EpisodeResource {
   id: string;
   title: string;
-  description: string;
-  scheduledAt: string;
-  duration: number;
-  host: {
-    name: string;
-    credentials: string;
-    avatar?: string;
-  };
-  category: string;
-  tags: string[];
-  maxParticipants: number;
-  currentParticipants: number;
-  registrationRequired: boolean;
-  streamUrl?: string;
-  chatEnabled: boolean;
-  recordingEnabled: boolean;
-  status: 'scheduled' | 'live' | 'ended' | 'cancelled';
-  registrations: string[]; // user IDs
-  created_at: string;
-  updated_at: string;
+  url: string;
+  type: 'article' | 'study' | 'website' | 'video' | 'book' | 'tool';
+  description?: string;
+}
+
+export interface PodcastSubscription {
+  id: string;
+  userId: string;
+  seriesId: string;
+  subscribedAt: string;
+  notificationsEnabled: boolean;
+  autoDownload: boolean;
+  lastListenedAt?: string;
+  progress: Record<string, number>; // episodeId -> progress percentage
+}
+
+export interface PodcastRSSFeed {
+  id: string;
+  seriesId: string;
+  xmlContent: string;
+  lastUpdatedAt: string;
+  url: string;
+  itemCount: number;
+}
+
+export interface EpisodeListening {
+  id: string;
+  userId: string;
+  episodeId: string;
+  seriesId: string;
+  startedAt: string;
+  completedAt?: string;
+  progress: number; // percentage 0-100
+  totalListenTime: number; // in seconds
+  lastPositionSeconds: number;
+  deviceType: 'web' | 'mobile' | 'tablet';
 }
 
 export class PodcastService {
-  // Initialize podcast system with sample data
-  static async initializePodcastSystem(): Promise<void> {
-    try {
-      const existingEpisodes = await githubDB.find(collections.podcasts, {});
-      
-      if (existingEpisodes.length === 0) {
-        const sampleEpisodes = this.getSampleEpisodes();
-        
-        for (const episode of sampleEpisodes) {
-          await githubDB.insert(collections.podcasts, {
-            ...episode,
-            id: crypto.randomUUID(),
-            playCount: 0,
-            likes: 0,
-            isLive: false,
-            status: 'published',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-        }
-        
-        await logger.info('podcast_system_initialized', 'Podcast system initialized', {
-          episodes_created: sampleEpisodes.length
-        });
-      }
-    } catch (error) {
-      await logger.error('podcast_init_failed', 'Podcast system initialization failed', {
-        error: error.message
-      });
+  // Create podcast series
+  static async createSeries(seriesData: Omit<PodcastSeries, 'id' | 'episodeCount' | 'totalDuration' | 'subscriberCount' | 'averageRating' | 'ratingCount' | 'createdAt' | 'updatedAt'>): Promise<PodcastSeries> {
+    const series: PodcastSeries = {
+      id: `series_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      ...seriesData,
+      episodeCount: 0,
+      totalDuration: 0,
+      subscriberCount: 0,
+      averageRating: 0,
+      ratingCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await githubDB.create(collections.podcast_series, series);
+    return series;
+  }
+
+  // Create podcast episode
+  static async createEpisode(episodeData: Omit<PodcastEpisode, 'id' | 'episodeNumber' | 'playCount' | 'downloadCount' | 'likeCount' | 'shareCount' | 'averageRating' | 'ratingCount' | 'createdAt' | 'updatedAt'>): Promise<PodcastEpisode> {
+    // Get series to determine episode number
+    const series = await githubDB.findById(collections.podcast_series, episodeData.seriesId);
+    if (!series) throw new Error('Podcast series not found');
+
+    const existingEpisodes = await githubDB.findMany(collections.podcast_episodes, {
+      seriesId: episodeData.seriesId
+    });
+
+    const episodeNumber = existingEpisodes.length + 1;
+
+    const episode: PodcastEpisode = {
+      id: `episode_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      ...episodeData,
+      episodeNumber,
+      playCount: 0,
+      downloadCount: 0,
+      likeCount: 0,
+      shareCount: 0,
+      averageRating: 0,
+      ratingCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await githubDB.create(collections.podcast_episodes, episode);
+
+    // Update series stats
+    await this.updateSeriesStats(episodeData.seriesId);
+
+    // Generate/update RSS feed if episode is published
+    if (episode.status === 'published') {
+      await this.generateRSSFeed(episodeData.seriesId);
     }
+
+    return episode;
   }
 
-  private static getSampleEpisodes(): Partial<PodcastEpisode>[] {
-    return [
-      {
-        title: 'Daily Wellness Check: Heart Health Basics',
-        description: 'Understanding cardiovascular health, risk factors, and simple prevention strategies everyone should know.',
-        audioUrl: '/audio/podcasts/heart-health-basics.mp3',
-        duration: 300,
-        publishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-        category: 'general',
-        host: {
-          name: 'Dr. Sarah Chen',
-          credentials: 'MD, Cardiologist',
-          avatar: '/images/hosts/dr-chen.jpg',
-          bio: 'Board-certified cardiologist with 15 years experience in preventive cardiology.'
-        },
-        transcript: 'Welcome to today\'s HealthTalk! I\'m Dr. Sarah Chen, and today we\'re discussing heart health basics...',
-        tags: ['heart health', 'prevention', 'wellness'],
-        isFeatured: true,
-        seasonNumber: 1,
-        episodeNumber: 1,
-        resources: [
-          {
-            title: 'American Heart Association Guidelines',
-            url: 'https://www.heart.org',
-            type: 'website'
-          }
-        ]
-      },
-      {
-        title: 'Nutrition Minute: Building Healthy Eating Habits',
-        description: 'Simple, science-based tips for developing sustainable healthy eating patterns that fit your lifestyle.',
-        audioUrl: '/audio/podcasts/healthy-eating-habits.mp3',
-        duration: 295,
-        publishedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-        category: 'nutrition',
-        host: {
-          name: 'Lisa Rodriguez, RD',
-          credentials: 'Registered Dietitian',
-          avatar: '/images/hosts/lisa-rodriguez.jpg',
-          bio: 'Clinical nutritionist specializing in behavioral nutrition and sustainable eating patterns.'
-        },
-        tags: ['nutrition', 'diet', 'healthy habits'],
-        isFeatured: false,
-        seasonNumber: 1,
-        episodeNumber: 2
-      },
-      {
-        title: 'Mental Wellness Today: Managing Daily Stress',
-        description: 'Quick, effective strategies for managing everyday stress and maintaining mental wellness in busy times.',
-        audioUrl: '/audio/podcasts/daily-stress-management.mp3',
-        duration: 318,
-        publishedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-        category: 'mental-health',
-        host: {
-          name: 'Dr. Michael Thompson',
-          credentials: 'PhD, Clinical Psychologist',
-          avatar: '/images/hosts/dr-thompson.jpg',
-          bio: 'Licensed clinical psychologist specializing in stress management and cognitive behavioral therapy.'
-        },
-        tags: ['stress management', 'mental health', 'wellness'],
-        isFeatured: true,
-        seasonNumber: 1,
-        episodeNumber: 3,
-        guests: [
-          {
-            name: 'Dr. Emily Zhang',
-            credentials: 'MD, Psychiatrist',
-            bio: 'Psychiatrist focusing on stress-related disorders and workplace mental health.'
-          }
-        ]
-      }
-    ];
+  // Publish episode
+  static async publishEpisode(episodeId: string): Promise<PodcastEpisode> {
+    const episode = await githubDB.findById(collections.podcast_episodes, episodeId);
+    if (!episode) throw new Error('Episode not found');
+
+    const updatedEpisode = {
+      ...episode,
+      status: 'published' as const,
+      publishedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await githubDB.update(collections.podcast_episodes, episodeId, updatedEpisode);
+
+    // Update RSS feed
+    await this.generateRSSFeed(episode.seriesId);
+
+    // Notify subscribers
+    await this.notifySubscribers(episode.seriesId, episodeId);
+
+    // Update series last episode date
+    await githubDB.update(collections.podcast_series, episode.seriesId, {
+      lastEpisodeAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    return updatedEpisode;
   }
 
-  // Create new episode (Admin)
-  static async createEpisode(episodeData: Partial<PodcastEpisode>): Promise<PodcastEpisode> {
-    try {
-      const episode = await githubDB.insert(collections.podcasts, {
-        ...episodeData,
-        id: crypto.randomUUID(),
-        playCount: 0,
-        likes: 0,
-        isLive: false,
-        status: episodeData.status || 'draft',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
+  // Generate RSS feed for podcast series
+  static async generateRSSFeed(seriesId: string): Promise<PodcastRSSFeed> {
+    const series = await githubDB.findById(collections.podcast_series, seriesId);
+    if (!series) throw new Error('Podcast series not found');
 
-      await logger.info('podcast_episode_created', 'Podcast episode created', {
-        episode_id: episode.id,
-        title: episode.title
-      });
+    const episodes = await githubDB.findMany(collections.podcast_episodes, {
+      seriesId,
+      status: 'published'
+    });
 
-      return episode;
-    } catch (error) {
-      await logger.error('podcast_creation_failed', 'Podcast episode creation failed', {
-        error: error.message,
-        episode_data: episodeData
-      });
-      throw error;
-    }
-  }
+    // Sort episodes by episode number (descending for RSS)
+    episodes.sort((a, b) => b.episodeNumber - a.episodeNumber);
 
-  // Update episode
-  static async updateEpisode(episodeId: string, updates: Partial<PodcastEpisode>): Promise<PodcastEpisode> {
-    try {
-      const updated = await githubDB.update(collections.podcasts, episodeId, {
-        ...updates,
-        updated_at: new Date().toISOString()
-      });
+    const rssXml = this.generateRSSXML(series, episodes);
+    
+    const existingFeed = await githubDB.findOne(collections.podcast_rss_feeds, { seriesId });
+    
+    const feedData = {
+      seriesId,
+      xmlContent: rssXml,
+      lastUpdatedAt: new Date().toISOString(),
+      url: `https://careconnect.com/podcast/${seriesId}/rss.xml`,
+      itemCount: episodes.length
+    };
 
-      await logger.info('podcast_episode_updated', 'Podcast episode updated', {
-        episode_id: episodeId
-      });
-
-      return updated;
-    } catch (error) {
-      await logger.error('podcast_update_failed', 'Podcast episode update failed', {
-        episode_id: episodeId,
-        error: error.message
-      });
-      throw error;
-    }
-  }
-
-  // Delete episode
-  static async deleteEpisode(episodeId: string): Promise<void> {
-    try {
-      await githubDB.delete(collections.podcasts, episodeId);
-
-      await logger.info('podcast_episode_deleted', 'Podcast episode deleted', {
-        episode_id: episodeId
-      });
-    } catch (error) {
-      await logger.error('podcast_deletion_failed', 'Podcast episode deletion failed', {
-        episode_id: episodeId,
-        error: error.message
-      });
-      throw error;
-    }
-  }
-
-  // Get all episodes with filters
-  static async getEpisodes(filters: {
-    category?: string;
-    status?: string;
-    featured?: boolean;
-    limit?: number;
-    offset?: number;
-  } = {}): Promise<{ episodes: PodcastEpisode[]; total: number }> {
-    try {
-      let query: Record<string, any> = {};
-
-      if (filters.category) {
-        query.category = filters.category;
-      }
-
-      if (filters.status) {
-        query.status = filters.status;
-      }
-
-      if (filters.featured !== undefined) {
-        query.isFeatured = filters.featured;
-      }
-
-      let episodes = await githubDB.find(collections.podcasts, query);
-
-      // Sort by published date (newest first)
-      episodes.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-
-      const total = episodes.length;
-      const offset = filters.offset || 0;
-      const limit = filters.limit || 25;
-
-      episodes = episodes.slice(offset, offset + limit);
-
-      return { episodes, total };
-    } catch (error) {
-      await logger.error('get_episodes_failed', 'Failed to get episodes', {
-        error: error.message,
-        filters
-      });
-      throw error;
-    }
-  }
-
-  // Get single episode
-  static async getEpisode(episodeId: string): Promise<PodcastEpisode | null> {
-    try {
-      return await githubDB.findById(collections.podcasts, episodeId);
-    } catch (error) {
-      await logger.error('get_episode_failed', 'Failed to get episode', {
-        episode_id: episodeId,
-        error: error.message
-      });
-      return null;
-    }
-  }
-
-  // Record play (analytics)
-  static async recordPlay(episodeId: string, userId?: string): Promise<void> {
-    try {
-      const episode = await githubDB.findById(collections.podcasts, episodeId);
-      if (episode) {
-        await githubDB.update(collections.podcasts, episodeId, {
-          playCount: (episode.playCount || 0) + 1,
-          updated_at: new Date().toISOString()
-        });
-
-        // Record in analytics
-        await githubDB.insert(collections.analytics_events, {
-          user_id: userId,
-          event_type: 'podcast_play',
-          event_data: {
-            episode_id: episodeId,
-            episode_title: episode.title,
-            category: episode.category
-          },
-          timestamp: new Date().toISOString(),
-          page_url: window.location.href,
-          referrer: document.referrer
-        });
-      }
-    } catch (error) {
-      await logger.error('record_play_failed', 'Failed to record play', {
-        episode_id: episodeId,
-        error: error.message
-      });
-    }
-  }
-
-  // Like episode
-  static async likeEpisode(episodeId: string, userId: string): Promise<void> {
-    try {
-      const episode = await githubDB.findById(collections.podcasts, episodeId);
-      if (episode) {
-        await githubDB.update(collections.podcasts, episodeId, {
-          likes: (episode.likes || 0) + 1,
-          updated_at: new Date().toISOString()
-        });
-
-        // Store user's like
-        await githubDB.insert(collections.analytics_events, {
-          user_id: userId,
-          event_type: 'podcast_like',
-          event_data: {
-            episode_id: episodeId,
-            episode_title: episode.title
-          },
-          timestamp: new Date().toISOString(),
-          page_url: window.location.href,
-          referrer: document.referrer
-        });
-      }
-    } catch (error) {
-      await logger.error('like_episode_failed', 'Failed to like episode', {
-        episode_id: episodeId,
-        user_id: userId,
-        error: error.message
-      });
-    }
-  }
-
-  // Generate simple RSS feed data
-  static async generateRSSData(): Promise<string> {
-    try {
-      const { episodes } = await this.getEpisodes({ status: 'published', limit: 50 });
-      
-      const rssItems = episodes.map(episode => ({
-        title: episode.title,
-        description: episode.description,
-        pubDate: new Date(episode.publishedAt).toUTCString(),
-        link: `${window.location.origin}/health-talk-podcast/${episode.id}`,
-        guid: episode.id,
-        duration: this.formatDuration(episode.duration),
-        category: episode.category,
-        author: episode.host.name
-      }));
-
-      const rssData = {
-        title: 'HealthTalk Podcast - CareConnect',
-        description: '5-minute daily healthcare insights from verified professionals',
-        link: `${window.location.origin}/health-talk-podcast`,
-        language: 'en-us',
-        lastBuildDate: new Date().toUTCString(),
-        items: rssItems
+    if (existingFeed) {
+      await githubDB.update(collections.podcast_rss_feeds, existingFeed.id, feedData);
+      return { ...existingFeed, ...feedData };
+    } else {
+      const feed: PodcastRSSFeed = {
+        id: `rss_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        ...feedData
       };
-
-      return JSON.stringify(rssData, null, 2);
-    } catch (error) {
-      await logger.error('rss_generation_failed', 'RSS generation failed', {
-        error: error.message
-      });
-      throw error;
+      await githubDB.create(collections.podcast_rss_feeds, feed);
+      return feed;
     }
   }
 
+  // Generate RSS XML content
+  private static generateRSSXML(series: PodcastSeries, episodes: PodcastEpisode[]): string {
+    const now = new Date();
+    const pubDate = now.toUTCString();
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title><![CDATA[${series.title}]]></title>
+    <description><![CDATA[${series.description}]]></description>
+    <link>https://careconnect.com/podcast/${series.id}</link>
+    <language>${series.language}</language>
+    <pubDate>${pubDate}</pubDate>
+    <lastBuildDate>${pubDate}</lastBuildDate>
+    <managingEditor>podcast@careconnect.com (${series.hostName})</managingEditor>
+    <webMaster>podcast@careconnect.com</webMaster>
+    <category>Health</category>
+    <itunes:category text="Health &amp; Fitness">
+      <itunes:category text="Medicine"/>
+    </itunes:category>
+    <itunes:explicit>no</itunes:explicit>
+    <itunes:author><![CDATA[${series.hostName}]]></itunes:author>
+    <itunes:summary><![CDATA[${series.description}]]></itunes:summary>
+    <itunes:owner>
+      <itunes:name><![CDATA[CareConnect]]></itunes:name>
+      <itunes:email>podcast@careconnect.com</itunes:email>
+    </itunes:owner>
+    <itunes:image href="${series.coverImage}"/>
+    <image>
+      <url>${series.coverImage}</url>
+      <title><![CDATA[${series.title}]]></title>
+      <link>https://careconnect.com/podcast/${series.id}</link>
+    </image>`;
+
+    episodes.forEach(episode => {
+      const episodePubDate = new Date(episode.publishedAt).toUTCString();
+      const durationFormatted = this.formatDuration(episode.duration * 60); // Convert minutes to seconds
+
+      xml += `
+    <item>
+      <title><![CDATA[${episode.title}]]></title>
+      <description><![CDATA[${episode.description}]]></description>
+      <link>https://careconnect.com/podcast/${series.id}/episode/${episode.id}</link>
+      <guid isPermaLink="false">${episode.id}</guid>
+      <pubDate>${episodePubDate}</pubDate>
+      <enclosure url="${episode.audioUrl}" length="${episode.fileSize}" type="audio/mpeg"/>
+      <itunes:duration>${durationFormatted}</itunes:duration>
+      <itunes:summary><![CDATA[${episode.summary}]]></itunes:summary>
+      <itunes:explicit>no</itunes:explicit>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:episode>${episode.episodeNumber}</itunes:episode>
+      <content:encoded><![CDATA[
+        <p>${episode.description}</p>
+        <h3>Key Points:</h3>
+        <ul>
+          ${episode.keyPoints.map(point => `<li>${point}</li>`).join('')}
+        </ul>
+        ${episode.showNotes ? `<h3>Show Notes:</h3><p>${episode.showNotes}</p>` : ''}
+        ${episode.resources.length > 0 ? `
+          <h3>Resources:</h3>
+          <ul>
+            ${episode.resources.map(resource => `<li><a href="${resource.url}">${resource.title}</a>${resource.description ? ` - ${resource.description}` : ''}</li>`).join('')}
+          </ul>
+        ` : ''}
+      ]]></content:encoded>
+    </item>`;
+    });
+
+    xml += `
+  </channel>
+</rss>`;
+
+    return xml;
+  }
+
+  // Format duration for RSS (HH:MM:SS)
   private static formatDuration(seconds: number): string {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  }
-
-  // Live session management
-  static async createLiveSession(sessionData: Partial<LiveSession>): Promise<LiveSession> {
-    try {
-      const session = await githubDB.insert(collections.live_sessions, {
-        ...sessionData,
-        id: crypto.randomUUID(),
-        currentParticipants: 0,
-        registrations: [],
-        status: 'scheduled',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-
-      await logger.info('live_session_created', 'Live session created', {
-        session_id: session.id,
-        title: session.title
-      });
-
-      return session;
-    } catch (error) {
-      await logger.error('live_session_creation_failed', 'Live session creation failed', {
-        error: error.message
-      });
-      throw error;
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    } else {
+      return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
   }
 
-  static async getLiveSessions(filters: {
-    status?: string;
-    upcoming?: boolean;
-  } = {}): Promise<LiveSession[]> {
-    try {
-      let sessions = await githubDB.find(collections.live_sessions, {});
+  // Subscribe to podcast series
+  static async subscribeToPodcast(userId: string, seriesId: string): Promise<PodcastSubscription> {
+    // Check if already subscribed
+    const existing = await githubDB.findOne(collections.analytics_events, {
+      userId,
+      entityId: seriesId,
+      action: 'podcast_subscribe'
+    });
 
-      if (filters.status) {
-        sessions = sessions.filter(s => s.status === filters.status);
-      }
-
-      if (filters.upcoming) {
-        const now = new Date();
-        sessions = sessions.filter(s => new Date(s.scheduledAt) > now);
-      }
-
-      return sessions.sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
-    } catch (error) {
-      await logger.error('get_live_sessions_failed', 'Failed to get live sessions', {
-        error: error.message
-      });
-      return [];
+    if (existing) {
+      throw new Error('Already subscribed to this podcast');
     }
+
+    const subscription: PodcastSubscription = {
+      id: `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      userId,
+      seriesId,
+      subscribedAt: new Date().toISOString(),
+      notificationsEnabled: true,
+      autoDownload: false,
+      progress: {}
+    };
+
+    // Store subscription in analytics events for tracking
+    await githubDB.create(collections.analytics_events, {
+      id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      userId,
+      action: 'podcast_subscribe',
+      entityType: 'podcast_series',
+      entityId: seriesId,
+      data: subscription,
+      timestamp: new Date().toISOString()
+    });
+
+    // Update series subscriber count
+    const series = await githubDB.findById(collections.podcast_series, seriesId);
+    if (series) {
+      await githubDB.update(collections.podcast_series, seriesId, {
+        subscriberCount: series.subscriberCount + 1,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    return subscription;
   }
 
-  static async registerForLiveSession(sessionId: string, userId: string): Promise<void> {
-    try {
-      const session = await githubDB.findById(collections.live_sessions, sessionId);
-      if (session && !session.registrations.includes(userId)) {
-        await githubDB.update(collections.live_sessions, sessionId, {
-          registrations: [...session.registrations, userId],
-          updated_at: new Date().toISOString()
+  // Notify subscribers of new episode
+  private static async notifySubscribers(seriesId: string, episodeId: string): Promise<void> {
+    const series = await githubDB.findById(collections.podcast_series, seriesId);
+    const episode = await githubDB.findById(collections.podcast_episodes, episodeId);
+    
+    if (!series || !episode) return;
+
+    // Get subscribers
+    const subscriptions = await githubDB.findMany(collections.analytics_events, {
+      action: 'podcast_subscribe',
+      entityId: seriesId
+    });
+
+    for (const subscription of subscriptions) {
+      if (subscription.data?.notificationsEnabled !== false) {
+        await githubDB.create(collections.notifications, {
+          id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          userId: subscription.userId,
+          type: 'new_podcast_episode',
+          title: 'New Podcast Episode',
+          message: `New episode of "${series.title}": ${episode.title}`,
+          data: { seriesId, episodeId },
+          createdAt: new Date().toISOString(),
+          read: false,
+          priority: 'low'
         });
-
-        await logger.info('live_session_registration', 'User registered for live session', {
-          session_id: sessionId,
-          user_id: userId
-        });
       }
-    } catch (error) {
-      await logger.error('live_session_registration_failed', 'Live session registration failed', {
-        session_id: sessionId,
-        user_id: userId,
-        error: error.message
-      });
     }
+  }
+
+  // Update series statistics
+  private static async updateSeriesStats(seriesId: string): Promise<void> {
+    const episodes = await githubDB.findMany(collections.podcast_episodes, { seriesId });
+    const publishedEpisodes = episodes.filter(e => e.status === 'published');
+    
+    const totalDuration = publishedEpisodes.reduce((sum, e) => sum + e.duration, 0);
+    const episodeCount = publishedEpisodes.length;
+    
+    // Calculate average rating
+    const ratingsSum = publishedEpisodes.reduce((sum, e) => sum + (e.averageRating * e.ratingCount), 0);
+    const totalRatings = publishedEpisodes.reduce((sum, e) => sum + e.ratingCount, 0);
+    const averageRating = totalRatings > 0 ? ratingsSum / totalRatings : 0;
+
+    await githubDB.update(collections.podcast_series, seriesId, {
+      episodeCount,
+      totalDuration,
+      averageRating,
+      ratingCount: totalRatings,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  // Get podcast series with episodes
+  static async getSeriesWithEpisodes(seriesId: string): Promise<{
+    series: PodcastSeries;
+    episodes: PodcastEpisode[];
+  }> {
+    const series = await githubDB.findById(collections.podcast_series, seriesId);
+    if (!series) throw new Error('Podcast series not found');
+
+    const episodes = await githubDB.findMany(collections.podcast_episodes, {
+      seriesId,
+      status: 'published'
+    });
+
+    episodes.sort((a, b) => b.episodeNumber - a.episodeNumber);
+
+    return { series, episodes };
+  }
+
+  // Get RSS feed content
+  static async getRSSFeedContent(seriesId: string): Promise<string> {
+    const feed = await githubDB.findOne(collections.podcast_rss_feeds, { seriesId });
+    
+    if (!feed) {
+      // Generate RSS feed if it doesn't exist
+      const generatedFeed = await this.generateRSSFeed(seriesId);
+      return generatedFeed.xmlContent;
+    }
+
+    return feed.xmlContent;
+  }
+
+  // Search podcast episodes
+  static async searchEpisodes(query: string, seriesId?: string): Promise<PodcastEpisode[]> {
+    let episodes = await githubDB.findMany(collections.podcast_episodes, {
+      status: 'published',
+      ...(seriesId && { seriesId })
+    });
+
+    if (query) {
+      const lowerQuery = query.toLowerCase();
+      episodes = episodes.filter(episode =>
+        episode.title.toLowerCase().includes(lowerQuery) ||
+        episode.description.toLowerCase().includes(lowerQuery) ||
+        episode.tags.some(tag => tag.toLowerCase().includes(lowerQuery)) ||
+        episode.keyPoints.some(point => point.toLowerCase().includes(lowerQuery))
+      );
+    }
+
+    return episodes.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  }
+
+  // Get popular episodes
+  static async getPopularEpisodes(limit: number = 10): Promise<PodcastEpisode[]> {
+    const episodes = await githubDB.findMany(collections.podcast_episodes, {
+      status: 'published'
+    });
+
+    return episodes
+      .sort((a, b) => b.playCount - a.playCount)
+      .slice(0, limit);
+  }
+
+  // Get recent episodes
+  static async getRecentEpisodes(limit: number = 20): Promise<PodcastEpisode[]> {
+    const episodes = await githubDB.findMany(collections.podcast_episodes, {
+      status: 'published'
+    });
+
+    return episodes
+      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+      .slice(0, limit);
   }
 }
+
+export default PodcastService;

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { TimelessFactsService, TimelessFact } from '../../lib/news';
 import { useAuth } from '../../lib/auth';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { Plus, Edit, Trash2, Eye, Lightbulb, Tag } from 'lucide-react';
 
 const TimelessFactsManagementPage: React.FC = () => {
+  const toast = useToastService();
   const { user } = useAuth();
   const [facts, setFacts] = useState<TimelessFact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -57,7 +59,7 @@ const TimelessFactsManagementPage: React.FC = () => {
       resetForm();
     } catch (error) {
       console.error('Failed to save fact:', error);
-      alert('Failed to save fact. Please try again.');
+      toast.showSuccess('Failed to save fact. Please try again.');
     }
   };
 
@@ -84,7 +86,7 @@ const TimelessFactsManagementPage: React.FC = () => {
       await loadFacts();
     } catch (error) {
       console.error('Failed to delete fact:', error);
-      alert('Failed to delete fact. Please try again.');
+      toast.showSuccess('Failed to delete fact. Please try again.');
     }
   };
 

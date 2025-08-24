@@ -97,6 +97,12 @@ const Header: React.FC = () => {
       megaMenu: 'tools',
       items: [
         { name: 'All Health Tools', href: '/health-tools' },
+        { name: 'AILab', href: '/ailab', submenu: [
+          { name: 'AILab Dashboard', href: '/ailab' },
+          { name: 'AI Care Path Cards', href: '/ailab/care-path' },
+          { name: 'AI Lab & Imaging Explainer', href: '/ailab/lab-explainer' },
+          { name: 'AI Procedure Navigator', href: '/ailab/procedure-navigator' }
+        ]},
         { name: 'AI Symptom Checker', href: '/health-tools/ai-symptom-checker' },
         { name: 'Health Calculators', href: '/health-tools?category=calculators' },
         { name: 'Mental Health', href: '/health-tools?category=mental_wellness' },

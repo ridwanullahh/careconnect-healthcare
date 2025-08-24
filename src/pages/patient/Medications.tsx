@@ -1,5 +1,6 @@
 // Patient Medications - Patient Portal Medication Management
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -108,7 +109,7 @@ export default function Medications() {
 
   const handleRefillRequest = (medicationId: string) => {
     // This would integrate with the medication request system
-    alert('Refill request functionality would be implemented here');
+    toast.showSuccess('Refill request functionality would be implemented here');
   };
 
   if (loading) {

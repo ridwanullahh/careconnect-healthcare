@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { JobService, JobApplication, JobPosting } from '../../lib/jobs';
 import { useAuth } from '../../lib/auth';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
@@ -9,6 +10,7 @@ import {
 } from 'lucide-react';
 
 const JobApplicationsPage: React.FC = () => {
+  const toast = useToastService();
   const { user } = useAuth();
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [jobs, setJobs] = useState<JobPosting[]>([]);
@@ -53,7 +55,7 @@ const JobApplicationsPage: React.FC = () => {
       await loadData(); // Reload data
     } catch (error) {
       console.error('Failed to update application status:', error);
-      alert('Failed to update application status. Please try again.');
+      toast.showSuccess('Failed to update application status. Please try again.');
     }
   };
 

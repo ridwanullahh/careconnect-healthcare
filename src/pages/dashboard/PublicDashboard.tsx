@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
 import { githubDB, collections } from '../../lib/database';
@@ -6,6 +7,7 @@ import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 // Dashboard sections
 const OverviewSection = () => {
+  const toast = useToastService();
   const { user } = useAuth();
   const [stats, setStats] = useState({
     appointments: 0,
@@ -109,9 +111,9 @@ const ProfileSection = () => {
     });
 
     if (success) {
-      alert('Profile updated successfully!');
+      toast.showSuccess('Profile updated successfully!');
     } else {
-      alert('Failed to update profile.');
+      toast.showSuccess('Failed to update profile.');
     }
     setIsLoading(false);
   };

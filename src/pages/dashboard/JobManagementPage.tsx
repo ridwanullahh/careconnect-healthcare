@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useToastService } from '../../lib/toast-service';
 import { JobService, JobPosting } from '../../lib/jobs';
 import { useAuth } from '../../lib/auth';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { Plus, Edit, Trash2, Eye, Users, DollarSign, MapPin, Clock, Star, Zap } from 'lucide-react';
 
 const JobManagementPage: React.FC = () => {
+  const toast = useToastService();
   const { user } = useAuth();
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -98,7 +100,7 @@ const JobManagementPage: React.FC = () => {
       resetForm();
     } catch (error) {
       console.error('Failed to save job:', error);
-      alert('Failed to save job. Please try again.');
+      toast.showSuccess('Failed to save job. Please try again.');
     }
   };
 
@@ -144,7 +146,7 @@ const JobManagementPage: React.FC = () => {
       await loadJobs();
     } catch (error) {
       console.error('Failed to delete job:', error);
-      alert('Failed to delete job. Please try again.');
+      toast.showSuccess('Failed to delete job. Please try again.');
     }
   };
 

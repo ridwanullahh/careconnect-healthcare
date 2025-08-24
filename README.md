@@ -7,6 +7,17 @@ Currently, two official plugins are available:
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
 - [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
+## Local Development with HTTPS/SSL
+
+If you encounter an `ERR_SSL_PROTOCOL_ERROR` in your browser when running the local development server, it is because the browser is forcing `http://localhost:3000` to `https://`. To resolve this, the project is configured to use HTTPS for local development, but this feature is disabled by default to prevent issues in environments where it's not needed.
+
+To enable HTTPS for your local development server, create a `.env.development` file in the root of the project and add the following line:
+
+```
+VITE_DEV_SERVER_HTTPS=true
+```
+
+Vite will automatically load this file when you run `npm run dev`, and the `vite.config.ts` is configured to enable HTTPS and the necessary SSL plugin only when this variable is set. This setup is isolated to the development environment and will not affect the production build.
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
