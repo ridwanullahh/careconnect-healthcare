@@ -5,7 +5,7 @@ import { ToastProvider } from './components/ui/Toast';
 import { useAuth } from './lib/auth';
 import { initializeDatabase } from './lib/database';
 import { initializeContentSeeds } from './lib/content-initializer';
-import { initializeAllHealthTools } from './lib/health-tools';
+import { initializeMasterHealthTools } from './lib/health-tools-master';
 import { initializeTheme } from './lib/theme';
 import { LMSService } from './lib/lms';
 
@@ -95,7 +95,7 @@ import Providers from './pages/patient/Providers';
 import Billing from './pages/patient/Billing';
 
 // Floating Tools
-import AISupportAgent from './components/ui/AISupportAgent';
+import EnhancedAISupportAgent from './components/ui/EnhancedAISupportAgent';
 import AccessibilityTools from './components/ui/AccessibilityTools';
 import ConsentBanner from './components/ui/ConsentBanner';
 
@@ -123,7 +123,7 @@ function App() {
         await initializeContentSeeds();
         console.log('App: Content seeds done');
         
-        await initializeAllHealthTools();
+        await initializeMasterHealthTools();
         console.log('App: Health tools initialized');
         
         await LMSService.initializeStarterCourses();
@@ -277,7 +277,7 @@ function App() {
         <Footer />
         
         {/* Floating Tools */}
-        <AISupportAgent />
+        <EnhancedAISupportAgent />
         <AccessibilityTools />
         
         {/* Consent & Cookie Banner */}

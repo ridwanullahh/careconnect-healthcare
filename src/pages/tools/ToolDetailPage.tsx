@@ -1,8 +1,8 @@
 import { useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { HealthTool, FixedHealthToolsService as ComprehensiveHealthToolsService, ToolType } from '../../lib/health-tools-fixed';
+import { HealthTool, masterHealthToolsService as ComprehensiveHealthToolsService, ToolType } from '../../lib/health-tools-master';
 import { githubDB, collections } from '../../lib/database';
-import { initializeComprehensiveHealthTools } from '../../lib/health-tools-initializer';
+import HealthToolAIChat from '../../components/ai/HealthToolAIChat';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { 
   Sparkles, 
@@ -24,6 +24,8 @@ const ToolDetailPage = () => {
   const [result, setResult] = useState<any>(null);
   const [inputData, setInputData] = useState<Record<string, any>>({});
   const [error, setError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isChatActive, setIsChatActive] = useState(false);
 
   useEffect(() => {
     const loadTool = async () => {
@@ -34,10 +36,9 @@ const ToolDetailPage = () => {
       }
 
       try {
-        // Ensure tools are initialized first
-        await initializeComprehensiveHealthTools();
+        // Get tool directly from service
+        const toolData = await ComprehensiveHealthToolsService.getToolById(toolId);
         
-        const toolData = await githubDB.findById(collections.health_tools, toolId);
         if (!toolData) {
           setError('Tool not found');
         } else {
@@ -65,14 +66,16 @@ const ToolDetailPage = () => {
       let toolResult;
       
       // Ensure the service is properly imported and available
-      if (tool.type === ToolType.AI_POWERED) {
-        // Check if executeAITool method exists
+      if (tool.type === ToolType.AI_POWERED || tool.type === ToolType.AI_CHAT) {
         if (typeof ComprehensiveHealthToolsService.executeAITool !== 'function') {
           throw new Error('AI tool execution service not available');
         }
         toolResult = await ComprehensiveHealthToolsService.executeAITool(tool.id, inputData);
+        if (toolResult.type === 'chat_response') {
+          setSessionId(toolResult.sessionId);
+          setIsChatActive(true);
+        }
       } else {
-        // Check if executeCalculatorTool method exists
         if (typeof ComprehensiveHealthToolsService.executeCalculatorTool !== 'function') {
           throw new Error('Calculator tool execution service not available');
         }
@@ -225,7 +228,11 @@ const ToolDetailPage = () => {
     }
   };
 
-  const renderResult = () => {
+  const renderOutput = () => {
+    if (isChatActive && sessionId && tool) {
+      return <HealthToolAIChat tool={tool} sessionId={sessionId} />;
+    }
+
     if (!result) return null;
 
     const { result: resultData, disclaimer, emergency_alert } = result;
@@ -443,7 +450,7 @@ const ToolDetailPage = () => {
             <div className="bg-white rounded-xl shadow-sm p-6">
               <h2 className="text-xl font-semibold mb-6 text-dark">Results</h2>
               {result ? (
-                renderResult()
+                renderOutput()
               ) : (
                 <div className="bg-gray-50 rounded-lg p-8 text-center">
                   <CheckCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />

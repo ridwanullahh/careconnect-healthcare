@@ -216,7 +216,7 @@ class UniversalSDK {
         }
       },
       chat_sessions: {
-        required: ['userId', 'name', 'messages'],
+        required: ['name', 'messages'],
         types: {
           userId: 'string',
           name: 'string',

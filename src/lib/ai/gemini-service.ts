@@ -1,9 +1,11 @@
 // Core Gemini 2.5-Flash AI Service - Production Ready
 import { githubDB } from '../github-db-sdk';
 
-// Gemini API Configuration
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
+// Gemini API Configuration - Multiple Keys Support
+const GEMINI_API_KEYS_STRING = import.meta.env.VITE_GEMINI_API_KEYS || import.meta.env.VITE_GEMINI_API_KEY || '';
+const GEMINI_API_KEYS = GEMINI_API_KEYS_STRING.split(',').map(key => key.trim()).filter(key => key.length > 0);
+let currentKeyIndex = 0;
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 export interface GeminiResponse {
   candidates: Array<{
@@ -36,6 +38,7 @@ export interface AIServiceConfig {
 export class GeminiAIService {
   private config: AIServiceConfig;
   private promptVersions: Map<string, string> = new Map();
+  private currentKeyIndex: number = 0;
 
   constructor(config: Partial<AIServiceConfig> = {}) {
     this.config = {
@@ -48,6 +51,26 @@ export class GeminiAIService {
     };
 
     this.initializePromptVersions();
+    this.validateApiKeys();
+  }
+
+  private validateApiKeys() {
+    if (GEMINI_API_KEYS.length === 0) {
+      console.warn('⚠️ No Gemini API keys found. Please set VITE_GEMINI_API_KEYS in your environment variables.');
+    } else {
+      console.log(`✅ Loaded ${GEMINI_API_KEYS.length} Gemini API key(s)`);
+    }
+  }
+
+  private getCurrentApiKey(): string {
+    if (GEMINI_API_KEYS.length === 0) {
+      throw new Error('No Gemini API keys available. Please configure VITE_GEMINI_API_KEYS.');
+    }
+    
+    const key = GEMINI_API_KEYS[this.currentKeyIndex];
+    // Rotate to next key for load balancing
+    this.currentKeyIndex = (this.currentKeyIndex + 1) % GEMINI_API_KEYS.length;
+    return key;
   }
 
   private initializePromptVersions() {
@@ -136,8 +159,8 @@ Procedure: {procedureName}
   }
 
   async generateContent(prompt: string, promptVersion: string = 'default'): Promise<string> {
-    if (!GEMINI_API_KEY) {
-      console.warn('Gemini API key not configured, using fallback');
+    if (GEMINI_API_KEYS.length === 0) {
+      console.warn('Gemini API keys not configured, using fallback');
       return this.getFallbackContent(promptVersion);
     }
 
@@ -182,7 +205,8 @@ Procedure: {procedureName}
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
-        const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+        const apiKey = this.getCurrentApiKey();
+        const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -228,7 +252,7 @@ Procedure: {procedureName}
 
   private async logUsage(promptVersion: string, usage: any) {
     try {
-      await githubDB.create('analytics_events', {
+      await githubDB.insert('analytics_events', {
         id: `ai_usage_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         event_type: 'ai_generation',
         prompt_version: promptVersion,
