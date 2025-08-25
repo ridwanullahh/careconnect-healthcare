@@ -2,11 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
-  ComprehensiveHealthToolsService as HealthToolsService, 
+  masterHealthToolsService as HealthToolsService, 
   ToolCategory, 
   ToolType,
-  initializeAllHealthTools
-} from '../../lib/health-tools';
+  initializeMasterHealthTools
+} from '../../lib/health-tools-master';
 import {
   Search,
   Filter,
@@ -106,6 +106,7 @@ const HealthToolsPage: React.FC = () => {
   ];
 
   const toolTypes = [
+    { id: ToolType.AI_CHAT, name: 'AI Chat', icon: Sparkles },
     { id: ToolType.AI_POWERED, name: 'AI-Powered', icon: Sparkles },
     { id: ToolType.CALCULATOR, name: 'Calculators', icon: Calculator },
     { id: ToolType.TRACKER, name: 'Trackers', icon: Activity },
@@ -119,7 +120,7 @@ const HealthToolsPage: React.FC = () => {
   useEffect(() => {
     loadTools();
     // Initialize tools if not already present
-    initializeAllHealthTools();
+    initializeMasterHealthTools();
   }, [selectedCategory]);
 
   const loadTools = async () => {

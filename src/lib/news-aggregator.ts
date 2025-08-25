@@ -315,7 +315,8 @@ export class NewsAggregatorService {
   private static async generateAISummary(content: string): Promise<string> {
     try {
       // Get system API key (not user BYOK for automated summarization)
-      const apiKey = process.env.VITE_GEMINI_API_KEY;
+      const apiKeys = (import.meta.env.VITE_GEMINI_API_KEYS || import.meta.env.VITE_GEMINI_API_KEY || '').split(',').map(key => key.trim()).filter(key => key.length > 0);
+      const apiKey = apiKeys[0]; // Use first available key
       if (!apiKey) {
         return '';
       }
