@@ -1,276 +1,219 @@
-# CareConnect Healthcare Platform — Comprehensive Technical Documentation
+# CareConnect Healthcare Platform — Technical Documentation
 
-This documentation covers the entire platform for hackathon evaluation: architecture, modules, data model, workflows, security, and AI. It is designed to be complete yet efficient. All sections reflect the current codebase.
+This document provides a comprehensive, factual, and concise technical overview of the CareConnect Healthcare Platform codebase. It is structured to give engineers, DevOps, data privacy, and product teams a clear understanding of architecture, modules, data model, workflows, and extension points without wasting words.
 
 ---
 
-## 1) Platform Overview
-- SPA built with React 18 + Vite + TypeScript
-- TailwindCSS for styling; lucide-react for icons
-- Routing via react-router-dom v6
-- GitHub JSON Database via custom SDK (collections as JSON files under `db/` in a GitHub repo)
+## 1. Stack Overview
+- Runtime: Browser SPA (React 18), Vite build tool, TypeScript
+- UI: TailwindCSS, lucide-react icons
+- Routing: react-router-dom v6
+- State/Utils: Zustand (light usage), clsx, tailwind-merge
+- Maps: @react-google-maps/api (Google Maps JS)
+- Data layer: GitHub as JSON-backed store via custom SDK (`src/lib/github-db-sdk.ts`)
 - AI: Google Gemini (Generative Language API) via REST
-- Maps: Google Maps via @react-google-maps/api
-- Deployment: Vercel (SPA rewrite to index.html)
-
-Key principles: privacy-first, modular domain layers, agentic AI assistance, extensibility.
+- Deployment: Vercel (see `vercel.json`), SPA rewrite to `index.html`
 
 ---
 
-## 2) Repository Structure
+## 2. Project Structure
 
-- Root: config files, scripts, locks, vercel.json, redirects
-- `db/`: static datasets (languages, specialties, podcasts, insurers)
 - `src/`
-  - `App.tsx`: initialization and routes
-  - `components/`: UI primitives, layout, AI support, utilities
-  - `hooks/`: AJAX search, analytics, responsiveness
-  - `lib/`: domain modules (HMS/EHR, booking, LMS, ecommerce, community, news, payments, consents, encryption, notifications, AI tools)
-  - `pages/`: route-level pages for each domain
-  - `styles/`: brand CSS
+  - `App.tsx`: App bootstrap, theme initialization, DB init, LMS and health-tools initialization. Declares routes and mounts floating tools (AI support, accessibility tools, consent banner).
+  - `components/`
+    - `layout/`: Header, Footer, Sidebar, Dashboard layout pieces
+    - `ui/`: Reusable UI (buttons, inputs, cards, tabs, toasts, loaders), AccessibilityTools, ConsentBanner, ThemeToggle
+    - `ui/AISupportAgent.tsx`: Floating, agentic Gemini-powered support assistant
+    - `ai/`: Feature-specific AI components (e.g., ProcedureNavigator/LabImagingExplainer)
+  - `hooks/`: Custom hooks including AJAX directory search and analytics
+  - `lib/`: Domain modules (booking, LMS, payments, HMS, EHR-like records, news, forum, ecommerce, consents, encryption, etc.) and platform initialization
+  - `pages/`: Route-level pages for directory, LMS, ecommerce, community, patient portal, dashboards, etc.
+  - `styles/`: Styling tokens and brand system
+- `db/`: Static seed/lookups (languages, specialties, podcasts, insurers)
+- `ProjectsDetails/`: Meta docs/specs
+- Root config: `vite.config.ts`, `tailwind.config.ts`, `eslint.config.js`, TS configs
 
 ---
 
-## 3) App Initialization & Routing (src/App.tsx)
+## 3. Application Bootstrapping
 
-Initialization sequence (inside useEffect):
-1. Theme initialization: `initializeTheme()`
-2. DB collections initialization: `initializeDatabase()` (via GitHub DB SDK)
-3. Health tools initialization: `initializeAllHealthTools()` (or master versions)
-4. LMS seeds: `LMSService.initializeStarterCourses()`
-5. Refresh user: `useAuth().refreshUser()`
+Boot flow in `App.tsx`:
+1. Initialize theme: `initializeTheme()`
+2. Initialize GitHub DB collections: `initializeDatabase()` (calls `githubDB.initializeAllCollections()`)
+3. Initialize health tools: `initializeAllHealthTools()`
+4. Initialize LMS starter content: `LMSService.initializeStarterCourses()`
+5. Refresh user auth: `useAuth().refreshUser()`
+6. Render router with public + protected areas
+7. Mount floating utilities: `AISupportAgent`, `AccessibilityTools`, `ConsentBanner`
 
-Routing:
-- Public: Home, Directory, EntityDetail, HealthTools, ToolDetail, Courses (+detail, learning, completion), Shop/Cart/Checkout/Success, Blog/Article, Community/Forum, News Feed/Article, Weekly Tips, Timeless Facts, Jobs/JobDetail, Help, Contact, Legal
-- Protected (role-based): HMS dashboards (Hospital, PatientRegistry, EncounterBoard, Lab/Imaging Orders, Care Plans, Referrals, Bed Mgmt, Billing, Reports), Patient Portal (Records, Medications, Consents, Providers, Billing), Super Admin areas (News, Weekly Tips, Timeless Facts, Forum, Jobs)
-- Floating utilities: `AISupportAgent`, `AccessibilityTools`, `ConsentBanner`
-
----
-
-## 4) Data Layer — GitHub JSON DB
-
-SDK: `src/lib/github-db-sdk.ts`
-- Collections are JSON blobs at `db/<collection>.json`
-- API auth via `VITE_GITHUB_TOKEN`; repo set by `VITE_GITHUB_OWNER`/`VITE_GITHUB_REPO`
-- Caching with ETag; optimistic writes queued; conflict retries
-- Core Methods:
-  - `get(collection)`: read full array; auto-initialize if missing
-  - `find(collection, filter | fn)`: filter by object or predicate
-  - `findById(collection, id)`
-  - `insert(collection, item)` => returns item with `id` + `uid`
-  - `update(collection, id|uid, patch)`
-  - `delete(collection, id|uid)`
-- Schemas: defined in constructor (hundreds of fields); validation on insert/update
-- `src/lib/database.ts` exposes `collections` (canonical names) and `initializeDatabase()` wrapper
-
-Suitability: Ideal for demos, content, meta/config; not for PHI. For health data, use encrypted fields with consent/access controls, or swap to compliant backend.
+Protected routes are conditionally rendered by `user.user_type`. Patient Portal and HMS dashboards are only available for authenticated users with specific roles.
 
 ---
 
-## 5) Authentication & Privacy
+## 4. Data Layer (GitHub JSON DB)
 
-- `src/lib/auth.tsx` (lightweight): user session management, roles (`public_user`, `patient`, `health_center`, `hospital_admin`, `physician`, `nurse`, `pharmacist`, etc.)
-- Privacy modules:
-  - `consents.ts`: consent records (type, scope, purpose, status)
-  - `access-grants.ts`: organization/person access control to patient data (scope + levels)
-  - `encryption.ts`: helpers for encrypting identifiers
-- Do not store PHI/PII in GitHub DB. If needed, encrypt contents and gate with consents/access grants.
+- SDK: `src/lib/github-db-sdk.ts`
+  - Stores collections as JSON files under `db/<collection>.json` in a GitHub repo
+  - Auth via `VITE_GITHUB_TOKEN`; repo config via `VITE_GITHUB_OWNER`, `VITE_GITHUB_REPO`
+  - Methods: `get`, `find`, `findById`, `insert`, `update`, `delete`
+  - Optimistic updates with write queue; handles ETags/SHA for conflict resolution
+  - Schemas are defined in SDK constructor; undefined collections auto-initialize
+- Database helpers + collection keys: `src/lib/database.ts`
+  - Exposes `collections` map for consistency
+  - `initializeDatabase()` runs `githubDB.initializeAllCollections()`
 
----
-
-## 6) AI — Gemini Integration & Agentic Support
-
-Primary component: `src/components/ui/AISupportAgent.tsx`
-- Works for anonymous and authenticated users
-- Persists sessions for authenticated users in `chat_sessions`
-- AI pipeline:
-  1) Collect conversation context (last messages)
-  2) Pull dynamic knowledge (`ai_chatbot_support`)
-  3) Query live platform collections (entities, health_tools, courses, blog_posts, causes, products)
-  4) Run agentic search over user query to construct result snippets with internal links
-  5) Build system prompt with counts, links, and constraints (privacy, emergency guidance)
-  6) Call Gemini REST API using `VITE_GEMINI_API_KEYS`
-  7) Extract response + `SUGGESTIONS:`; fallback suggestions are generated from live collection availability
-
-- Error handling: if Gemini fails, reply references real counts and internal URLs (no hardcoded content)
-- Security: no PHI/PII; includes medical safety guidance in system prompt
-
-AI Utilities:
-- `src/lib/ai/gemini-service.ts` (if present): centralized Gemini client wrapper; else direct fetch from component
+Privacy: Do not store PHI/PII directly in GitHub DB; use encrypted fields if absolutely necessary and follow consent/access controls in `consents.ts` and `access-grants.ts`.
 
 ---
 
-## 7) Domain Modules (src/lib)
+## 5. Environment Variables (.env.local)
 
-The platform implements a comprehensive healthcare ecosystem. Key modules:
+See `.env.example` for all keys. Important ones:
+- `VITE_GITHUB_OWNER`, `VITE_GITHUB_REPO`, `VITE_GITHUB_TOKEN` — JSON DB
+- `VITE_GEMINI_API_KEYS` — comma-separated Gemini keys for load-balancing
+- `VITE_GOOGLE_MAPS_API_KEY` — maps
+- `VITE_CLOUDINARY_*` — media uploads (if used)
+- `VITE_API_BASE_URL` — for any external APIs
 
-7.1 Booking & Scheduling
-- `booking.ts`, `booking-enhanced.ts`, `booking-complete.ts`: appointment lifecycle, slot management, payments coupling
-
-7.2 Learning Management System (LMS)
-- `lms.ts`, `lms-enhanced.ts`:
-  - Entities: Course, Module, Lesson, Quiz, Enrollment, Progress, Certificate
-  - Payments integration for paid courses
-  - Certificate HTML template generation
-
-7.3 E-Commerce & Shop
-- `ecommerce.ts`, `shop-enhanced.ts`, `payments.ts`, `payments-enhanced.ts`:
-  - Cart, Order, Inventory, Variants, Addresses
-  - PaymentIntent and settlement logic (client-side demo)
-
-7.4 Community & Forum
-- `community.ts`, `forum.ts`, `forum-enhanced.ts`:
-  - Posts, Replies, Votes, Reports, Moderation, Expert answers, Categories
-
-7.5 Crowdfunding (Causes)
-- `crowdfunding.ts`, `crowdfunding-enhanced.ts`, `causes-enhanced.ts`:
-  - Causes, Donations, Disbursements, Updates, In-kind Donations
-  - Verification flows and transparency
-
-7.6 News & Content
-- `news.ts`, `news-enhanced.ts`, `news-aggregator.ts`, `blog.ts`:
-  - Sources, Articles, Newsletters, Digests, RSS/API ingestion
-
-7.7 Directory & Entities
-- `entities.ts`, `directory-enhanced.ts`:
-  - Entities/providers, staff, services, specialties, insurance networks
-  - Search utilities (see `hooks/use-ajax-search.tsx`)
-
-7.8 HMS/EHR-like Modules
-- `patients.ts`, `encounters.ts`, `labs.ts`, `imaging.ts`, `medications.ts`, `care-plans.ts`, `referrals.ts`, `bed-management.ts`, `observations.ts`, `conditions.ts`, `documents` (within schemas)
-  - Scaffolding for clinical workflows: orders, results, pharmacy, referrals, care plans, billing items
-
-7.9 Security & Privacy
-- `consents.ts`, `access-grants.ts`, `encryption.ts`, `key-management.ts`
-- Audit and governance schemas included in SDK
-
-7.10 Notifications & Emails
-- `notifications-enhanced.ts`, `email.ts`, `email-notifications.ts`, `email-events.ts`:
-  - Templates, Preferences, Delivery (client demo), EmailJS rendering
-
-7.11 Observability & Scheduling
-- `observability.ts`, `background-scheduler.ts`, `scheduler.ts`:
-  - Background jobs, periodic tasks, logging helpers
-
-7.12 Health Tools (Master)
-- `health-tools-master.ts`:
-  - Canonical catalog of health tools (categories, types, AI chat tools)
-  - `initializeMasterHealthTools()` seeds tools into DB if missing
-  0  - `geminiAI` hook point for AI tool interactions
-
-7.13 Content Initialization
-- `content-initializer.ts`: seeds news, podcasts, forum, causes, blogs, jobs, products, tips, facts; ensures expert answers
+Never commit `.env.local`.
 
 ---
 
-## 8) Pages (src/pages)
+## 6. AI Support Agent (src/components/ui/AISupportAgent.tsx)
 
-- Directory: `directory/DirectoryPage.tsx`, `directory/EntityDetailPage.tsx`
-- Health Tools: `tools/HealthToolsPage.tsx`, `tools/ToolDetailPage.tsx`
-- LMS: `lms/CoursesPage.tsx`, `lms/CourseDetailPage.tsx`, `lms/CourseLearningPage.tsx`, `lms/CourseCompletionPage.tsx`, `lms/CourseCreationPage.tsx`, `lms/LMSDashboard.tsx`
-- E-commerce: `shop/ShopPage.tsx`, `ecommerce/ProductPage.tsx`, `ecommerce/CartPage.tsx`, `ecommerce/CheckoutPage.tsx`, `ecommerce/OrderSuccessPage.tsx`
-- Community: `community/CommunityPage.tsx`, `community/ForumPostPage.tsx`, `community/CreateForumPostPage.tsx`
-- News: `HealthNewsFeedPage.tsx`, `HealthNewsArticlePage.tsx`
-- Support/Legal: `support/HelpCenterPage.tsx`, `support/ContactPage.tsx`, `legal/PrivacyPolicyPage.tsx`, `legal/TermsOfServicePage.tsx`
-- Patient Portal: `patient/*` (Records, Medications, Consents, Providers, Billing)
-- Dashboards: `dashboard/*` for Hospital, Admin, Super Admin
+Purpose: Provide platform-aware, privacy-preserving, agentic support via Gemini.
 
----
+Key behaviors:
+- Works for both anonymous and authenticated users
+- Persists sessions to GitHub DB for authenticated users (`collections.chat_sessions`)
+- Generates responses by calling Gemini with a system prompt containing:
+  - Conversation context (last messages)
+  - Dynamic knowledge base from `ai_chatbot_support` collection
+  - Live platform signals: entity/tool/course/blog/cause/product counts
+  - Agentic search results with internal links (e.g., `/directory/:id`, `/health-tools/:id`)
+- Extracts AI-provided suggestions from `SUGGESTIONS:` line; else generates suggestions from available data
+- Includes strict privacy and medical safety guidance in the prompt
 
-## 9) Hooks & UI
+Integration details:
+- API: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=<API_KEY>`
+- Request includes `generationConfig` and `safetySettings`
+- Robust error handling: if Gemini fails, fallback responses reference actual platform data with direct links
 
-- Hooks:
-  - `use-ajax-search.tsx`: directory search
-  - `use-search-analytics.tsx`: search telemetry
-  - `use-mobile.tsx`: responsive helpers
-- UI components: `components/ui/*` (button, input, card, tabs, toast, loading spinner, notifications, consent banner, theme toggle, search modal/suggestions)
-- Layout: `components/layout/*` (Header/Footer/Sidebar/DashboardLayout)
+Security & Privacy:
+- No PHI/PII collection in chat
+- Emergency guidance handled by AI instruction; no storage of sensitive info
 
----
-
-## 10) Configuration & Build
-
-- `vite.config.ts`: Vite + React plugin, dev server
-- `tailwind.config.ts`: Tailwind setup
-- `eslint.config.js`: ESLint rules
-- `tsconfig*.json`: TypeScript configs
-- `vercel.json`: SPA rewrite
+UX details:
+- Floating button opens chat window
+- Message sending via submit, Enter key, or button click
+- Loading/thinking states; feedback buttons on bot replies; session management and export
 
 ---
 
-## 11) Security, Compliance, and Data Governance
+## 7. Domain Modules (src/lib)
 
-- No PHI/PII in GitHub DB; use encrypted fields when unavoidable
-- Manage access via `consents.ts` and `access-grants.ts`
-- Emergency messaging in AI to route users to local emergency services
-- Email templates and notifications are informational; for production, swap to server-side email
+Representative modules (not exhaustive):
+- `booking*.ts`: appointment scheduling, slots, payments
+- `lms*.ts`: courses, modules, lessons, enrollments, progress, certificates
+- `payments*.ts`: payments, subscriptions, methods
+- `news*.ts`, `blog.ts`, `news-aggregator.ts`: content aggregation and publishing
+- `community.ts`, `forum*.ts`: forums, categories, moderation
+- `directory*.ts`, `entities.ts`: provider discovery, entity metadata
+- `patients.ts`, `encounters.ts`, `labs.ts`, `imaging.ts`, `medications.ts`, `care-plans.ts`, `referrals.ts`: HMS/EHR-inspired features
+- `consents.ts`, `access-grants.ts`, `encryption.ts`: privacy, consent and access control helpers
+- `ecommerce*.ts`, `shop-enhanced.ts`, `products`, `orders` collections
+- `observability.ts`: logging/metrics scaffolding
 
----
-
-## 12) Environment & Secrets
-
-- `.env.example` documents all keys
-- Required:
-  - `VITE_GITHUB_OWNER`, `VITE_GITHUB_REPO`, `VITE_GITHUB_TOKEN`
-  - `VITE_GEMINI_API_KEYS`
-  - `VITE_GOOGLE_MAPS_API_KEY`
-- Optional: Cloudinary, API base URL
+Each module uses `githubDB` to CRUD collections named in `src/lib/database.ts`.
 
 ---
 
-## 13) Build/Run/Deploy
+## 8. Pages & Routing
 
-- Dev: `npm run dev`
+- Public pages: Home, Directory, Entity detail, Health Tools (+ detail), Courses (+ detail/learning/completion), Shop/Cart/Checkout/Success, Blog/Article, Community/Forum, News, Jobs, Weekly Tips, Timeless Facts, Support (Help/Contact), Legal
+- Patient Portal: Records, Medications, Consents, Providers, Billing
+- HMS Admin: HospitalDashboard, PatientRegistry, EncounterBoard, Lab/Imaging Orders, Care Plans, Referrals, Bed Management, Billing, Reports
+- Super Admin: News/Weekly Tips/Timeless Facts Management, Forum, Jobs
+
+Routes are declared in `App.tsx` using `react-router-dom`. Role-gated sections redirect unauthenticated users to `/login`.
+
+---
+
+## 9. Styling & UI System
+
+- TailwindCSS configured in `tailwind.config.ts`
+- Shared primitives under `components/ui/*`: `button.tsx`, `input.tsx`, `card.tsx`, `tabs.tsx`, `LoadingSpinner.tsx`, etc.
+- Accessibility helpers: `AccessibilityProvider`, `AccessibilityTools`
+- Theme toggle: `ThemeToggle.tsx`, theme initialization in `lib/theme.tsx`
+
+---
+
+## 10. Security, Privacy, Compliance
+
+- Strong guidance to avoid PHI/PII in chat and general UI
+- Consents & Access Grants modules to manage secure sharing
+- Encryption helpers available for sensitive identifiers
+- Data storage via GitHub JSON collections: suitable for non-PHI content; for PHI, integrate a compliant backend
+- Emergency messaging in AI to direct users to local emergency services
+
+---
+
+## 11. Initialization & Seeding
+
+- Database initialization: `initializeDatabase()` -> `githubDB.initializeAllCollections()` creates missing collections
+- Health tools initialization: `initializeAllHealthTools()` seeds catalog if missing
+- LMS: `LMSService.initializeStarterCourses()` seeds courses/modules/lessons
+- Optional seed scripts are present under `src/lib/seeds/*`
+
+---
+
+## 12. Building, Running, Deploying
+
+- Dev: `npm run dev` or `pnpm dev`
 - Lint: `npm run lint`
-- Build: `npm run build`
+- Build: `npm run build` (TypeScript + Vite)
 - Preview: `npm run preview`
-- Deploy: Vercel (auto-detects Vite; rewrite to SPA)
+- Deploy: Vercel (SPA rewrite in `vercel.json` routes all to `index.html`)
 
 ---
 
-## 14) Extension Points & Best Practices
+## 13. Extensibility & Best Practices
 
-- Add collection: define schema in `github-db-sdk.ts`, add key in `database.ts`
-- Add feature module: place in `src/lib`, expose typed interfaces, use `githubDB`
-- Add page: place under `src/pages`, wire route in `App.tsx`
-- Add AI feature: reuse Gemini client/pattern; store curated content in `ai_chatbot_support`
-- Avoid schema drift by using `collections` constants
-- Keep secrets in `.env.local`; never commit
-
----
-
-## 15) Troubleshooting
-
-- Gemini errors: verify `VITE_GEMINI_API_KEYS`, check network call and CORS
-- GitHub DB writes failing: validate token scope (repo), repo/owner envs, network
-- SPA 404: confirm `vercel.json` rewrites
-- Maps missing: check Google Maps key
+- Add new collections: update schema in `github-db-sdk.ts` + key in `database.ts`
+- Add new pages/routes: update `App.tsx`; colocate page components under `src/pages/...`
+- Add new AI tools: follow `AISupportAgent.tsx` pattern; use `ai_chatbot_support` for curated context
+- Use `githubDB.get/find/insert/update/delete` consistently to avoid schema drift
+- Keep PHI/PII out of GitHub DB; if needed, encrypt and gate behind consents/access grants
 
 ---
 
-## 16) Collections Glossary (high level)
+## 14. Troubleshooting
 
-See `schemas` in `src/lib/github-db-sdk.ts` for exact fields. Major groups:
+- Chatbot not responding:
+  - Ensure `VITE_GEMINI_API_KEYS` is set and valid
+  - Check browser console for fetch errors to Google API
+  - Verify DB collections auto-initialized (network tab to GitHub API)
+- Maps not loading: check `VITE_GOOGLE_MAPS_API_KEY`
+- Data not saving: check GitHub token scopes and repo name
+- SPA routing 404: confirm Vercel rewrite to `index.html`
+
+---
+
+## 15. Glossary of Collections (partial)
+
 - Messaging: `chat_sessions`, `messages`, `notifications`
-- Content: `blog_posts`, `news_articles`, `pages`, `media_files`, `weekly_tips`, `timeless_facts`, `podcasts`
+- Content: `blog_posts`, `news_articles`, `podcasts`, `pages`, `media_files`, `weekly_tips`, `timeless_facts`
 - Directory & Healthcare: `entities`, `specialties`, `insurance_providers`, `languages`, `entity_*`
 - LMS: `courses`, `course_modules`, `course_lessons`, `course_enrollments`, `course_progress`, `certificates`
 - E-commerce: `products`, `orders`, `order_items`
 - Crowdfunding: `causes`, `donations`, `cause_updates`
-- HMS/EHR: `patients`, `encounters`, `vitals`, `conditions`, `allergies`, `lab_orders`, `lab_results`, `imaging_orders`, `care_plans`, `referrals`, `documents`, `billing_items`, `pharmacy_inventory`, `pharmacy_orders`, `insurance_claims`
-- Security & Admin: `consents`, `access_grants`, `audit_logs`, `feature_flags`, `system_settings`
-- AI: `ai_chatbot_support`, `ai_consultations`, `health_tools`
+- HMS/EHR: `patients`, `encounters`, `vitals`, `conditions`, `allergies`, `lab_orders`, `lab_results`, `imaging_orders`, `care_plans`, `referrals`, `documents`
+- Security: `consents`, `access_grants`, `encrypted_keys`, `audit_logs`
+- AI: `ai_chatbot_support`, `ai_consultations`
+
+For full schema definitions, see the `schemas` object in `src/lib/github-db-sdk.ts`.
+
 
 ---
 
-## 17) Future Enhancements (suggested)
-
-- Server-side proxy for AI calls + secure secret storage
-- Streaming AI responses, RAG with vector search
-- Role-aware AI (restrict context by user type/consent)
-- Replace GitHub DB with compliant backend for PHI scenarios
-- Unified observability across modules (logs, metrics, traces)
-
----
-
-This document is comprehensive and aligned with the current code. For additional artifacts (architecture diagram, sequence diagrams, API reference per module), request ARCHITECTURE.md and SDK_API.md.
+This documentation reflects the current architecture and implementation within the repository. For questions or contributions, open a PR with suggested improvements.
