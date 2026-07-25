@@ -11,28 +11,121 @@ import CausesManagementPage from './CausesManagementPage';
 import ShopManagementPage from './ShopManagementPage';
 
 const OverviewSection = ({ entity }: { entity: HealthcareEntity | null }) => {
-  // This section would also fetch real data for stats
+  const entityId = entity?.id || null;
+  const [stats, setStats] = useState<{
+    bookings: number;
+    patients: number;
+    services: number;
+    reviews: number;
+  } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!entityId) {
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      setError(null);
+      try {
+        const [bookings, patientLinks, services, reviews] = await Promise.all([
+          dbHelpers
+            .find<any>(collections.bookings, { entity_id: entityId })
+            .catch(() => [] as any[]),
+          dbHelpers
+            .find<any>(collections.patient_entity_links, { entity_id: entityId })
+            .catch(() => [] as any[]),
+          dbHelpers
+            .find<any>(collections.services, { entity_id: entityId })
+            .catch(() => [] as any[]),
+          dbHelpers
+            .find<any>(collections.reviews, { entity_id: entityId })
+            .catch(() => [] as any[]),
+        ]);
+
+        if (cancelled) return;
+        setStats({
+          bookings: bookings.length,
+          patients: patientLinks.filter((l: any) => l.status === 'active' || !l.status).length,
+          services: services.length,
+          reviews: reviews.length,
+        });
+      } catch (err) {
+        console.error('Failed to load entity overview stats', err);
+        if (!cancelled) setError('Unable to load entity overview data.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [entityId]);
+
+  const statCards = [
+    {
+      label: 'Total Bookings',
+      value: stats?.bookings,
+      subtitle: 'Real-time count',
+      subtitleColor: 'text-blue-600',
+    },
+    {
+      label: 'Patient Reviews',
+      value: entity?.rating || 0,
+      subtitle: `Based on ${entity?.review_count || stats?.reviews || 0} reviews`,
+      subtitleColor: 'text-gray-600',
+    },
+    {
+      label: 'Active Patients',
+      value: stats?.patients,
+      subtitle: 'Linked to your entity',
+      subtitleColor: 'text-gray-500',
+    },
+    {
+      label: 'Services Offered',
+      value: stats?.services,
+      subtitle: 'Active services',
+      subtitleColor: 'text-gray-500',
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-dark">Entity Dashboard</h2>
-      
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 text-sm">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Total Bookings</h3>
-          <p className="text-3xl font-bold text-primary">45</p>
-          <p className="text-sm text-green-600 mt-1">+12% from last month</p>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Patient Reviews</h3>
-          <p className="text-3xl font-bold text-primary">{entity?.rating || 0}</p>
-          <p className="text-sm text-gray-600 mt-1">Based on {entity?.review_count || 0} reviews</p>
-        </div>
+        {statCards.map((card) => (
+          <div key={card.label} className="bg-white rounded-lg shadow-sm p-6">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">{card.label}</h3>
+            {isLoading ? (
+              <div className="h-9 w-16 bg-gray-200 rounded animate-pulse" />
+            ) : error && card.value === undefined ? (
+              <p className="text-3xl font-bold text-red-500">N/A</p>
+            ) : (
+              <p className="text-3xl font-bold text-primary">
+                {(card.value ?? 0).toLocaleString()}
+              </p>
+            )}
+            <p className={`text-sm ${card.subtitleColor} mt-1`}>{card.subtitle}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
 };
 
 const ProfileManagementSection = ({ entity, onUpdate }: { entity: HealthcareEntity | null, onUpdate: () => void }) => {
+  const toast = useToastService();
   const [formData, setFormData] = useState<Partial<HealthcareEntity>>({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -56,7 +149,7 @@ const ProfileManagementSection = ({ entity, onUpdate }: { entity: HealthcareEnti
       onUpdate();
     } catch (error) {
       console.error("Failed to update profile:", error);
-      toast.showSuccess('Failed to update profile.');
+      toast.showError('Failed to update profile.');
     } finally {
       setIsLoading(false);
     }
@@ -157,7 +250,6 @@ const ServicesSection = ({ entityId }: { entityId: string | null }) => {
   };
 
   const handleCloseModal = () => {
-  const toast = useToastService();
     setIsModalOpen(false);
     setCurrentService(null);
   };

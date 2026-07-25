@@ -80,3 +80,43 @@ Stage Summary:
 - All seed accounts use password: CareConnect2025!
 - Known gap: SuperAdminDashboard/HMSDashboard/EntityDashboard still show hardcoded stats (pre-existing) — to fix next
 - Pre-existing broken files (verification.ts, platform-integration.ts, DataExportDialog) still need fixing
+
+---
+Task ID: 10b-DASHBOARD-STATS
+Agent: full-stack-developer
+Task: Replace hardcoded dashboard statistics with real data fetched from the backend (SuperAdmin, HMS, Entity), and fix the toast bug in EntityDashboard.
+
+Work Log:
+- Read /home/z/my-project/worklog.md to absorb prior agent state (Lightbase migration complete; frontend talks to Astro backend at /api via Vite proxy; apiClient.getStats()/getAuditLogs()/getCollection() all wired; dbHelpers aliases the SQLiteClientSDK that calls /api/data/:collection).
+- Read the 3 target dashboard components (SuperAdminDashboard.tsx 302 lines, HMSDashboard.tsx 124 lines, EntityDashboard.tsx 693 lines), the data layer (src/lib/database.ts, src/lib/github-db-sdk.ts SQLiteClientSDK section), src/lib/api-client.ts, src/lib/toast-service.ts, src/lib/auth.tsx (User interface), LoadingSpinner.tsx, the backend route (apps/backend/src/pages/api/[...route].ts) for the /admin/stats and /admin/audit-logs shapes, and apps/backend/src/seed/index.ts to learn field names (entity_id, primary_entity_id, verification_status, status, priority, final_cost, etc.).
+- SuperAdminDashboard OverviewSection rewrite:
+  * Removed unused `useAuth` import; added `apiClient` and `githubDB as dbHelpers` imports.
+  * Added `OverviewStats`, `AuditLog`, `EntityRecord` interfaces and a reusable `StatCard` component with loading skeleton, error display, and subtitle.
+  * New `useEffect` fetches: primary counts via `apiClient.getStats()` (falls back to parallel `dbHelpers.get(collections.users|entities|patients|bookings|orders|causes|courses)` if the admin endpoint fails), revenue computed as `sum(encounters.final_cost) + sum(orders.total_amount where status==='paid')`, pending verifications via `dbHelpers.find(collections.entities, { verification_status: 'pending' })`, and recent activity via `apiClient.getAuditLogs()` (sorted desc, top 5).
+  * Replaced hardcoded "12,547" / "1,234" / "$125K" / "2,847" with real fetched numbers; replaced fake "Downtown Medical Center" / "City Pharmacy" verification rows with real pending entities (empty-state message when none); replaced fake "Recent Platform Activity" rows with real audit logs (empty-state when none).
+  * Added a red error banner and per-card "N/A" / skeleton fallbacks; all fetches wrapped in try/catch with `cancelled` flag to avoid setState after unmount.
+- HMSDashboard HMSOverview rewrite:
+  * Added `useState`, `useEffect` imports; added `githubDB as dbHelpers`, `collections`, `LoadingSpinner` imports.
+  * New `HmsStats`, `AdmissionRecord`, `UrgentItem` interfaces and `isToday()` helper.
+  * `useEffect` keyed on `user.entity_id` fetches in parallel: patient_entity_links, encounters, bed_management, lab_orders, imaging_orders (all filtered by `{ entity_id: entityId }`, each with `.catch(() => [])` so a single failed collection doesn't break the dashboard).
+  * Computed derived metrics: active patients (links where status==='active'), today's encounters (start date is today), pending encounters (scheduled/in_progress/pending), bed occupancy % (occupied/total), beds available, pending lab results (status not completed/cancelled), urgent lab results (priority urgent/emergency).
+  * Replaced hardcoded "1,247 active patients" / "89 today's encounters" / "85% bed occupancy" / "23 pending lab results" with real values; replaced the fake "Recent Admissions" list with the 5 most recent real encounters; replaced fake "Urgent Items" with real urgent lab orders, urgent imaging orders, and in-progress encounters (discharge pending).
+  * Loading state shows `LoadingSpinner size="lg"`; error state shows red banner; empty states show "No recent encounters found." / "No urgent items right now.".
+- EntityDashboard OverviewSection rewrite + toast bug fix:
+  * Added `useEffect`-driven fetch keyed on `entity.id`: parallel `dbHelpers.find(collections.bookings|patient_entity_links|services|reviews, { entity_id: entityId })` with `.catch(() => [])`.
+  * Replaced hardcoded "45 Total Bookings" with real count; kept the existing "Patient Reviews" card but now uses the real reviews count as a fallback subtitle; added two new cards ("Active Patients" and "Services Offered") to fill the original `lg:grid-cols-4` grid with real counts.
+  * Per-card loading skeleton (`animate-pulse` div) and error "N/A" fallback; red error banner.
+  * Fixed the toast bug: added `const toast = useToastService();` at the top of `ProfileManagementSection` (previously `toast` was undefined in scope, causing a runtime ReferenceError), and changed `toast.showSuccess('Failed to update profile.')` → `toast.showError('Failed to update profile.')` so the error path actually reports an error.
+  * Defensive cleanup: removed a hooks-rule violation in `ServicesSection.handleCloseModal` that called `useToastService()` inside a regular callback (the result was unused). The component now relies on the parent EntityDashboard's toast context instead.
+- Validation:
+  * `npx tsc --noEmit` → exit 0 (no type errors across the project).
+  * `bun run lint` cannot run because the eslint config imports the missing `typescript-eslint` unified package (pre-existing repo issue unrelated to my changes — confirmed `node_modules/typescript-eslint` is absent while `@typescript-eslint/*` scoped packages are present).
+  * Vite dev server accepted HMR updates for all 3 modified files (visible in /tmp/devstack.log: "hmr update /src/pages/dashboard/SuperAdminDashboard.tsx", "hmr update /src/pages/dashboard/HMSDashboard.tsx", "hmr update /src/pages/dashboard/EntityDashboard.tsx" with no errors).
+  * The backend `/api/admin/stats` endpoint returned 200 in the dev log, confirming the data path my SuperAdminDashboard uses.
+
+Stage Summary:
+- Files changed (3):
+  * src/pages/dashboard/SuperAdminDashboard.tsx — OverviewSection now fetches real counts via apiClient.getStats() (+ dbHelpers fallback), computes revenue from encounters.final_cost + orders.total_amount, lists real pending entity verifications, and lists real audit-log activity. Loading skeletons, error banner, empty states added. No emojis.
+  * src/pages/dashboard/HMSDashboard.tsx — HMSOverview now fetches patient_entity_links, encounters, bed_management, lab_orders, imaging_orders scoped by user.entity_id. Real counts for active patients, today's encounters, bed occupancy %, pending lab results, urgent items, and recent encounters. Loading spinner, error banner, empty states added. No emojis.
+  * src/pages/dashboard/EntityDashboard.tsx — OverviewSection now fetches bookings, patient_entity_links, services, reviews scoped by entity.id. Four real stat cards (Total Bookings, Patient Reviews, Active Patients, Services Offered) with loading skeletons and error fallbacks. Toast bug fixed: `useToastService()` properly invoked in ProfileManagementSection; `toast.showError('Failed to update profile.')` replaces the buggy `toast.showSuccess('Failed to update profile.')`. Hooks violation in `ServicesSection.handleCloseModal` removed.
+- All three dashboards now display real backend data with graceful loading and error states. No new dependencies added. No existing functionality removed (UsersSection and EntitiesSection in SuperAdminDashboard retain their pre-existing display-only content because the task scoped only the Overview stats). The dev server is running and HMR-accepting the changes; TypeScript compilation is clean.

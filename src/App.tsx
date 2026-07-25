@@ -111,41 +111,66 @@ function App() {
   useEffect(() => {
     // Initialize application
     const initialize = async () => {
+      console.log('App: Starting initialization...');
+
+      // Initialize theme system
+      initializeTheme();
+      console.log('App: Theme initialized');
+
+      // Restore the user session FIRST so that authenticated data operations
+      // (health tools init, etc.) have a valid token. This must not throw.
       try {
-        console.log('App: Starting initialization...');
-        
-        // Initialize theme system
-        initializeTheme();
-        console.log('App: Theme initialized');
-        
-        // Initialize database and load user
+        console.log('App: Checking for existing session...');
+        await refreshUser();
+      } catch (e) {
+        console.warn('App: Session restore failed:', e);
+      }
+
+      // Each subsequent init step is independent; a failure in one must not
+      // block the others or leave the app in a permanent loading state.
+      try {
         await initializeDatabase();
         console.log('App: Database initialized');
-        
-        // Seed demo content once (news, podcasts, forum, causes, blogs, jobs, products, weekly tips, timeless facts)
+      } catch (e) {
+        console.warn('App: Database init failed:', e);
+      }
+
+      try {
         await initializeContentSeeds();
         console.log('App: Content seeds done');
-        
+      } catch (e) {
+        console.warn('App: Content seeds failed:', e);
+      }
+
+      try {
         await initializeMasterHealthTools();
         console.log('App: Health tools initialized');
-        
-        await LMSService.initializeStarterCourses();
-        console.log('App: LMS initialized');
+      } catch (e) {
+        console.warn('App: Health tools init failed:', e);
+      }
 
+      // LMS starter courses — only if the method exists (it was removed during
+      // the monorepo migration; the backend seed now provides courses).
+      try {
+        if (typeof (LMSService as any).initializeStarterCourses === 'function') {
+          await (LMSService as any).initializeStarterCourses();
+          console.log('App: LMS initialized');
+        }
+      } catch (e) {
+        console.warn('App: LMS init failed:', e);
+      }
+
+      try {
         BookingReminderService.startReminderDaemon();
         EmailSchedulerService.startProcessor();
         console.log('App: Background schedulers started');
-
-        // Check for existing session
-        console.log('App: Checking for existing session...');
-        await refreshUser();
-        
-        console.log('CareConnect application initialized successfully');
-      } catch (error) {
-        console.error('App initialization failed:', error);
-        // Ensure loading is set to false even if initialization fails
-        useAuth.setState({ isLoading: false });
+      } catch (e) {
+        console.warn('App: Schedulers failed:', e);
       }
+
+      console.log('CareConnect application initialized successfully');
+      // Ensure loading is false regardless of init outcome.
+      useAuth.setState({ isLoading: false });
     };
 
     initialize();
