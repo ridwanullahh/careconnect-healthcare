@@ -122,3 +122,15 @@ apps/backend/.env.local
 # Package lock files (keep only root)
 apps/*/package-lock.json
 packages/*/package-lock.json
+
+# Sandbox / environment infrastructure (not part of the product)
+.zscripts/
+Caddyfile
+skills/
+tool-results/
+upload/
+dev.log
+bun.lock
+.zscripts-dev.log
+.zscripts/*.log
+.zscripts/dev.pid
