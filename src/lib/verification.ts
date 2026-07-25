@@ -73,11 +73,11 @@ export class VerificationService {
     };
 
     // Save verification request
-    await githubDB.create(collections.verification_requests, verificationRequest);
+    await githubDB.insert(collections.verification_requests, verificationRequest);
 
     // Save documents separately for better querying
     for (const doc of verificationRequest.documents) {
-      await githubDB.create(collections.verification_documents, doc);
+      await githubDB.insert(collections.verification_documents, doc);
     }
 
     // Update entity verification status
@@ -112,7 +112,7 @@ export class VerificationService {
     await this.updateEntityVerificationStatus(request.entityId, entityStatus, requestId);
 
     // Log audit trail
-    await githubDB.create(collections.audit_logs, {
+    await githubDB.insert(collections.audit_logs, {
       id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       action: 'verification_review',
       entityType: 'verification_request',
@@ -146,7 +146,7 @@ export class VerificationService {
     if (existing) {
       await githubDB.update(collections.entity_verification, existing.id, verification);
     } else {
-      await githubDB.create(collections.entity_verification, {
+      await githubDB.insert(collections.entity_verification, {
         id: `entver_${entityId}`,
         ...verification
       });
@@ -200,7 +200,7 @@ export class VerificationService {
     const entity = await githubDB.findById(collections.entities, entityId);
     if (!entity) return;
 
-    await githubDB.create(collections.notifications, {
+    await githubDB.insert(collections.notifications, {
       id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       userId: entity.ownerId || entity.primaryContactId,
       type: 'verification_reminder',
@@ -241,7 +241,7 @@ export class VerificationService {
       metadata
     };
 
-    await githubDB.create(collections.verification_documents, document);
+    await githubDB.insert(collections.verification_documents, document);
     return document;
   }
 

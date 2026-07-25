@@ -1555,7 +1555,21 @@ export const MASTER_HEALTH_TOOLS: HealthTool[] = [
 export const initializeMasterHealthTools = async () => {
   try {
     console.log('🔄 Initializing Master Health Tools System...');
+
+    // In backend mode (api/sqlite/lightbase), health tools are seeded server-side
+    // via /api/seed. The frontend must not attempt to delete/re-insert them
+    // (those writes require auth and would fail during app boot before the
+    // session is restored). We only verify they exist here.
+    const dbMode =
+      (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_DB_MODE) || 'github';
+    const useBackend = dbMode === 'api' || dbMode === 'sqlite' || dbMode === 'lightbase';
+
     const existingTools = await githubDB.find(collections.health_tools, {});
+
+    if (useBackend) {
+      console.log(`✅ Backend mode: ${existingTools.length} health tools available (seeded server-side)`);
+      return;
+    }
     
     if (existingTools.length < MASTER_HEALTH_TOOLS.length) {
       console.log(`🚀 Creating ${MASTER_HEALTH_TOOLS.length} master health tools...`);

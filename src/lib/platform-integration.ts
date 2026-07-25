@@ -1,5 +1,5 @@
 // Platform Integration and Initialization Service
-import { ConsolidatedHealthToolsService } from './health-tools-consolidated';
+import { initializeMasterHealthTools, masterHealthToolsService } from './health-tools-master';
 import { backgroundScheduler } from './scheduler';
 import { logger } from './observability';
 import { emailService } from './email';
@@ -20,7 +20,7 @@ export class PlatformIntegrationService {
 
       // 1. Initialize health tools
       console.log('🔧 Initializing health tools...');
-      await ConsolidatedHealthToolsService.initializeTools();
+      await initializeMasterHealthTools();
 
       // 2. Start background scheduler
       console.log('⏰ Starting background scheduler...');
@@ -328,7 +328,7 @@ export class PlatformIntegrationService {
   // Get health tools status
   private static async getHealthToolsStatus(): Promise<any> {
     try {
-      const tools = await ConsolidatedHealthToolsService.getAllTools();
+      const tools = await masterHealthToolsService.getAllTools();
       return {
         total_tools: tools.length,
         active_tools: tools.filter(tool => tool.is_active).length,

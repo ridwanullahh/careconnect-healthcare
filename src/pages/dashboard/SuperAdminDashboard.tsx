@@ -1,78 +1,286 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../../lib/auth';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { apiClient } from '../../lib/api-client';
+import { githubDB as dbHelpers, collections } from '../../lib/database';
+
+interface OverviewStats {
+  users: number;
+  entities: number;
+  patients: number;
+  bookings: number;
+  orders: number;
+  causes: number;
+  courses: number;
+  revenue: number;
+  pendingVerifications: number;
+}
+
+interface AuditLog {
+  id: string;
+  action: string;
+  entity_type?: string;
+  entity_id?: string;
+  user_email?: string;
+  details?: string;
+  created_at: string;
+}
+
+interface EntityRecord {
+  id: string;
+  name: string;
+  entity_type: string;
+  verification_status?: string;
+  is_active?: boolean;
+  created_at?: string;
+}
+
+const StatCard = ({
+  label,
+  value,
+  subtitle,
+  subtitleColor = 'text-gray-500',
+  valueColor = 'text-primary',
+  isLoading,
+  error,
+}: {
+  label: string;
+  value: string | number;
+  subtitle?: string;
+  subtitleColor?: string;
+  valueColor?: string;
+  isLoading: boolean;
+  error: boolean;
+}) => {
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6">
+      <h3 className="text-sm font-medium text-gray-500 mb-2">{label}</h3>
+      {isLoading ? (
+        <div className="h-9 w-20 bg-gray-200 rounded animate-pulse" />
+      ) : error ? (
+        <p className="text-3xl font-bold text-red-500">N/A</p>
+      ) : (
+        <p className={`text-3xl font-bold ${valueColor}`}>{value}</p>
+      )}
+      {subtitle && <p className={`text-sm ${subtitleColor} mt-1`}>{subtitle}</p>}
+    </div>
+  );
+};
 
 const OverviewSection = () => {
+  const [stats, setStats] = useState<OverviewStats | null>(null);
+  const [pendingEntities, setPendingEntities] = useState<EntityRecord[]>([]);
+  const [recentLogs, setRecentLogs] = useState<AuditLog[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Fetch primary counts via the admin stats endpoint (users, entities,
+        // patients, bookings, orders, causes, courses). Fall back to direct
+        // collection reads if the admin endpoint is unavailable.
+        let primaryCounts: Record<string, number> = {};
+        try {
+          primaryCounts = await apiClient.getStats();
+        } catch (err) {
+          console.warn('getStats failed, falling back to dbHelpers', err);
+          const [users, entities, patients, bookings, orders, causes, courses] =
+            await Promise.all([
+              dbHelpers.get(collections.users),
+              dbHelpers.get(collections.entities),
+              dbHelpers.get(collections.patients),
+              dbHelpers.get(collections.bookings),
+              dbHelpers.get(collections.orders),
+              dbHelpers.get(collections.causes),
+              dbHelpers.get(collections.courses),
+            ]);
+          primaryCounts = {
+            users: users.length,
+            entities: entities.length,
+            patients: patients.length,
+            bookings: bookings.length,
+            orders: orders.length,
+            causes: causes.length,
+            courses: courses.length,
+          };
+        }
+
+        // Compute platform revenue from completed encounters (final_cost) and
+        // paid orders (total_amount) — whichever exist. Falls back to 0.
+        let revenue = 0;
+        try {
+          const encounters = await dbHelpers.get(collections.encounters);
+          const orderDocs = await dbHelpers.get(collections.orders);
+          revenue =
+            encounters.reduce(
+              (sum: number, e: any) => sum + (typeof e.final_cost === 'number' ? e.final_cost : 0),
+              0,
+            ) +
+            orderDocs.reduce(
+              (sum: number, o: any) =>
+                sum +
+                (typeof o.total_amount === 'number' && o.status === 'paid'
+                  ? o.total_amount
+                  : 0),
+              0,
+            );
+        } catch (err) {
+          console.warn('Revenue computation failed', err);
+        }
+
+        // Pending entity verifications: entities with verification_status = 'pending'.
+        let pending: EntityRecord[] = [];
+        try {
+          pending = await dbHelpers.find<EntityRecord>(collections.entities, {
+            verification_status: 'pending',
+          });
+        } catch (err) {
+          console.warn('Pending verifications fetch failed', err);
+        }
+
+        // Recent platform activity from audit logs (newest first).
+        let logs: AuditLog[] = [];
+        try {
+          logs = await apiClient.getAuditLogs();
+          logs = (logs || [])
+            .slice()
+            .sort(
+              (a, b) =>
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+            )
+            .slice(0, 5);
+        } catch (err) {
+          console.warn('Audit logs fetch failed', err);
+        }
+
+        if (cancelled) return;
+        setStats({
+          users: primaryCounts.users || 0,
+          entities: primaryCounts.entities || 0,
+          patients: primaryCounts.patients || 0,
+          bookings: primaryCounts.bookings || 0,
+          orders: primaryCounts.orders || 0,
+          causes: primaryCounts.causes || 0,
+          courses: primaryCounts.courses || 0,
+          revenue,
+          pendingVerifications: pending.length,
+        });
+        setPendingEntities(pending.slice(0, 5));
+        setRecentLogs(logs);
+      } catch (err) {
+        console.error('Failed to load super admin overview', err);
+        if (!cancelled) setError('Unable to load dashboard data.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const formatNumber = (n: number) => n.toLocaleString();
+  const formatCurrency = (n: number) =>
+    n >= 1000
+      ? `$${(n / 1000).toFixed(1)}K`
+      : `$${n.toLocaleString()}`;
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-dark">Super Admin Dashboard</h2>
-      
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 text-sm">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Platform Stats */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Total Users</h3>
-          <p className="text-3xl font-bold text-primary">12,547</p>
-          <p className="text-sm text-green-600 mt-1">+5.2% from last month</p>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Total Entities</h3>
-          <p className="text-3xl font-bold text-accent">1,234</p>
-          <p className="text-sm text-green-600 mt-1">+8.1% from last month</p>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Platform Revenue</h3>
-          <p className="text-3xl font-bold text-primary">$125K</p>
-          <p className="text-sm text-green-600 mt-1">+12% from last month</p>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Active Bookings</h3>
-          <p className="text-3xl font-bold text-accent">2,847</p>
-          <p className="text-sm text-blue-600 mt-1">Real-time count</p>
-        </div>
+        <StatCard
+          label="Total Users"
+          value={stats ? formatNumber(stats.users) : ''}
+          subtitle="Real-time count"
+          subtitleColor="text-blue-600"
+          valueColor="text-primary"
+          isLoading={isLoading}
+          error={!!error && !stats}
+        />
+        <StatCard
+          label="Total Entities"
+          value={stats ? formatNumber(stats.entities) : ''}
+          subtitle={stats ? `${stats.pendingVerifications} pending verification` : ''}
+          subtitleColor="text-orange-600"
+          valueColor="text-accent"
+          isLoading={isLoading}
+          error={!!error && !stats}
+        />
+        <StatCard
+          label="Platform Revenue"
+          value={stats ? formatCurrency(stats.revenue) : ''}
+          subtitle="From completed encounters & paid orders"
+          subtitleColor="text-gray-500"
+          valueColor="text-primary"
+          isLoading={isLoading}
+          error={!!error && !stats}
+        />
+        <StatCard
+          label="Total Bookings"
+          value={stats ? formatNumber(stats.bookings) : ''}
+          subtitle="Real-time count"
+          subtitleColor="text-blue-600"
+          valueColor="text-accent"
+          isLoading={isLoading}
+          error={!!error && !stats}
+        />
       </div>
 
       {/* Verification Queue */}
       <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-dark mb-4">Pending Verifications</h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div>
-              <p className="font-medium text-dark">Downtown Medical Center</p>
-              <p className="text-sm text-gray-600">Health Center • Submitted 2 days ago</p>
-            </div>
-            <div className="flex gap-2">
-              <button className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors">
-                Approve
-              </button>
-              <button className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors">
-                Reject
-              </button>
-              <button className="border border-gray-300 text-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-50 transition-colors">
-                Review
-              </button>
-            </div>
+        <h3 className="text-lg font-semibold text-dark mb-4">
+          Pending Verifications
+        </h3>
+        {isLoading ? (
+          <LoadingSpinner size="md" text="Loading verifications..." />
+        ) : pendingEntities.length === 0 ? (
+          <p className="text-gray-500 text-sm py-4">
+            No entities are currently awaiting verification.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {pendingEntities.map((entity) => (
+              <div
+                key={entity.id}
+                className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg"
+              >
+                <div>
+                  <p className="font-medium text-dark">{entity.name}</p>
+                  <p className="text-sm text-gray-600">
+                    {entity.entity_type}
+                    {entity.created_at
+                      ? ` • Submitted ${new Date(entity.created_at).toLocaleDateString()}`
+                      : ''}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors">
+                    Approve
+                  </button>
+                  <button className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors">
+                    Reject
+                  </button>
+                  <button className="border border-gray-300 text-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-50 transition-colors">
+                    Review
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-          
-          <div className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div>
-              <p className="font-medium text-dark">City Pharmacy</p>
-              <p className="text-sm text-gray-600">Pharmacy • Submitted 1 day ago</p>
-            </div>
-            <div className="flex gap-2">
-              <button className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors">
-                Approve
-              </button>
-              <button className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors">
-                Reject
-              </button>
-              <button className="border border-gray-300 text-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-50 transition-colors">
-                Review
-              </button>
-            </div>
-          </div>
-        </div>
-        
+        )}
+
         <div className="mt-4">
           <Link
             to="/super-admin/verifications"
@@ -85,24 +293,43 @@ const OverviewSection = () => {
 
       {/* Recent Activity */}
       <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-dark mb-4">Recent Platform Activity</h3>
-        <div className="space-y-4">
-          <div className="flex items-center gap-4 p-3 bg-light rounded-lg">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span className="text-gray-700">New entity registration: Dr. Smith Medical Practice</span>
-            <span className="text-sm text-gray-500 ml-auto">5 minutes ago</span>
+        <h3 className="text-lg font-semibold text-dark mb-4">
+          Recent Platform Activity
+        </h3>
+        {isLoading ? (
+          <LoadingSpinner size="md" text="Loading activity..." />
+        ) : recentLogs.length === 0 ? (
+          <p className="text-gray-500 text-sm py-4">
+            No recent activity recorded.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {recentLogs.map((log, idx) => {
+              const dotColors = [
+                'bg-green-500',
+                'bg-blue-500',
+                'bg-accent',
+                'bg-yellow-500',
+                'bg-purple-500',
+              ];
+              const dotColor = dotColors[idx % dotColors.length];
+              const time = new Date(log.created_at).toLocaleString();
+              return (
+                <div
+                  key={log.id}
+                  className="flex items-center gap-4 p-3 bg-light rounded-lg"
+                >
+                  <div className={`w-2 h-2 ${dotColor} rounded-full`}></div>
+                  <span className="text-gray-700">
+                    {log.details || log.action}
+                    {log.user_email ? ` (${log.user_email})` : ''}
+                  </span>
+                  <span className="text-sm text-gray-500 ml-auto">{time}</span>
+                </div>
+              );
+            })}
           </div>
-          <div className="flex items-center gap-4 p-3 bg-light rounded-lg">
-            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-            <span className="text-gray-700">User reported content on Health Tips Forum</span>
-            <span className="text-sm text-gray-500 ml-auto">15 minutes ago</span>
-          </div>
-          <div className="flex items-center gap-4 p-3 bg-light rounded-lg">
-            <div className="w-2 h-2 bg-accent rounded-full"></div>
-            <span className="text-gray-700">Payment gateway maintenance completed</span>
-            <span className="text-sm text-gray-500 ml-auto">1 hour ago</span>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
