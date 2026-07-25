@@ -2,12 +2,21 @@
 import { create } from 'zustand';
 import { githubDB as dbHelpers, collections } from './database';
 import { encrypt, decrypt } from './encryption';
-import { 
-  emailEventHandler, 
-  EmailEvent, 
+import {
+  emailEventHandler,
+  EmailEvent,
   triggerUserRegistered,
   triggerAppointmentBooked
 } from './email-events';
+import { apiClient } from './api-client';
+
+// When the SPA routes through the backend (VITE_DB_MODE = api|sqlite|lightbase),
+// authentication is handled server-side via PBKDF2-hashed passwords and signed
+// session tokens. In 'github' mode, auth stays client-side (SHA-256) for the
+// legacy GitHub JSON storage.
+const DB_MODE =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_DB_MODE) || 'github';
+const USE_BACKEND_AUTH = DB_MODE === 'api' || DB_MODE === 'sqlite' || DB_MODE === 'lightbase';
 
 // User Types
 export enum UserType {
@@ -146,74 +155,59 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   login: async (email: string, password: string, rememberMe: boolean = false) => {
     set({ isLoading: true });
-    
+
     try {
-      // Find user by email
-      const users = await dbHelpers.find(collections.users, { email });
-      const user = users[0];
-      
-      if (!user) {
-        throw new Error('User not found');
+      let user: any;
+      let profile: any;
+
+      if (USE_BACKEND_AUTH) {
+        // Backend auth: PBKDF2 password verification + signed session token.
+        const res = await apiClient.login(email, password);
+        user = res.user;
+        profile = res.profile;
+        // apiClient stores the backend token as careconnect_api_token.
+        // Also keep an encrypted marker in careconnect_token for compatibility
+        // with any code that checks for a session presence.
+        const sessionData = {
+          userId: user.id,
+          expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+          rememberMe,
+        };
+        try {
+          localStorage.setItem('careconnect_token', encrypt(JSON.stringify(sessionData)));
+        } catch {}
+      } else {
+        // Legacy client-side auth (github mode): SHA-256 comparison.
+        const users = await dbHelpers.find(collections.users, { email });
+        user = users[0];
+        if (!user) throw new Error('User not found');
+        const hashedPassword = await hashPassword(password);
+        if (user.password_hash !== hashedPassword) throw new Error('Invalid password');
+        if (!user.is_active) throw new Error('Account is deactivated');
+        await dbHelpers.update(collections.users, user.id, {
+          last_login: new Date().toISOString(),
+        });
+        const profiles = await dbHelpers.find(collections.profiles, { user_id: user.id });
+        profile = profiles[0];
+        const sessionData = {
+          userId: user.id,
+          expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+          rememberMe,
+        };
+        localStorage.setItem('careconnect_token', encrypt(JSON.stringify(sessionData)));
+        sessionStorage.removeItem('careconnect_token');
       }
-      
-      // Verify password (simplified - in production use proper hashing)
-      const hashedPassword = await hashPassword(password);
-      if (user.password_hash !== hashedPassword) {
-        throw new Error('Invalid password');
-      }
-      
-      if (!user.is_active) {
-        throw new Error('Account is deactivated');
-      }
-      
-      // Update last login
-      await dbHelpers.update(collections.users, user.id, {
-        last_login: new Date().toISOString()
-      });
-      
-      // Get user profile
-      const profiles = await dbHelpers.find(collections.profiles, { user_id: user.id });
-      const profile = profiles[0];
-      
-      // Store session with a fixed 7-day expiration
-      const expirationTime = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days
-      
-      const sessionData = {
-        userId: user.id,
-        expires: expirationTime,
-        rememberMe
-      };
-      
-      console.log('Login: Creating session', {
-        userId: user.id,
-        email: user.email,
-        rememberMe,
-        expiresAt: new Date(expirationTime).toISOString(),
-        storageType: rememberMe ? 'localStorage' : 'sessionStorage'
-      });
-      
-      // Use localStorage for both cases to ensure persistence
-      const encryptedToken = encrypt(JSON.stringify(sessionData));
-      console.log('Login: Encrypted token created, length:', encryptedToken.length);
-      
-      // Always use localStorage for now to ensure persistence
-      localStorage.setItem('careconnect_token', encryptedToken);
-      
-      // Clear sessionStorage to avoid conflicts
-      sessionStorage.removeItem('careconnect_token');
-      
-      console.log('Login: Token stored in localStorage');
-      
+
       const cleanUser = { ...user };
       delete cleanUser.password_hash;
-      
-      set({ 
-        user: cleanUser, 
+
+      set({
+        user: cleanUser,
         profile,
         isAuthenticated: true,
-        isLoading: false 
+        isLoading: false,
       });
-      
+
       // Trigger login alert for security monitoring
       try {
         await emailEventHandler.trigger(EmailEvent.USER_LOGIN, {
@@ -221,15 +215,15 @@ export const useAuth = create<AuthState>((set, get) => ({
           userName: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'User',
           eventData: {
             loginTime: new Date().toLocaleString(),
-            location: 'Unknown', // Could be determined via IP geolocation
+            location: 'Unknown',
             device: navigator.userAgent,
-            ipAddress: 'N/A' // Would need server-side implementation
-          }
+            ipAddress: 'N/A',
+          },
         });
       } catch (emailError) {
         console.warn('Failed to send login notification:', emailError);
       }
-      
+
       return true;
     } catch (error) {
       console.error('Login error:', error);
@@ -240,93 +234,111 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   register: async (userData: any) => {
     set({ isLoading: true });
-    
+
     try {
-      // Check if user already exists
-      const existingUsers = await dbHelpers.find(collections.users, { email: userData.email });
-      if (existingUsers.length > 0) {
-        throw new Error('User already exists');
-      }
-      
-      let entityId = null;
-      
-      // Create entity for health centers and pharmacies
-      if ([UserType.HEALTH_CENTER, UserType.PHARMACY].includes(userData.user_type)) {
-        const newEntity = await dbHelpers.insert(collections.entities, {
-          name: userData.entity_name,
-          entity_type: userData.user_type,
-          description: userData.entity_description,
-          address: userData.entity_address,
-          phone: userData.entity_phone,
-          email: userData.entity_email || userData.email,
-          verification_status: 'pending',
-          is_active: true,
-          services: userData.entity_services || [],
-          specialties: userData.specialties || [],
-          rating: 0,
-          review_count: 0,
-          badges: []
+      let newUser: any;
+      let newProfile: any;
+
+      if (USE_BACKEND_AUTH) {
+        // Backend handles entity/user/profile creation + PBKDF2 hashing.
+        const res = await apiClient.register(userData);
+        newUser = res.user;
+        newProfile = res.profile;
+        // Auto-login after registration (backend returns a signed token).
+        const sessionData = {
+          userId: newUser.id,
+          expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+          rememberMe: false,
+        };
+        try {
+          localStorage.setItem('careconnect_token', encrypt(JSON.stringify(sessionData)));
+        } catch {}
+        const cleanUser = { ...newUser };
+        delete cleanUser.password_hash;
+        set({
+          user: cleanUser,
+          profile: newProfile,
+          isAuthenticated: true,
+          isLoading: false,
         });
-        entityId = newEntity.id;
-      }
-      
-      // Create user
-      const hashedPassword = await hashPassword(userData.password);
-      const newUser = await dbHelpers.insert(collections.users, {
-        email: userData.email,
-        phone: userData.phone,
-        user_type: userData.user_type,
-        password_hash: hashedPassword,
-        is_verified: false,
-        is_active: true,
-        entity_id: entityId,
-        permissions: getDefaultPermissions(userData.user_type)
-      });
-      
-      // Create profile
-      const newProfile = await dbHelpers.insert(collections.profiles, {
-        user_id: newUser.id,
-        first_name: userData.first_name,
-        last_name: userData.last_name,
-        bio: userData.bio || '',
-        specialties: userData.specialties || [],
-        languages: userData.languages || ['English'],
-        license_number: userData.license_number,
-        preferences: {
-          notifications: true,
-          marketing_emails: false,
-          data_sharing: false
+      } else {
+        // Legacy client-side registration (github mode).
+        const existingUsers = await dbHelpers.find(collections.users, { email: userData.email });
+        if (existingUsers.length > 0) {
+          throw new Error('User already exists');
         }
-      });
-      
-      // Don't auto-login after registration
-      set({ 
-        user: null,
-        profile: null,
-        isAuthenticated: false,
-        isLoading: false 
-      });
-      
-      // Trigger welcome email
+
+        let entityId = null;
+        if ([UserType.HEALTH_CENTER, UserType.PHARMACY].includes(userData.user_type)) {
+          const newEntity = await dbHelpers.insert(collections.entities, {
+            name: userData.entity_name,
+            entity_type: userData.user_type,
+            description: userData.entity_description,
+            address: userData.entity_address,
+            phone: userData.entity_phone,
+            email: userData.entity_email || userData.email,
+            verification_status: 'pending',
+            is_active: true,
+            services: userData.entity_services || [],
+            specialties: userData.specialties || [],
+            rating: 0,
+            review_count: 0,
+            badges: [],
+          });
+          entityId = newEntity.id;
+        }
+
+        const hashedPassword = await hashPassword(userData.password);
+        newUser = await dbHelpers.insert(collections.users, {
+          email: userData.email,
+          phone: userData.phone,
+          user_type: userData.user_type,
+          password_hash: hashedPassword,
+          is_verified: false,
+          is_active: true,
+          entity_id: entityId,
+          permissions: getDefaultPermissions(userData.user_type),
+        });
+
+        newProfile = await dbHelpers.insert(collections.profiles, {
+          user_id: newUser.id,
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          bio: userData.bio || '',
+          specialties: userData.specialties || [],
+          languages: userData.languages || ['English'],
+          license_number: userData.license_number,
+          preferences: {
+            notifications: true,
+            marketing_emails: false,
+            data_sharing: false,
+          },
+        });
+
+        set({
+          user: null,
+          profile: null,
+          isAuthenticated: false,
+          isLoading: false,
+        });
+      }
+
+      // Trigger welcome + verification emails
       try {
         await triggerUserRegistered(
           newUser.email,
-          `${newProfile.first_name} ${newProfile.last_name}`.trim()
+          `${newProfile.first_name} ${newProfile.last_name}`.trim(),
         );
-        
-        // Also trigger email verification
         const verificationCode = Math.random().toString(36).substring(2, 8).toUpperCase();
         await emailEventHandler.trigger(EmailEvent.EMAIL_VERIFICATION_REQUESTED, {
           userEmail: newUser.email,
           userName: `${newProfile.first_name} ${newProfile.last_name}`.trim(),
-          eventData: {
-            verificationCode
-          }
+          eventData: { verificationCode },
         });
       } catch (emailError) {
         console.warn('Failed to send welcome/verification email:', emailError);
       }
-      
+
       return true;
     } catch (error) {
       console.error('Registration error:', error);
@@ -337,13 +349,18 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   logout: () => {
     console.log('Logout: Clearing session data');
+    if (USE_BACKEND_AUTH) {
+      // Fire-and-forget backend logout; local token clearance is what matters.
+      apiClient.logout().catch(() => {});
+    }
     localStorage.removeItem('careconnect_token');
+    localStorage.removeItem('careconnect_api_token');
     sessionStorage.removeItem('careconnect_token');
-    set({ 
-      user: null, 
-      profile: null, 
+    set({
+      user: null,
+      profile: null,
       isAuthenticated: false,
-      isLoading: false
+      isLoading: false,
     });
   },
 
@@ -368,116 +385,88 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   refreshUser: async () => {
     set({ isLoading: true });
-    
+
+    const clearSession = () => {
+      localStorage.removeItem('careconnect_token');
+      localStorage.removeItem('careconnect_api_token');
+      sessionStorage.removeItem('careconnect_token');
+      set({
+        user: null,
+        profile: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
+    };
+
     try {
-      // Check localStorage for token (we're storing everything there now)
+      if (USE_BACKEND_AUTH) {
+        // Backend mode: rely on the signed server token + /auth/me.
+        const apiToken = localStorage.getItem('careconnect_api_token');
+        if (!apiToken) {
+          clearSession();
+          return;
+        }
+        try {
+          const res = await apiClient.me();
+          const cleanUser = { ...res.user };
+          delete cleanUser.password_hash;
+          set({
+            user: cleanUser,
+            profile: res.profile,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+        } catch {
+          // Token invalid or expired.
+          clearSession();
+        }
+        return;
+      }
+
+      // Legacy client-side mode (github): decrypt local session marker.
       let token = localStorage.getItem('careconnect_token');
-      let storageType = 'localStorage';
-      
-      console.log('RefreshUser: Checking for token...', { 
-        hasToken: !!token, 
-        storageType,
-        tokenLength: token?.length 
-      });
-      
       if (!token) {
-        console.log('RefreshUser: No token found, setting unauthenticated');
-        set({ 
-          user: null, 
-          profile: null, 
-          isAuthenticated: false, 
-          isLoading: false 
-        });
+        clearSession();
         return;
       }
-      
-      console.log('RefreshUser: Attempting to decrypt token...');
+
       const decryptedData = decrypt(token);
-      
       if (!decryptedData) {
-        console.log('RefreshUser: Failed to decrypt token');
-        localStorage.removeItem('careconnect_token');
-        sessionStorage.removeItem('careconnect_token');
-        set({ 
-          user: null, 
-          profile: null, 
-          isAuthenticated: false, 
-          isLoading: false 
-        });
+        clearSession();
         return;
       }
-      
+
       const sessionData = JSON.parse(decryptedData);
-      console.log('RefreshUser: Session data parsed', { 
-        userId: sessionData.userId, 
-        expires: new Date(sessionData.expires).toISOString(),
-        isExpired: Date.now() > sessionData.expires 
-      });
-      
-      // Check if session has expired
       if (Date.now() > sessionData.expires) {
-        console.log('RefreshUser: Session expired, clearing tokens');
-        localStorage.removeItem('careconnect_token');
-        sessionStorage.removeItem('careconnect_token');
-        set({ 
-          user: null, 
-          profile: null, 
-          isAuthenticated: false, 
-          isLoading: false 
-        });
+        clearSession();
         return;
       }
-      
-      console.log('RefreshUser: Fetching user data for ID:', sessionData.userId);
+
       const user = await dbHelpers.findById(collections.users, sessionData.userId);
-      
       if (user && user.is_active) {
-        console.log('RefreshUser: User found and active, fetching profile...');
         const profiles = await dbHelpers.find(collections.profiles, { user_id: sessionData.userId });
         const profile = profiles[0];
-        
         const cleanUser = { ...user };
         delete cleanUser.password_hash;
-        
-        console.log('RefreshUser: Successfully restored session for user:', cleanUser.email);
 
-        // Extend the session by updating the token with a new expiration
-        const newExpirationTime = Date.now() + (7 * 24 * 60 * 60 * 1000); // 7 days from now
-        const newSessionData = {
-          ...sessionData,
-          expires: newExpirationTime,
-        };
-        const newEncryptedToken = encrypt(JSON.stringify(newSessionData));
-        localStorage.setItem('careconnect_token', newEncryptedToken);
-        console.log('RefreshUser: Session extended for another 7 days.');
+        const newExpirationTime = Date.now() + 7 * 24 * 60 * 60 * 1000;
+        const newSessionData = { ...sessionData, expires: newExpirationTime };
+        try {
+          localStorage.setItem('careconnect_token', encrypt(JSON.stringify(newSessionData)));
+        } catch {}
 
         set({
           user: cleanUser,
           profile,
           isAuthenticated: true,
-          isLoading: false
+          isLoading: false,
         });
       } else {
-        console.log('RefreshUser: User not found or inactive, clearing session');
-        localStorage.removeItem('careconnect_token');
-        sessionStorage.removeItem('careconnect_token');
-        set({ 
-          user: null, 
-          profile: null, 
-          isAuthenticated: false, 
-          isLoading: false 
-        });
+        clearSession();
       }
     } catch (error) {
       console.error('RefreshUser: Error during token refresh:', error);
-      localStorage.removeItem('careconnect_token');
-      sessionStorage.removeItem('careconnect_token');
-      set({ 
-        user: null, 
-        profile: null, 
-        isAuthenticated: false, 
-        isLoading: false 
-      });
+      clearSession();
     }
   }
 }));

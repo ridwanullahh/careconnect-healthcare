@@ -1048,6 +1048,9 @@ const githubSDKInstance = new UniversalSDK(sdkConfig);
 const sqliteSDKInstance = new SQLiteClientSDK(allSchemas);
 
 // Export githubDB as the active SDK based on VITE_DB_MODE
-// 'github' (default) = GitHub JSON DB, 'sqlite' = SQLite via backend API
-export const githubDB = DB_MODE === 'sqlite' ? sqliteSDKInstance : githubSDKInstance;
+// 'github' (default) = GitHub JSON DB (client-side)
+// 'sqlite' | 'api' | 'lightbase' = route through Astro backend (storage provider
+// is selected server-side via STORAGE_PROVIDER: lightbase primary, sqlite fallback).
+const USE_BACKEND = DB_MODE === 'sqlite' || DB_MODE === 'api' || DB_MODE === 'lightbase';
+export const githubDB = USE_BACKEND ? sqliteSDKInstance : githubSDKInstance;
 export const dbProvider = DB_MODE;

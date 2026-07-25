@@ -1,9 +1,64 @@
+// Bismillah Ar-Rahman Ar-Raheem.
+// CareConnect backend API — single catch-all route.
+// Storage-agnostic: uses the factory (Lightbase primary / SQLite fallback).
 import type { APIRoute } from 'astro';
-import { sqliteDB } from '@careconnect/db';
+import { getStorage, getProviderName } from '@careconnect/db';
 import crypto from 'node:crypto';
 
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const SESSION_EXPIRY = 7 * 24 * 60 * 60 * 1000;
+const SEED_KEY = process.env.SEED_KEY || 'cc_seed_dev_key_change_in_production';
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+
+// Collections that may be read without authentication (public-facing content).
+// All other collections require an authenticated session. PHI collections
+// (patients, encounters, vitals, etc.) are never public.
+const PUBLIC_READ_COLLECTIONS = new Set<string>([
+  'entities',
+  'entity_services',
+  'entity_specialties',
+  'entity_locations',
+  'specialties',
+  'insurance_providers',
+  'languages',
+  'services',
+  'news_articles',
+  'news_sources',
+  'blog_posts',
+  'podcasts',
+  'podcast_series',
+  'podcast_episodes',
+  'weekly_tips',
+  'timeless_facts',
+  'courses',
+  'course_modules',
+  'course_lessons',
+  'causes',
+  'job_postings',
+  'job_categories',
+  'products',
+  'forum_categories',
+  'forum_questions',
+  'forum_answers',
+  'forum_posts',
+  'forum_replies',
+  'health_tools',
+  'tool_versions',
+  'reviews',
+  'ratings',
+  'feature_flags',
+  'system_settings',
+  'verification_queue',
+]);
+
+// Fields stripped from every response to avoid leaking secrets/PII.
+const SANITIZE_FIELDS = new Set<string>([
+  'password_hash',
+  'encrypted_pin',
+  'access_token',
+  'encrypted_value',
+  'data_base64',
+]);
 
 interface Session {
   userId: string;
@@ -21,7 +76,9 @@ function createToken(session: Session): string {
 function verifyToken(token: string): Session | null {
   try {
     const [payload, sig] = token.split('.');
+    if (!payload || !sig) return null;
     const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+    if (sig.length !== expected.length) return null;
     if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
     const session = JSON.parse(Buffer.from(payload, 'base64url').toString()) as Session;
     if (Date.now() > session.exp) return null;
@@ -54,10 +111,22 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
     if (!saltHex || !hashHex) return false;
     const salt = Buffer.from(saltHex, 'hex');
     const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512');
+    if (hash.length !== Buffer.from(hashHex, 'hex').length) return false;
     return crypto.timingSafeEqual(Buffer.from(hashHex, 'hex'), hash);
   } catch {
     return false;
   }
+}
+
+function sanitizeRecord(record: any): any {
+  if (!record || typeof record !== 'object') return record;
+  const out: any = { ...record };
+  for (const f of SANITIZE_FIELDS) delete out[f];
+  return out;
+}
+
+function sanitizeRecords(records: any[]): any[] {
+  return records.map(sanitizeRecord);
 }
 
 function json(data: any, status = 200): Response {
@@ -65,9 +134,11 @@ function json(data: any, status = 200): Response {
     status,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Origin': CORS_ORIGIN,
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+      Vary: 'Origin',
     },
   });
 }
@@ -79,245 +150,6 @@ function error(message: string, status = 400): Response {
 function parsePath(url: URL): string[] {
   return url.pathname.replace('/api/', '').split('/').filter(Boolean);
 }
-
-export const prerender = false;
-
-export const OPTIONS: APIRoute = () => json({ ok: true });
-
-export const ALL: APIRoute = async ({ request }) => {
-  const url = new URL(request.url);
-  const segments = parsePath(url);
-  const method = request.method;
-  const session = getSession(request);
-
-  await sqliteDB.initializeAllCollections();
-
-  try {
-    // --- AUTH ROUTES ---
-    if (segments[0] === 'auth') {
-      if (segments[1] === 'register' && method === 'POST') {
-        const body = await request.json();
-        const existing = await sqliteDB.find('users', { email: body.email });
-        if (existing.length > 0) return error('User already exists');
-
-        const password_hash = await hashPassword(body.password);
-        let entityId: string | null = null;
-
-        if (['health_center', 'pharmacy'].includes(body.user_type)) {
-          const entity = await sqliteDB.insert('entities', {
-            name: body.entity_name || body.first_name,
-            entity_type: body.user_type,
-            description: body.entity_description || '',
-            address: body.entity_address || '',
-            phone: body.entity_phone || '',
-            email: body.email,
-            verification_status: 'pending',
-            is_active: true,
-            services: [],
-            specialties: body.specialties || [],
-            rating: 0,
-            review_count: 0,
-            badges: [],
-          });
-          entityId = entity.id;
-        }
-
-        const user = await sqliteDB.insert('users', {
-          email: body.email,
-          phone: body.phone || '',
-          user_type: body.user_type || 'public_user',
-          password_hash,
-          is_verified: false,
-          is_active: true,
-          entity_id: entityId,
-          permissions: getDefaultPermissions(body.user_type || 'public_user'),
-        });
-
-        const profile = await sqliteDB.insert('profiles', {
-          user_id: user.id,
-          first_name: body.first_name,
-          last_name: body.last_name,
-          bio: body.bio || '',
-          specialties: body.specialties || [],
-          languages: body.languages || ['English'],
-          license_number: body.license_number || '',
-          preferences: { notifications: true, marketing_emails: false, data_sharing: false },
-        });
-
-        await sqliteDB.insert('audit_logs', {
-          action: 'user_registered',
-          entity_type: 'user',
-          entity_id: user.id,
-          user_email: body.email,
-          details: `New user registered: ${body.email}`,
-          created_at: new Date().toISOString(),
-        });
-
-        const token = createToken({
-          userId: user.id,
-          email: user.email,
-          roles: [user.user_type],
-          exp: Date.now() + SESSION_EXPIRY,
-        });
-
-        return json({
-          user: { ...user, password_hash: undefined },
-          profile,
-          token,
-        }, 201);
-      }
-
-      if (segments[1] === 'login' && method === 'POST') {
-        const body = await request.json();
-        const users = await sqliteDB.find('users', { email: body.email });
-        const user = users[0];
-        if (!user) return error('Invalid credentials', 401);
-        if (!user.is_active) return error('Account is deactivated', 403);
-
-        const valid = await verifyPassword(body.password, user.password_hash);
-        if (!valid) return error('Invalid credentials', 401);
-
-        await sqliteDB.update('users', user.id, { last_login: new Date().toISOString() });
-
-        const profiles = await sqliteDB.find('profiles', { user_id: user.id });
-        const profile = profiles[0];
-
-        const token = createToken({
-          userId: user.id,
-          email: user.email,
-          roles: [user.user_type],
-          exp: Date.now() + SESSION_EXPIRY,
-        });
-
-        await sqliteDB.insert('audit_logs', {
-          action: 'user_login',
-          entity_type: 'user',
-          entity_id: user.id,
-          user_email: user.email,
-          details: `User logged in: ${user.email}`,
-          created_at: new Date().toISOString(),
-        });
-
-        return json({
-          user: { ...user, password_hash: undefined },
-          profile,
-          token,
-        });
-      }
-
-      if (segments[1] === 'me' && method === 'GET') {
-        if (!session) return error('Unauthorized', 401);
-        const user = await sqliteDB.findById('users', session.userId);
-        if (!user) return error('User not found', 404);
-        const profiles = await sqliteDB.find('profiles', { user_id: session.userId });
-        return json({ user: { ...user, password_hash: undefined }, profile: profiles[0] });
-      }
-
-      if (segments[1] === 'logout' && method === 'POST') {
-        return json({ success: true }, 200, );
-      }
-    }
-
-    // --- PROTECTED DATA ROUTES ---
-    if (segments[0] === 'data') {
-      if (!session) return error('Unauthorized', 401);
-      const collection = segments[1];
-      if (!collection) return error('Collection name required');
-
-      if (method === 'GET') {
-        const filterParam = url.searchParams.get('filter');
-        let filter: Record<string, any> | undefined;
-        if (filterParam) {
-          try { filter = JSON.parse(filterParam); } catch {}
-        }
-        const data = await sqliteDB.find(collection, filter);
-        return json({ data });
-      }
-
-      if (method === 'POST') {
-        const body = await request.json();
-        const item = await sqliteDB.insert(collection, body);
-        return json({ data: item }, 201);
-      }
-
-      if (segments[2] && method === 'GET') {
-        const item = await sqliteDB.findById(collection, segments[2]);
-        if (!item) return error('Not found', 404);
-        return json({ data: item });
-      }
-
-      if (segments[2] && method === 'PUT') {
-        const body = await request.json();
-        const item = await sqliteDB.update(collection, segments[2], body);
-        return json({ data: item });
-      }
-
-      if (segments[2] && method === 'DELETE') {
-        await sqliteDB.delete(collection, segments[2]);
-        return json({ success: true });
-      }
-    }
-
-    // --- ADMIN ROUTES ---
-    if (segments[0] === 'admin') {
-      if (!session) return error('Unauthorized', 401);
-      const user = await sqliteDB.findById('users', session.userId);
-      if (!user || user.user_type !== 'super_admin') return error('Forbidden', 403);
-
-      if (segments[1] === 'verify-entity' && method === 'POST') {
-        const body = await request.json();
-        const entity = await sqliteDB.update('entities', body.entity_id, {
-          verification_status: body.status,
-          verified_at: body.status === 'verified' ? new Date().toISOString() : undefined,
-          verified_by: session.userId,
-          verification_notes: body.notes || '',
-        });
-        await sqliteDB.insert('verification_queue', {
-          entity_id: body.entity_id,
-          reviewer_id: session.userId,
-          action: body.status,
-          notes: body.notes || '',
-          reviewed_at: new Date().toISOString(),
-        });
-        return json({ data: entity });
-      }
-
-      if (segments[1] === 'audit-logs' && method === 'GET') {
-        const logs = await sqliteDB.get('audit_logs');
-        return json({ data: logs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) });
-      }
-
-      if (segments[1] === 'stats' && method === 'GET') {
-        const collections = ['users', 'entities', 'patients', 'bookings', 'orders', 'causes', 'courses'];
-        const stats: Record<string, number> = {};
-        for (const col of collections) {
-          const items = await sqliteDB.get(col);
-          stats[col] = items.length;
-        }
-        return json({ data: stats });
-      }
-    }
-
-    // --- HEALTH CHECK ---
-    if (segments[0] === 'health' || segments.length === 0) {
-      return json({
-        status: 'ok',
-        database: 'sqlite',
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    return error('Not found', 404);
-  } catch (err: any) {
-    console.error('API Error:', err);
-    return error(err.message || 'Internal server error', 500);
-  }
-};
-
-export const GET = ALL;
-export const POST = ALL;
-export const PUT = ALL;
-export const DELETE = ALL;
 
 function getDefaultPermissions(userType: string): string[] {
   const perms: Record<string, string[]> = {
@@ -337,3 +169,305 @@ function getDefaultPermissions(userType: string): string[] {
   };
   return perms[userType] || [];
 }
+
+export const prerender = false;
+
+export const OPTIONS: APIRoute = () =>
+  json({ ok: true });
+
+export const ALL: APIRoute = async ({ request }) => {
+  const url = new URL(request.url);
+  const segments = parsePath(url);
+  const method = request.method;
+  const session = getSession(request);
+  const db = await getStorage();
+
+  try {
+    // --- HEALTH CHECK ---
+    if (segments[0] === 'health' || segments.length === 0) {
+      const provider = getProviderName();
+      let storageOk = true;
+      if (provider === 'lightbase') {
+        try {
+          const store = await getStorage();
+          // LightbaseStorageAdapter exposes ping()
+          if (typeof (store as any).ping === 'function') {
+            const r = await (store as any).ping();
+            storageOk = r.ok;
+          }
+        } catch {
+          storageOk = false;
+        }
+      }
+      return json({
+        status: storageOk ? 'ok' : 'degraded',
+        database: provider,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // --- AUTH ROUTES ---
+    if (segments[0] === 'auth') {
+      if (segments[1] === 'register' && method === 'POST') {
+        const body = await request.json();
+        if (!body.email || !body.password || !body.user_type) {
+          return error('email, password and user_type are required', 422);
+        }
+        const existing = await db.find('users', { email: body.email });
+        if (existing.length > 0) return error('User already exists', 409);
+
+        const password_hash = await hashPassword(body.password);
+        let entityId: string | null = null;
+
+        if (['health_center', 'pharmacy', 'practitioner'].includes(body.user_type)) {
+          const entity = await db.insert('entities', {
+            name: body.entity_name || body.first_name || body.email,
+            entity_type: body.user_type,
+            description: body.entity_description || '',
+            address: body.entity_address || '',
+            phone: body.entity_phone || '',
+            email: body.email,
+            verification_status: 'pending',
+            is_active: true,
+            services: [],
+            specialties: body.specialties || [],
+            rating: 0,
+            review_count: 0,
+            badges: [],
+            is_featured: false,
+            created_at: new Date().toISOString(),
+          });
+          entityId = entity.id;
+        }
+
+        const user = await db.insert('users', {
+          email: body.email,
+          phone: body.phone || '',
+          user_type: body.user_type,
+          password_hash,
+          is_verified: false,
+          is_active: true,
+          entity_id: entityId,
+          permissions: getDefaultPermissions(body.user_type),
+          created_at: new Date().toISOString(),
+        });
+
+        const profile = await db.insert('profiles', {
+          user_id: user.id,
+          first_name: body.first_name || '',
+          last_name: body.last_name || '',
+          bio: body.bio || '',
+          specialties: body.specialties || [],
+          languages: body.languages || ['English'],
+          license_number: body.license_number || '',
+          preferences: { notifications: true, marketing_emails: false, data_sharing: false },
+          created_at: new Date().toISOString(),
+        });
+
+        await db.insert('audit_logs', {
+          action: 'user_registered',
+          entity_type: 'user',
+          entity_id: user.id,
+          user_email: body.email,
+          details: `New user registered: ${body.email}`,
+          created_at: new Date().toISOString(),
+        });
+
+        const token = createToken({
+          userId: user.id,
+          email: user.email,
+          roles: [user.user_type],
+          exp: Date.now() + SESSION_EXPIRY,
+        });
+
+        return json(
+          {
+            user: sanitizeRecord(user),
+            profile,
+            token,
+          },
+          201,
+        );
+      }
+
+      if (segments[1] === 'login' && method === 'POST') {
+        const body = await request.json();
+        if (!body.email || !body.password) return error('email and password are required', 422);
+        const users = await db.find('users', { email: body.email });
+        const user = users[0];
+        if (!user) return error('Invalid credentials', 401);
+        if (!user.is_active) return error('Account is deactivated', 403);
+
+        const valid = await verifyPassword(body.password, user.password_hash);
+        if (!valid) return error('Invalid credentials', 401);
+
+        await db.update('users', user.id, { last_login: new Date().toISOString() });
+
+        const profiles = await db.find('profiles', { user_id: user.id });
+        const profile = profiles[0];
+
+        const token = createToken({
+          userId: user.id,
+          email: user.email,
+          roles: [user.user_type],
+          exp: Date.now() + SESSION_EXPIRY,
+        });
+
+        await db.insert('audit_logs', {
+          action: 'user_login',
+          entity_type: 'user',
+          entity_id: user.id,
+          user_email: user.email,
+          details: `User logged in: ${user.email}`,
+          created_at: new Date().toISOString(),
+        });
+
+        return json({
+          user: sanitizeRecord(user),
+          profile,
+          token,
+        });
+      }
+
+      if (segments[1] === 'me' && method === 'GET') {
+        if (!session) return error('Unauthorized', 401);
+        const user = await db.findById('users', session.userId);
+        if (!user) return error('User not found', 404);
+        const profiles = await db.find('profiles', { user_id: session.userId });
+        return json({ user: sanitizeRecord(user), profile: profiles[0] || null });
+      }
+
+      if (segments[1] === 'logout' && method === 'POST') {
+        return json({ success: true });
+      }
+    }
+
+    // --- PROTECTED / PUBLIC DATA ROUTES ---
+    if (segments[0] === 'data') {
+      const collection = segments[1];
+      if (!collection) return error('Collection name required');
+
+      const isPublicRead = PUBLIC_READ_COLLECTIONS.has(collection);
+
+      if (method === 'GET') {
+        // Public collections: no auth. Private collections: auth required.
+        if (!isPublicRead && !session) return error('Unauthorized', 401);
+
+        if (segments[2]) {
+          const item = await db.findById(collection, segments[2]);
+          if (!item) return error('Not found', 404);
+          return json({ data: sanitizeRecord(item) });
+        }
+
+        const filterParam = url.searchParams.get('filter');
+        let filter: Record<string, any> | undefined;
+        if (filterParam) {
+          try {
+            filter = JSON.parse(filterParam);
+          } catch {
+            return error('Invalid filter JSON', 422);
+          }
+        }
+        const data = await db.find(collection, filter);
+        return json({ data: sanitizeRecords(data) });
+      }
+
+      // All writes require authentication.
+      if (!session) return error('Unauthorized', 401);
+
+      if (method === 'POST') {
+        const body = await request.json();
+        const item = await db.insert(collection, body);
+        return json({ data: sanitizeRecord(item) }, 201);
+      }
+
+      if (segments[2] && method === 'PUT') {
+        const body = await request.json();
+        const item = await db.update(collection, segments[2], body);
+        return json({ data: sanitizeRecord(item) });
+      }
+
+      if (segments[2] && method === 'PATCH') {
+        const body = await request.json();
+        const item = await db.update(collection, segments[2], body);
+        return json({ data: sanitizeRecord(item) });
+      }
+
+      if (segments[2] && method === 'DELETE') {
+        await db.delete(collection, segments[2]);
+        return json({ success: true });
+      }
+    }
+
+    // --- ADMIN ROUTES ---
+    if (segments[0] === 'admin') {
+      if (!session) return error('Unauthorized', 401);
+      const user = await db.findById('users', session.userId);
+      if (!user || user.user_type !== 'super_admin') return error('Forbidden', 403);
+
+      if (segments[1] === 'verify-entity' && method === 'POST') {
+        const body = await request.json();
+        const entity = await db.update('entities', body.entity_id, {
+          verification_status: body.status,
+          verified_at: body.status === 'verified' ? new Date().toISOString() : undefined,
+          verified_by: session.userId,
+          verification_notes: body.notes || '',
+        });
+        await db.insert('verification_queue', {
+          entity_id: body.entity_id,
+          reviewer_id: session.userId,
+          action: body.status,
+          notes: body.notes || '',
+          reviewed_at: new Date().toISOString(),
+        });
+        return json({ data: sanitizeRecord(entity) });
+      }
+
+      if (segments[1] === 'audit-logs' && method === 'GET') {
+        const logs = await db.get('audit_logs');
+        return json({
+          data: logs.sort(
+            (a: any, b: any) =>
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+          ),
+        });
+      }
+
+      if (segments[1] === 'stats' && method === 'GET') {
+        const collections = [
+          'users', 'entities', 'patients', 'bookings', 'orders', 'causes', 'courses',
+        ];
+        const stats: Record<string, number> = {};
+        for (const col of collections) {
+          try {
+            const items = await db.get(col);
+            stats[col] = items.length;
+          } catch {
+            stats[col] = 0;
+          }
+        }
+        return json({ data: stats });
+      }
+    }
+
+    // --- SEED ENDPOINT (protected by SEED_KEY) ---
+    if (segments[0] === 'seed' && method === 'POST') {
+      const provided = request.headers.get('x-seed-key') || url.searchParams.get('key');
+      if (provided !== SEED_KEY) return error('Unauthorized', 401);
+      const { runSeed } = await import('../../seed/index.ts');
+      const result = await runSeed(db);
+      return json({ data: result });
+    }
+
+    return error('Not found', 404);
+  } catch (err: any) {
+    console.error('API Error:', err);
+    return error(err.message || 'Internal server error', 500);
+  }
+};
+
+export const GET = ALL;
+export const POST = ALL;
+export const PUT = ALL;
+export const PATCH = ALL;
+export const DELETE = ALL;

@@ -23,11 +23,24 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    // Only scan app source for dependency optimization; prevents Vite from
+    // trying to resolve imports inside the sandbox skills/ folder.
+    optimizeDeps: {
+      entries: ['src/**/*.{ts,tsx}'],
+    },
     server: {
       port: 3000,
       host: true,
       // Conditionally enable HTTPS for the dev server
       https: useHttps,
+      proxy: {
+        // Forward /api requests to the Astro backend (port 4321) in dev.
+        // In production this is handled by the gateway (Caddyfile).
+        '/api': {
+          target: 'http://localhost:4321',
+          changeOrigin: true,
+        },
+      },
     },
     build: {
       outDir: 'dist',
