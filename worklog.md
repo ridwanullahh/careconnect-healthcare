@@ -120,3 +120,25 @@ Stage Summary:
   * src/pages/dashboard/HMSDashboard.tsx — HMSOverview now fetches patient_entity_links, encounters, bed_management, lab_orders, imaging_orders scoped by user.entity_id. Real counts for active patients, today's encounters, bed occupancy %, pending lab results, urgent items, and recent encounters. Loading spinner, error banner, empty states added. No emojis.
   * src/pages/dashboard/EntityDashboard.tsx — OverviewSection now fetches bookings, patient_entity_links, services, reviews scoped by entity.id. Four real stat cards (Total Bookings, Patient Reviews, Active Patients, Services Offered) with loading skeletons and error fallbacks. Toast bug fixed: `useToastService()` properly invoked in ProfileManagementSection; `toast.showError('Failed to update profile.')` replaces the buggy `toast.showSuccess('Failed to update profile.')`. Hooks violation in `ServicesSection.handleCloseModal` removed.
 - All three dashboards now display real backend data with graceful loading and error states. No new dependencies added. No existing functionality removed (UsersSection and EntitiesSection in SuperAdminDashboard retain their pre-existing display-only content because the task scoped only the Overview stats). The dev server is running and HMR-accepting the changes; TypeScript compilation is clean.
+
+---
+Task ID: 10-FIXES-AND-VERIFICATION
+Agent: Main (Z.ai Code)
+Task: Fix broken code, real dashboard stats, app init flow, multi-role browser verification
+
+Work Log:
+- Fixed verification.ts (create->insert, 6 calls), platform-integration.ts (health-tools-master import)
+- Delegated dashboard stats fix to subagent: SuperAdminDashboard/HMSDashboard/EntityDashboard now fetch real Lightbase data (loading+error states, no hardcoded numbers)
+- Fixed App.tsx init flow: refreshUser() runs FIRST (before content init), each step in independent try/catch, guarded LMSService.initializeStarterCourses call (method doesn't exist)
+- Fixed initializeMasterHealthTools to skip in backend mode (backend seeds tools server-side; avoids Unauthorized errors during init)
+- Fixed EntityService.getEntity (added missing static method)
+- Fixed EntityDashboard dbHelpers import
+- Browser verification: homepage, /directory (3 entities), /shop (6 products), /community (forum Q&A), /health-tools, /courses all render with real Lightbase data
+- Login verified for super_admin (-> /super-admin, real stats: 16 users/3 entities/3 bookings) and hospital_admin (-> /dashboard/entity/overview, real stats)
+- No console errors on dashboards after fixes
+
+Stage Summary:
+- Platform fully functional end-to-end: Lightbase (primary) -> Astro backend -> Vite frontend
+- All seed accounts use password: CareConnect2025!
+- 6 commits pushed and hash-verified on main branch
+- Remaining: Task 4 feature completion (payment gateway, AILab 4-6, booking ICS, etc.) per TASKS.md
