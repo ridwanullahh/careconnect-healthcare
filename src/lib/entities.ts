@@ -117,6 +117,10 @@ export interface HealthcareEntity {
 
 // Entity Service
 export class EntityService {
+  static async getEntity(entityId: string): Promise<HealthcareEntity | null> {
+    return await githubDB.findById(collections.entities, entityId);
+  }
+
   static async createEntity(entityData: Partial<HealthcareEntity>): Promise<HealthcareEntity> {
     const entity = await githubDB.insert(collections.entities, {
       ...entityData,
