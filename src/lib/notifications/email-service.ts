@@ -336,3 +336,11 @@ export class EmailService {
         </div>
         
         <p style="color: #666; font-size: 14px; border-top: 1px solid #eee; padding-top: 20px; margin-top: 30px;">
+          &copy; ${new Date().getFullYear()} CareConnect Healthcare Platform. All rights reserved.
+        </p>
+    </body>
+    </html>`;
+  }
+}
+
+export default EmailService;

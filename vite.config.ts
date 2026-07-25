@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
   const useHttps = env.VITE_DEV_SERVER_HTTPS === 'true'
 
   return {
+    esbuild: false as any,
     plugins: [
       react(),
       // Conditionally add the SSL plugin

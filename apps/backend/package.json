@@ -1,0 +1,20 @@
+{
+  "name": "@careconnect/backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --port 4321",
+    "build": "astro build",
+    "preview": "astro preview --port 4321"
+  },
+  "dependencies": {
+    "astro": "^5.9.3",
+    "@astrojs/node": "^9.2.1",
+    "@careconnect/db": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.0.2"
+  }
+}
