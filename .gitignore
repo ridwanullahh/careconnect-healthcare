@@ -108,3 +108,17 @@ dist/
 
 # Local certificates
 *.pem
+
+# SQLite database files
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.backup.*.db
+
+# Backend environment files
+apps/backend/.env
+apps/backend/.env.local
+
+# Package lock files (keep only root)
+apps/*/package-lock.json
+packages/*/package-lock.json

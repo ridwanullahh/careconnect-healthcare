@@ -557,7 +557,7 @@ class EmailService {
             
             <div class="order-summary">
               <h3>Order #{{order.number}}</h3>
-              <p><strong>Total:</strong> ${{order.total}}</p>
+              <p><strong>Total:</strong> $' + '{order.total}}</p>
               <p><strong>Payment Method:</strong> {{order.payment_method}}</p>
               <p><strong>Shipping Address:</strong><br>{{order.shipping_address}}</p>
             </div>
@@ -607,7 +607,7 @@ class EmailService {
             <div class="donation-info">
               <h3>Donation Details</h3>
               <p><strong>Cause:</strong> {{cause.title}}</p>
-              <p><strong>Amount:</strong> ${{donation.amount}}</p>
+              <p><strong>Amount:</strong> $' + '{donation.amount}}</p>
               <p><strong>Date:</strong> {{donation.date}}</p>
               <p><strong>Transaction ID:</strong> {{donation.transaction_id}}</p>
             </div>

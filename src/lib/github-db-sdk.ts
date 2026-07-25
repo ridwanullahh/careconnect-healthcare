@@ -930,30 +930,113 @@ class UniversalSDK {
   }
 }
 
+// SQLite Client SDK - connects to backend API (Astro + better-sqlite3)
+class SQLiteClientSDK {
+  private schemas: Record<string, SchemaDefinition> = {};
+  private apiBase: string;
+  private cache: Record<string, any[]> = {};
+
+  constructor(schemas: Record<string, SchemaDefinition>) {
+    this.schemas = schemas;
+    this.apiBase = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE_URL) || 'http://localhost:4321/api';
+  }
+
+  private getToken(): string | null {
+    try { return localStorage.getItem('careconnect_api_token'); } catch { return null; }
+  }
+
+  private async req<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+    const token = this.getToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(options.headers as Record<string, string> || {}) };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${this.apiBase}${path}`, { ...options, headers });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `API error: ${res.status}`);
+    return data;
+  }
+
+  async get<T = any>(collection: string, _force = false): Promise<T[]> {
+    if (this.cache[collection] && !_force) return this.cache[collection] as T[];
+    try {
+      const res = await this.req(`/data/${collection}`);
+      this.cache[collection] = res.data || [];
+      return this.cache[collection] as T[];
+    } catch { return []; }
+  }
+
+  async findById<T = any>(collection: string, id: string): Promise<T | null> {
+    try {
+      const res = await this.req(`/data/${collection}/${id}`);
+      return res.data || null;
+    } catch { return null; }
+  }
+
+  async find<T = any>(collection: string, filterFnOrObject?: ((item: T) => boolean) | Record<string, any>): Promise<T[]> {
+    const arr = await this.get<T>(collection);
+    if (!filterFnOrObject) return arr;
+    if (typeof filterFnOrObject === 'function') return arr.filter(filterFnOrObject as (item: T) => boolean);
+    return arr.filter(record => {
+      for (const [key, value] of Object.entries(filterFnOrObject)) {
+        if ((record as any)[key] !== value) return false;
+      }
+      return true;
+    });
+  }
+
+  async insert<T = any>(collection: string, item: Partial<T>): Promise<T & { id: string; uid: string }> {
+    const schema = this.schemas[collection];
+    if (schema?.defaults) item = { ...schema.defaults, ...item };
+    const res = await this.req(`/data/${collection}`, { method: 'POST', body: JSON.stringify(item) });
+    await this.get(collection, true);
+    return res.data;
+  }
+
+  async update<T = any>(collection: string, key: string, updates: Partial<T>): Promise<T> {
+    const res = await this.req(`/data/${collection}/${key}`, { method: 'PUT', body: JSON.stringify(updates) });
+    await this.get(collection, true);
+    return res.data;
+  }
+
+  async delete<T = any>(collection: string, key: string): Promise<void> {
+    await this.req(`/data/${collection}/${key}`, { method: 'DELETE' });
+    await this.get(collection, true);
+  }
+
+  async initializeAllCollections(): Promise<void> {
+    console.log('SQLite Client: collections managed by backend');
+  }
+}
+
+// Determine database mode and create appropriate SDK instance
+const DB_MODE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_DB_MODE) || 'github';
+
+// Collect schemas from the original config for SQLite mode
+const allSchemas: Record<string, SchemaDefinition> = {};
+
 // Export the SDK class and configuration
 export default UniversalSDK;
-export type { 
-  UniversalSDKConfig, 
-  CloudinaryConfig, 
-  SMTPConfig, 
-  AuthConfig, 
-  SchemaDefinition, 
-  User, 
-  Session, 
+export type {
+  UniversalSDKConfig,
+  CloudinaryConfig,
+  SMTPConfig,
+  AuthConfig,
+  SchemaDefinition,
+  User,
+  Session,
   QueryBuilder,
   CloudinaryUploadResult
 };
 
 // Create and export the configured SDK instance
 const sdkConfig: UniversalSDKConfig = {
-  owner: import.meta.env.VITE_GITHUB_OWNER,
-  repo: import.meta.env.VITE_GITHUB_REPO,
-  token: import.meta.env.VITE_GITHUB_TOKEN,
+  owner: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GITHUB_OWNER) || '',
+  repo: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GITHUB_REPO) || '',
+  token: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GITHUB_TOKEN) || '',
   branch: 'main',
   basePath: 'db',
   cloudinary: {
-    cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME,
-    uploadPreset: import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
+    cloudName: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDINARY_CLOUD_NAME) || '',
+    uploadPreset: (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CLOUDINARY_UPLOAD_PRESET) || ''
   },
   templates: {
     otp: 'Your CareConnect verification code: {{otp}}. Valid for 10 minutes.',
@@ -961,4 +1044,10 @@ const sdkConfig: UniversalSDKConfig = {
   }
 };
 
-export const githubDB = new UniversalSDK(sdkConfig);
+const githubSDKInstance = new UniversalSDK(sdkConfig);
+const sqliteSDKInstance = new SQLiteClientSDK(allSchemas);
+
+// Export githubDB as the active SDK based on VITE_DB_MODE
+// 'github' (default) = GitHub JSON DB, 'sqlite' = SQLite via backend API
+export const githubDB = DB_MODE === 'sqlite' ? sqliteSDKInstance : githubSDKInstance;
+export const dbProvider = DB_MODE;

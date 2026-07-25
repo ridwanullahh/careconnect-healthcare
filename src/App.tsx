@@ -8,6 +8,7 @@ import { initializeContentSeeds } from './lib/content-initializer';
 import { initializeMasterHealthTools } from './lib/health-tools-master';
 import { initializeTheme } from './lib/theme';
 import { LMSService } from './lib/lms';
+import { BookingReminderService, EmailSchedulerService } from './lib/schedulers';
 
 // Layout Components
 import Header from './components/layout/Header';
@@ -19,6 +20,8 @@ import DashboardLayout from './components/layout/DashboardLayout';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
+import PaymentCallbackPage from './pages/PaymentCallbackPage';
 import DirectoryPage from './pages/directory/DirectoryPage';
 import EntityDetailPage from './pages/directory/EntityDetailPage';
 import HealthToolsPage from './pages/tools/HealthToolsPage';
@@ -128,7 +131,11 @@ function App() {
         
         await LMSService.initializeStarterCourses();
         console.log('App: LMS initialized');
-        
+
+        BookingReminderService.startReminderDaemon();
+        EmailSchedulerService.startProcessor();
+        console.log('App: Background schedulers started');
+
         // Check for existing session
         console.log('App: Checking for existing session...');
         await refreshUser();
@@ -180,6 +187,9 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/payment/callback" element={<PaymentCallbackPage />} />
+              <Route path="/payment/cancelled" element={<PaymentCallbackPage />} />
               <Route path="/directory" element={<DirectoryPage />} />
               <Route path="/directory/:entityId" element={<EntityDetailPage />} />
               <Route path="/health-tools" element={<HealthToolsPage />} />

@@ -1,0 +1,339 @@
+import type { APIRoute } from 'astro';
+import { sqliteDB } from '@careconnect/db';
+import crypto from 'node:crypto';
+
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const SESSION_EXPIRY = 7 * 24 * 60 * 60 * 1000;
+
+interface Session {
+  userId: string;
+  email: string;
+  roles: string[];
+  exp: number;
+}
+
+function createToken(session: Session): string {
+  const payload = Buffer.from(JSON.stringify(session)).toString('base64url');
+  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function verifyToken(token: string): Session | null {
+  try {
+    const [payload, sig] = token.split('.');
+    const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+    const session = JSON.parse(Buffer.from(payload, 'base64url').toString()) as Session;
+    if (Date.now() > session.exp) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+function getSession(request: Request): Session | null {
+  const auth = request.headers.get('authorization');
+  if (auth?.startsWith('Bearer ')) return verifyToken(auth.slice(7));
+  const cookie = request.headers.get('cookie');
+  if (cookie) {
+    const match = cookie.match(/session=([^;]+)/);
+    if (match) return verifyToken(match[1]);
+  }
+  return null;
+}
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.randomBytes(16);
+  const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512');
+  return `${salt.toString('hex')}:${hash.toString('hex')}`;
+}
+
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  try {
+    const [saltHex, hashHex] = stored.split(':');
+    if (!saltHex || !hashHex) return false;
+    const salt = Buffer.from(saltHex, 'hex');
+    const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512');
+    return crypto.timingSafeEqual(Buffer.from(hashHex, 'hex'), hash);
+  } catch {
+    return false;
+  }
+}
+
+function json(data: any, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
+}
+
+function error(message: string, status = 400): Response {
+  return json({ error: message }, status);
+}
+
+function parsePath(url: URL): string[] {
+  return url.pathname.replace('/api/', '').split('/').filter(Boolean);
+}
+
+export const prerender = false;
+
+export const OPTIONS: APIRoute = () => json({ ok: true });
+
+export const ALL: APIRoute = async ({ request }) => {
+  const url = new URL(request.url);
+  const segments = parsePath(url);
+  const method = request.method;
+  const session = getSession(request);
+
+  await sqliteDB.initializeAllCollections();
+
+  try {
+    // --- AUTH ROUTES ---
+    if (segments[0] === 'auth') {
+      if (segments[1] === 'register' && method === 'POST') {
+        const body = await request.json();
+        const existing = await sqliteDB.find('users', { email: body.email });
+        if (existing.length > 0) return error('User already exists');
+
+        const password_hash = await hashPassword(body.password);
+        let entityId: string | null = null;
+
+        if (['health_center', 'pharmacy'].includes(body.user_type)) {
+          const entity = await sqliteDB.insert('entities', {
+            name: body.entity_name || body.first_name,
+            entity_type: body.user_type,
+            description: body.entity_description || '',
+            address: body.entity_address || '',
+            phone: body.entity_phone || '',
+            email: body.email,
+            verification_status: 'pending',
+            is_active: true,
+            services: [],
+            specialties: body.specialties || [],
+            rating: 0,
+            review_count: 0,
+            badges: [],
+          });
+          entityId = entity.id;
+        }
+
+        const user = await sqliteDB.insert('users', {
+          email: body.email,
+          phone: body.phone || '',
+          user_type: body.user_type || 'public_user',
+          password_hash,
+          is_verified: false,
+          is_active: true,
+          entity_id: entityId,
+          permissions: getDefaultPermissions(body.user_type || 'public_user'),
+        });
+
+        const profile = await sqliteDB.insert('profiles', {
+          user_id: user.id,
+          first_name: body.first_name,
+          last_name: body.last_name,
+          bio: body.bio || '',
+          specialties: body.specialties || [],
+          languages: body.languages || ['English'],
+          license_number: body.license_number || '',
+          preferences: { notifications: true, marketing_emails: false, data_sharing: false },
+        });
+
+        await sqliteDB.insert('audit_logs', {
+          action: 'user_registered',
+          entity_type: 'user',
+          entity_id: user.id,
+          user_email: body.email,
+          details: `New user registered: ${body.email}`,
+          created_at: new Date().toISOString(),
+        });
+
+        const token = createToken({
+          userId: user.id,
+          email: user.email,
+          roles: [user.user_type],
+          exp: Date.now() + SESSION_EXPIRY,
+        });
+
+        return json({
+          user: { ...user, password_hash: undefined },
+          profile,
+          token,
+        }, 201);
+      }
+
+      if (segments[1] === 'login' && method === 'POST') {
+        const body = await request.json();
+        const users = await sqliteDB.find('users', { email: body.email });
+        const user = users[0];
+        if (!user) return error('Invalid credentials', 401);
+        if (!user.is_active) return error('Account is deactivated', 403);
+
+        const valid = await verifyPassword(body.password, user.password_hash);
+        if (!valid) return error('Invalid credentials', 401);
+
+        await sqliteDB.update('users', user.id, { last_login: new Date().toISOString() });
+
+        const profiles = await sqliteDB.find('profiles', { user_id: user.id });
+        const profile = profiles[0];
+
+        const token = createToken({
+          userId: user.id,
+          email: user.email,
+          roles: [user.user_type],
+          exp: Date.now() + SESSION_EXPIRY,
+        });
+
+        await sqliteDB.insert('audit_logs', {
+          action: 'user_login',
+          entity_type: 'user',
+          entity_id: user.id,
+          user_email: user.email,
+          details: `User logged in: ${user.email}`,
+          created_at: new Date().toISOString(),
+        });
+
+        return json({
+          user: { ...user, password_hash: undefined },
+          profile,
+          token,
+        });
+      }
+
+      if (segments[1] === 'me' && method === 'GET') {
+        if (!session) return error('Unauthorized', 401);
+        const user = await sqliteDB.findById('users', session.userId);
+        if (!user) return error('User not found', 404);
+        const profiles = await sqliteDB.find('profiles', { user_id: session.userId });
+        return json({ user: { ...user, password_hash: undefined }, profile: profiles[0] });
+      }
+
+      if (segments[1] === 'logout' && method === 'POST') {
+        return json({ success: true }, 200, );
+      }
+    }
+
+    // --- PROTECTED DATA ROUTES ---
+    if (segments[0] === 'data') {
+      if (!session) return error('Unauthorized', 401);
+      const collection = segments[1];
+      if (!collection) return error('Collection name required');
+
+      if (method === 'GET') {
+        const filterParam = url.searchParams.get('filter');
+        let filter: Record<string, any> | undefined;
+        if (filterParam) {
+          try { filter = JSON.parse(filterParam); } catch {}
+        }
+        const data = await sqliteDB.find(collection, filter);
+        return json({ data });
+      }
+
+      if (method === 'POST') {
+        const body = await request.json();
+        const item = await sqliteDB.insert(collection, body);
+        return json({ data: item }, 201);
+      }
+
+      if (segments[2] && method === 'GET') {
+        const item = await sqliteDB.findById(collection, segments[2]);
+        if (!item) return error('Not found', 404);
+        return json({ data: item });
+      }
+
+      if (segments[2] && method === 'PUT') {
+        const body = await request.json();
+        const item = await sqliteDB.update(collection, segments[2], body);
+        return json({ data: item });
+      }
+
+      if (segments[2] && method === 'DELETE') {
+        await sqliteDB.delete(collection, segments[2]);
+        return json({ success: true });
+      }
+    }
+
+    // --- ADMIN ROUTES ---
+    if (segments[0] === 'admin') {
+      if (!session) return error('Unauthorized', 401);
+      const user = await sqliteDB.findById('users', session.userId);
+      if (!user || user.user_type !== 'super_admin') return error('Forbidden', 403);
+
+      if (segments[1] === 'verify-entity' && method === 'POST') {
+        const body = await request.json();
+        const entity = await sqliteDB.update('entities', body.entity_id, {
+          verification_status: body.status,
+          verified_at: body.status === 'verified' ? new Date().toISOString() : undefined,
+          verified_by: session.userId,
+          verification_notes: body.notes || '',
+        });
+        await sqliteDB.insert('verification_queue', {
+          entity_id: body.entity_id,
+          reviewer_id: session.userId,
+          action: body.status,
+          notes: body.notes || '',
+          reviewed_at: new Date().toISOString(),
+        });
+        return json({ data: entity });
+      }
+
+      if (segments[1] === 'audit-logs' && method === 'GET') {
+        const logs = await sqliteDB.get('audit_logs');
+        return json({ data: logs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) });
+      }
+
+      if (segments[1] === 'stats' && method === 'GET') {
+        const collections = ['users', 'entities', 'patients', 'bookings', 'orders', 'causes', 'courses'];
+        const stats: Record<string, number> = {};
+        for (const col of collections) {
+          const items = await sqliteDB.get(col);
+          stats[col] = items.length;
+        }
+        return json({ data: stats });
+      }
+    }
+
+    // --- HEALTH CHECK ---
+    if (segments[0] === 'health' || segments.length === 0) {
+      return json({
+        status: 'ok',
+        database: 'sqlite',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return error('Not found', 404);
+  } catch (err: any) {
+    console.error('API Error:', err);
+    return error(err.message || 'Internal server error', 500);
+  }
+};
+
+export const GET = ALL;
+export const POST = ALL;
+export const PUT = ALL;
+export const DELETE = ALL;
+
+function getDefaultPermissions(userType: string): string[] {
+  const perms: Record<string, string[]> = {
+    super_admin: ['*'],
+    health_center: ['create_entity', 'update_entity', 'create_content', 'update_content', 'view_payments'],
+    pharmacy: ['create_entity', 'update_entity', 'create_content', 'update_content', 'view_payments'],
+    practitioner: ['create_entity', 'update_entity', 'create_content', 'update_content', 'view_payments'],
+    hospital_admin: ['manage_patients', 'view_patient_data', 'create_encounters', 'manage_encounters', 'manage_care_plans', 'manage_referrals', 'manage_beds', 'process_billing', 'manage_insurance_claims', 'obtain_consents', 'manage_access_grants', 'view_analytics'],
+    physician: ['manage_patients', 'view_patient_data', 'create_encounters', 'manage_encounters', 'record_vitals', 'manage_conditions', 'prescribe_medications', 'order_labs', 'view_lab_results', 'order_imaging', 'view_imaging_results', 'manage_care_plans', 'create_referrals', 'obtain_consents'],
+    nurse: ['view_patient_data', 'manage_encounters', 'record_vitals', 'manage_conditions', 'manage_care_plans', 'obtain_consents'],
+    pharmacist: ['view_patient_data', 'dispense_medications', 'manage_pharmacy_inventory'],
+    lab_tech: ['view_patient_data', 'view_lab_results', 'order_labs'],
+    imaging_tech: ['view_patient_data', 'view_imaging_results', 'order_imaging'],
+    billing_clerk: ['view_patient_data', 'process_billing', 'manage_insurance_claims', 'view_payments'],
+    patient: ['view_patient_data', 'manage_access_grants'],
+    public_user: [],
+  };
+  return perms[userType] || [];
+}

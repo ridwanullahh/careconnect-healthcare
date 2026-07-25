@@ -173,7 +173,9 @@ export const collections = {
   data_deletion_requests: 'data_deletion_requests',
   search_analytics: 'search_analytics',
   uptime_checks: 'uptime_checks',
-  error_logs: 'error_logs'
+  error_logs: 'error_logs',
+  ai_chat_sessions: 'ai_chat_sessions',
+  payment_intents: 'payment_intents'
 };
 
 // Auto-initialize all collections
