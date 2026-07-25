@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useToastService } from '../../lib/toast-service';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
-import { githubDB, collections } from '../../lib/database';
+import { githubDB, dbHelpers, collections } from '../../lib/database';
 import { EntityService, HealthcareEntity } from '../../lib/entities';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import LmsManagementPage from './LmsManagementPage';
