@@ -9,15 +9,18 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite",
     "dev:http": "VITE_FORCE_HTTP=true vite",
-    "dev:backend": "npm run dev --workspace=apps/backend",
-    "dev:all": "npm run dev:backend & npm run dev",
+    "dev:backend": "cd apps/backend && bun run dev",
+    "dev:all": "node scripts/dev.mjs",
     "build": "tsc && vite build",
     "build:analyze": "tsc && vite build --mode analyze",
     "build:backend": "npm run build --workspace=apps/backend",
     "lint": "eslint . --ext ts,tsx",
     "preview": "vite preview",
+    "db:push": "node scripts/db-push.mjs",
+    "db:seed": "node scripts/seed.mjs",
     "db:backup": "cp data/careconnect.db data/careconnect.backup.$(date +%Y%m%d%H%M%S).db"
   },
   "dependencies": {

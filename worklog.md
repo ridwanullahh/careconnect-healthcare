@@ -54,3 +54,29 @@ Work Log:
 Stage Summary:
 - Environment ready; Lightbase storage model decided (envelope: {record: json, email/uid/user_id/entity_id/patient_id/status: indexed string})
 - Next: implement LightbaseStorageAdapter in packages/db
+
+---
+Task ID: 4-LIGHTBASE-MIGRATION
+Agent: Main (Z.ai Code)
+Task: Implement Lightbase storage adapter, wire backend, integrate auth, comprehensive seed, dev stack
+
+Work Log:
+- Created packages/db/src/lightbase-adapter.ts (envelope model: {record: json, indexed filter fields}; get/find/findById/insert/update/delete/save; lazy collection creation; server-side filter for indexed fields, client-side for others)
+- Created packages/db/src/index.ts storage factory (STORAGE_PROVIDER=lightbase|sqlite; dynamic import for sqlite to avoid side effects)
+- Updated packages/db/package.json exports
+- Rewrote apps/backend route to use getStorage() factory; added PUBLIC_READ_COLLECTIONS whitelist (entities, news, etc.); sanitize responses (strip password_hash); /auth/login,/auth/register,/auth/me,/auth/logout (PBKDF2); /api/seed (SEED_KEY protected); /api/health (reports provider)
+- Fixed astro.config.mjs to load .env into process.env; fixed @careconnect/db alias to index.ts
+- Fixed Lightbase GET-by-ID path (/collections/{c}/{id} not /collections/{c}/docs/{id})
+- Updated src/lib/github-db-sdk.ts DB_MODE switch (api/sqlite/lightbase -> SQLiteClientSDK)
+- Integrated backend auth into src/lib/auth.tsx (login/register/logout/refreshUser branch on USE_BACKEND_AUTH)
+- Disabled frontend content seeders in backend mode (content-initializer.ts)
+- Added Vite proxy /api -> localhost:4321; optimizeDeps.entries to ignore skills/ folder
+- Created scripts/dev.mjs (starts backend + Vite), scripts/db-push.mjs, scripts/seed.mjs
+- Updated root package.json (dev=db-push+dev scripts)
+- Created comprehensive seed module (apps/backend/src/seed/index.ts): 3 entities, 16 users (all roles), 5 patients, 5 encounters, vitals, conditions, allergies, meds, labs, imaging, care plans, referrals, beds, consents, bookings, products, pharmacy inventory, courses, forum, news, podcasts, tips, facts, blogs, jobs, causes, health tools, system settings
+
+Stage Summary:
+- Verified end-to-end in browser: homepage renders, /directory shows 3 seeded entities from Lightbase, login as admin works (PBKDF2), /super-admin dashboard loads, /auth/me works, /admin/stats returns real counts, password_hash sanitized from all responses
+- All seed accounts use password: CareConnect2025!
+- Known gap: SuperAdminDashboard/HMSDashboard/EntityDashboard still show hardcoded stats (pre-existing) — to fix next
+- Pre-existing broken files (verification.ts, platform-integration.ts, DataExportDialog) still need fixing
