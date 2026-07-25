@@ -1,0 +1,2729 @@
+Bismillah Ar-Rahman Ar-Raheem. Ash-hadu an laa ilaaha illa-Llah wahdaHu lasharikalaHu, wa ash-hadu anna Muhammadan Abduhu wa Rasooluh. Laa hawla wa laa quwwata illaa biLLAH. Hasbiyallaahu laa ilaaha illaa Huwa, 'alayhi tawakkaltu wa Huwa Rabbul-'Arshil-'Azeem. SubhaanALLAH wa bihamdih, SubhaanALLAHil-'azeem, AlhamduliLLAH, Laa ilaaha illa-ALLAH, wa ALLAHU AKBAR, walaa hawla walaa quwwata illaa biLLAH. Astaghfirullaaha wa atoobu ilayh.
+
+# Lightbase API Integration Guide
+
+> **Complete reference for developers integrating Lightbase into their applications.**
+>
+// This document covers every endpoint, data type, operation, and utility
+// available in the Lightbase BaaS API. Read it end-to-end to understand
+// the full capabilities, or use the table of contents to jump to specific
+// sections.
+
+**Version:** 1.0.0 | **Base URL:** `https://your-lightbase-host` | **Auth:** API Key or JWT
+
+---
+
+## Table of Contents
+
+1. [Authentication](#1-authentication)
+2. [Projects](#2-projects)
+3. [Collections and Schema](#3-collections-and-schema)
+4. [Field Types (22 types)](#4-field-types)
+5. [Documents (CRUD)](#5-documents)
+6. [Querying](#6-querying)
+7. [Filter Operators (24)](#7-filter-operators)
+8. [Aggregations](#8-aggregations)
+9. [Vector Similarity Search](#9-vector-similarity-search)
+10. [Full-Text Search](#10-full-text-search)
+11. [Upsert](#11-upsert)
+12. [Bulk Operations](#12-bulk-operations)
+13. [Transactions](#13-transactions)
+14. [Realtime Subscriptions](#14-realtime-subscriptions)
+15. [Branches](#15-branches)
+16. [Edge Functions](#16-edge-functions)
+17. [Webhooks](#17-webhooks)
+18. [File Storage](#18-file-storage)
+19. [API Keys](#19-api-keys)
+20. [Backups](#20-backups)
+21. [Seed Utility](#21-seed-utility)
+22. [PostgREST/Supabase Compatibility](#22-postgrest-supabase-compatibility)
+23. [SQLite Compatibility](#23-sqlite-compatibility)
+24. [Error Handling](#24-error-handling)
+25. [Rate Limiting](#25-rate-limiting)
+26. [Security](#26-security)
+27. [SDK Examples](#27-sdk-examples)
+28. [Schema Migrations](#28-schema-migrations)
+29. [GraphQL API](#29-graphql-api)
+30. [Change Data Capture (CDC) Stream](#30-change-data-capture-cdc-stream)
+31. [Cloud Backup Providers](#31-cloud-backup-providers)
+32. [Audit Log Streaming](#32-audit-log-streaming)
+33. [Field-Level Encryption](#33-field-level-encryption)
+34. [IP Allow-listing per API Key](#34-ip-allow-listing-per-api-key)
+35. [BetterSQLite3 Migration](#35-bettersqlite3-migration)
+36. [Instance-Level Backup and Restore](#36-instance-level-backup-and-restore)
+37. [Notification System](#37-notification-system)
+38. [Usage Stats API](#38-usage-stats-api)
+39. [Update Collection Schema](#39-update-collection-schema)
+40. [Health Check](#40-health-check)
+41. [API Key Query Parameter Deprecation](#41-api-key-query-parameter-deprecation)
+
+---
+
+## 1. Authentication
+
+Every request requires:
+- `apikey: <your-api-key>` header OR `Authorization: Bearer <jwt>` header
+- `x-lightbase-project: <project-id>` header
+
+### Get an API Key
+
+API keys are issued when a project is created (root key) or via the API:
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/keys \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"mobile-app","env":"live","scopes":["read","write"],"collections":["users","posts"]}'
+```
+
+Response:
+```json
+{
+  "key": { "id": "abc123", "name": "mobile-app", "env": "live", "scopes": ["read","write"] },
+  "secret": "lb_live_xxx",
+  "warning": "Store the secret securely. It will not be shown again."
+}
+```
+
+### Exchange API Key for JWT
+
+```bash
+curl -X POST https://your-host/api/v1/auth/token \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"ttlSeconds": 3600, "scopes": ["read"]}'
+```
+
+Response:
+```json
+{
+  "accessToken": "eyJhbGci...",
+  "tokenType": "Bearer",
+  "expiresIn": 3600,
+  "projectId": "my-app"
+}
+```
+
+### Scopes
+
+| Scope | Permissions |
+|---|---|
+| `read` | GET endpoints |
+| `write` | POST, PUT, PATCH, DELETE (implies read) |
+| `admin` | All operations including key management (implies write+read) |
+
+### Collection Allow-list
+
+API keys can be scoped to specific collections. If `collections` is omitted, the key has access to all collections in the project.
+
+---
+
+## 2. Projects
+
+### Create a Project
+
+```bash
+curl -X POST https://your-host/api/v1/projects \
+  -H "x-lightbase-bootstrap: <bootstrap-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"My App","tenantId":"my-tenant"}'
+```
+
+The project ID is auto-generated from the name (e.g. "My App" -> "my-app"). Tenant ID is optional (defaults to "default"). Response includes the root API key (shown once).
+
+### List Projects
+
+```bash
+curl "https://your-host/api/v1/projects?tenantId=my-tenant" \
+  -H "x-lightbase-bootstrap: <bootstrap-token>"
+```
+
+### Get Project Info
+
+```bash
+curl https://your-host/api/v1/projects/my-app \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+### Delete a Project
+
+```bash
+curl -X DELETE https://your-host/api/v1/projects/my-app \
+  -H "x-lightbase-bootstrap: <bootstrap-token>"
+```
+
+---
+
+## 3. Collections and Schema
+
+### Create a Collection
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/collections \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "users",
+    "fields": [
+      {"name": "email", "type": "email", "required": true, "unique": true, "indexed": true},
+      {"name": "age", "type": "integer", "minimum": 0, "maximum": 150},
+      {"name": "active", "type": "boolean", "default": true},
+      {"name": "balance", "type": "currency", "currency": "USD"},
+      {"name": "location", "type": "point"},
+      {"name": "embedding", "type": "vector", "dimensions": 1536},
+      {"name": "profile_id", "type": "reference", "refCollection": "profiles"}
+    ],
+    "indexes": [
+      {"name": "users_email_idx", "fields": ["email"], "unique": true}
+    ]
+  }'
+```
+
+### List Collections
+
+```bash
+curl https://your-host/api/v1/projects/my-app/collections \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+### Get Collection Schema
+
+```bash
+curl https://your-host/api/v1/projects/my-app/collections/users \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+### Delete a Collection
+
+```bash
+curl -X DELETE https://your-host/api/v1/projects/my-app/collections/users \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+---
+
+## 4. Field Types
+
+Lightbase supports 22 field types:
+
+### Primitive Types
+
+| Type | Description | Validation |
+|---|---|---|
+| `string` | Short string | maxLength, enum |
+| `text` | Long text | maxLength, searchable |
+| `number` | Floating point | minimum, maximum |
+| `integer` | Whole number | minimum, maximum |
+| `boolean` | true/false | - |
+| `date` | ISO date (YYYY-MM-DD) | Valid date |
+| `datetime` | ISO datetime | Valid datetime |
+| `json` | Any JSON value | Must be serializable |
+| `array` | Array of values | Requires `of` (element type) |
+
+### Advanced Scalar Types
+
+| Type | Description | Validation |
+|---|---|---|
+| `uuid` | UUID v1-v5 | RFC 4122 format, auto-lowercased |
+| `url` | URL | http/https/ftp/ws/wss protocols only |
+| `email` | Email address | RFC 5322 subset, auto-lowercased |
+| `phone` | Phone number | E.164 normalized (+prefix) |
+| `ip` | IP address | IPv4 or IPv6 (with :: expansion) |
+| `color` | Hex color | #RGB, #RRGGBB, or #RRGGBBAA |
+| `decimal` | High-precision decimal | precision, minimum, maximum |
+| `currency` | Currency amount | Returns {amount, currency} object |
+| `duration` | ISO 8601 duration | PT1H30M, P1Y2M3D, etc. |
+
+### Geospatial Types
+
+| Type | Description | Format |
+|---|---|---|
+| `point` | GeoJSON Point | {type:"Point", coordinates:[lng, lat]} or [lng, lat] |
+| `polygon` | GeoJSON Polygon | {type:"Polygon", coordinates:[[[lng,lat],...]]} |
+
+### Special Types
+
+| Type | Description | Requirements |
+|---|---|---|
+| `binary` | Base64-encoded binary | maxBytes limit |
+| `vector` | AI embedding vector | dimensions (required) |
+| `reference` | Foreign key to another collection | refCollection (required) |
+
+### Field Definition Properties
+
+```json
+{
+  "name": "email",
+  "type": "email",
+  "required": true,
+  "unique": true,
+  "indexed": true,
+  "default": "user@example.com",
+  "maxLength": 254,
+  "minimum": 0,
+  "maximum": 100,
+  "enum": ["active", "inactive"],
+  "precision": 2,
+  "currency": "USD",
+  "dimensions": 1536,
+  "refCollection": "profiles",
+  "cascade": false,
+  "maxBytes": 1048576,
+  "searchable": true,
+  "defaultRegion": "US",
+  "description": "User email address"
+}
+```
+
+### Reserved Fields (auto-managed)
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Auto-generated document ID |
+| `_created_at` | datetime | Creation timestamp |
+| `_updated_at` | datetime | Last update timestamp |
+| `_revision` | integer | Optimistic concurrency counter |
+| `_deleted` | boolean | Soft-delete flag |
+| `_checksum` | string | SHA-256 tamper detection hash |
+
+---
+
+## 5. Documents
+
+### Insert
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/collections/users \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com","age":30}'
+```
+
+Response:
+```json
+{
+  "document": {
+    "email": "alice@example.com",
+    "age": 30,
+    "active": true,
+    "id": "abc123def456",
+    "_created_at": "2026-01-15T10:30:00.000Z",
+    "_updated_at": "2026-01-15T10:30:00.000Z",
+    "_revision": 1,
+    "_deleted": false,
+    "_checksum": "sha256hex..."
+  }
+}
+```
+
+### Get by ID
+
+```bash
+curl https://your-host/api/v1/projects/my-app/collections/users/abc123def456 \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+### Update (with optimistic concurrency)
+
+```bash
+curl -X PATCH https://your-host/api/v1/projects/my-app/collections/users/abc123def456 \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "If-Match: 1" \
+  -H "Content-Type: application/json" \
+  -d '{"age": 31}'
+```
+
+The `If-Match` header specifies the expected `_revision`. If it doesn't match, a 409 Conflict is returned.
+
+### Delete
+
+```bash
+curl -X DELETE https://your-host/api/v1/projects/my-app/collections/users/abc123def456 \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+---
+
+## 6. Querying
+
+### Basic Query
+
+```bash
+curl "https://your-host/api/v1/projects/my-app/collections/users/docs?limit=25" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+### Query Parameters
+
+| Param | Format | Example |
+|---|---|---|
+| `filter` | JSON FilterExpr | `{"field":"age","op":"gt","value":18}` |
+| `sort` | field:direction,... | `age:desc,name:asc` |
+| `limit` | integer 1-1000 | `25` |
+| `cursor` | JSON PageCursor | `{"limit":25,"offset":25}` |
+| `after` | document id (ULID) | `01HQ2K7P9XY4T3N1Z5V8B6R0MJ` |
+| `count` | `true` or `1` | `true` |
+| `select` | comma-separated fields (dot notation supported) | `id,email,metadata.tags` |
+
+#### Keyset pagination with `?after=<id>`
+
+For efficient deep pagination that does not degrade as the offset grows, pass
+`?after=<id>&limit=N`. Lightbase filters to documents whose `id` is strictly
+greater than `after` and sorts by `id` ascending. ULIDs are time-sortable, so
+this gives chronological ordering. If you also pass a `filter`, it is combined
+with the `id > after` predicate via an implicit `and` group; if you also pass a
+`sort`, your sort is applied after the `id:asc` ordering (the engine's
+`compareBySort` iterates left-to-right so `id` wins ties). The `after` and
+`cursor` parameters cannot be combined; doing so returns `400`.
+
+```bash
+curl "https://your-host/api/v1/projects/my-app/collections/users/docs?after=01HQ2K7P9XY4T3N1Z5V8B6R0MJ&limit=50" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+#### Total count with `?count=true`
+
+Pass `?count=true` (or `?count=1`) to include a `count` field in the response
+holding the total number of documents matching the same `filter`. The count is
+computed by the dedicated `countDocuments` path, so it is accurate even when
+`limit` truncates the `data` array. Use this when rendering pagination UI that
+needs to display "showing 25 of 312 results" without a second round-trip.
+
+```bash
+curl "https://your-host/api/v1/projects/my-app/collections/users/docs?filter=%7B%22field%22%3A%22age%22%2C%22op%22%3A%22gte%22%2C%22value%22%3A18%7D&count=true&limit=25" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+#### Nested projection with `?select=`
+
+The `select` parameter supports dot notation for projecting into nested JSON
+fields. For example, `?select=id,metadata.tags,name` returns only `id`,
+`metadata.tags`, and `name` for each document, with `metadata.tags` materialized
+as `{ "metadata": { "tags": [...] } }` in the output. Intermediate objects are
+created as needed; reserved fields (`id`, `_created_at`, `_updated_at`,
+`_revision`, `_deleted`) are always included so clients can paginate and address
+documents.
+
+```bash
+curl "https://your-host/api/v1/projects/my-app/collections/users/docs?select=id,metadata.tags,name&limit=10" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+### Response
+
+```json
+{
+  "data": [...],
+  "nextCursor": {"limit": 25, "offset": 50},
+  "total": 100,
+  "hasMore": true,
+  "count": 312
+}
+```
+
+The `count` field is only present when `?count=true` is supplied.
+
+---
+
+## 7. Filter Operators
+
+### Comparison
+
+| Operator | Description | Example |
+|---|---|---|
+| `eq` | Equals | `{"field":"status","op":"eq","value":"active"}` |
+| `neq` | Not equals | `{"field":"status","op":"neq","value":"deleted"}` |
+| `lt` | Less than | `{"field":"age","op":"lt","value":18}` |
+| `lte` | Less than or equal | `{"field":"age","op":"lte","value":65}` |
+| `gt` | Greater than | `{"field":"age","op":"gt","value":18}` |
+| `gte` | Greater than or equal | `{"field":"age","op":"gte","value":21}` |
+
+### Set
+
+| Operator | Description | Example |
+|---|---|---|
+| `in` | Value in list | `{"field":"status","op":"in","value":["active","pending"]}` |
+| `nin` | Value not in list | `{"field":"status","op":"nin","value":["deleted","banned"]}` |
+
+### Pattern
+
+| Operator | Description | Example |
+|---|---|---|
+| `like` | SQL LIKE (% and _) | `{"field":"name","op":"like","value":"%alice%"}` |
+| `ilike` | Case-insensitive LIKE | `{"field":"name","op":"ilike","value":"%ALICE%"}` |
+| `regex` | Regular expression | `{"field":"email","op":"regex","value":"^alice"}` |
+| `startsWith` | Prefix match | `{"field":"name","op":"startsWith","value":"Alice"}` |
+| `endsWith` | Suffix match | `{"field":"name","op":"endsWith","value":"Smith"}` |
+
+### Null
+
+| Operator | Description | Example |
+|---|---|---|
+| `is` | Is null/true/false | `{"field":"deleted_at","op":"is","value":null}` |
+| `isnot` | Is not null | `{"field":"deleted_at","op":"isnot","value":null}` |
+
+### Range
+
+| Operator | Description | Example |
+|---|---|---|
+| `between` | Inclusive range | `{"field":"age","op":"between","value":[18,65]}` |
+
+### Array
+
+| Operator | Description | Example |
+|---|---|---|
+| `contains` | Array contains value | `{"field":"tags","op":"contains","value":"tech"}` |
+| `arrayContains` | Array contains all values | `{"field":"tags","op":"arrayContains","value":["tech","ai"]}` |
+
+### Text
+
+| Operator | Description | Example |
+|---|---|---|
+| `search` | Case-insensitive substring | `{"field":"bio","op":"search","value":"engineer"}` |
+
+### Geospatial
+
+| Operator | Description | Example |
+|---|---|---|
+| `near` | Within distance (meters) | `{"field":"location","op":"near","value":{"point":[-74.0,40.7],"maxDistanceMeters":1000}}` |
+| `within` | Inside polygon | `{"field":"location","op":"within","value":{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,1],[0,0]]]}}` |
+| `intersects` | Intersects polygon | Same as within |
+
+### Vector
+
+| Operator | Description |
+|---|---|
+| `vectorL2` | L2 (Euclidean) distance |
+| `vectorCosine` | Cosine similarity |
+| `vectorDot` | Dot product |
+
+### Boolean Composition
+
+```json
+{
+  "and": [
+    {"field": "age", "op": "gte", "value": 18},
+    {"field": "status", "op": "eq", "value": "active"}
+  ]
+}
+```
+
+```json
+{
+  "or": [
+    {"field": "role", "op": "eq", "value": "admin"},
+    {"field": "role", "op": "eq", "value": "editor"}
+  ]
+}
+```
+
+---
+
+## 8. Aggregations
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/collections/orders/aggregate \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "groupBy": ["status"],
+    "aggregations": [
+      {"op": "count", "as": "total"},
+      {"op": "sum", "field": "amount", "as": "revenue"},
+      {"op": "avg", "field": "amount", "as": "avg_order"},
+      {"op": "min", "field": "amount", "as": "min_order"},
+      {"op": "max", "field": "amount", "as": "max_order"},
+      {"op": "stddev", "field": "amount", "as": "stddev_order"},
+      {"op": "variance", "field": "amount", "as": "var_order"}
+    ]
+  }'
+```
+
+Supported operations: `count`, `sum`, `avg`, `min`, `max`, `first`, `last`, `stddev`, `variance`.
+
+---
+
+## 9. Vector Similarity Search
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/collections/docs/vector-search \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "field": "embedding",
+    "vector": [0.1, 0.2, 0.3, ...],
+    "metric": "cosine",
+    "limit": 10,
+    "filter": {"field": "category", "op": "eq", "value": "tech"}
+  }'
+```
+
+Metrics: `l2` (Euclidean), `cosine` (cosine similarity), `dot` (dot product).
+
+Response:
+```json
+{
+  "results": [
+    {"document": {...}, "score": 0.95},
+    {"document": {...}, "score": 0.89}
+  ]
+}
+```
+
+---
+
+## 10. Full-Text Search
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/collections/articles/search \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "lightweight backend", "limit": 10}'
+```
+
+Requires fields marked `searchable: true` in the collection schema.
+
+### Empty query returns all documents
+
+An empty (or whitespace-only) `query` is allowed and returns all documents in
+the collection up to `limit`, bypassing the FTS index. This lets callers use
+`/search` as a universal "list" fallback without switching to `/docs` when the
+search box is empty. The response shape is identical to the populated-query
+case: `{ "data": [...], "total": N }`.
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/collections/articles/search \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "", "limit": 25}'
+```
+
+---
+
+## 11. Upsert
+
+```bash
+curl -X PUT https://your-host/api/v1/projects/my-app/collections/users/upsert \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filter": {"field": "email", "op": "eq", "value": "alice@example.com"},
+    "document": {"email": "alice@example.com", "name": "Alice", "age": 30}
+  }'
+```
+
+Response:
+```json
+{
+  "document": {...},
+  "created": true
+}
+```
+
+---
+
+## 12. Bulk Operations
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/bulk \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inserts": [
+      {"collection": "users", "document": {"email": "a@b.com"}},
+      {"collection": "users", "document": {"email": "c@d.com"}}
+    ],
+    "updates": [
+      {"collection": "users", "id": "abc123", "patch": {"age": 31}}
+    ],
+    "deletes": [
+      {"collection": "users", "id": "xyz789"}
+    ]
+  }'
+```
+
+Response:
+```json
+{
+  "inserted": 2,
+  "updated": 1,
+  "deleted": 1,
+  "errors": []
+}
+```
+
+---
+
+## 13. Transactions
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/transactions \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ops": [
+      {"kind": "insert", "collection": "orders", "document": {"total": 100}},
+      {"kind": "update", "collection": "users", "id": "abc", "patch": {"balance": 900}}
+    ]
+  }'
+```
+
+If any operation fails, all previously applied operations are rolled back.
+
+---
+
+## 14. Realtime Subscriptions
+
+```javascript
+const es = new EventSource(
+  'https://your-host/api/v1/projects/my-app/realtime/subscribe?collections=users,orders&events=document.created',
+  { headers: { 'apikey': 'lb_live_xxx', 'x-lightbase-project': 'my-app' } }
+);
+
+es.addEventListener('document.created', (e) => {
+  const msg = JSON.parse(e.data);
+  console.log('New document:', msg.document);
+});
+
+es.addEventListener('document.updated', (e) => {
+  const msg = JSON.parse(e.data);
+  console.log('Updated:', msg.docId, 'revision:', msg.revision);
+});
+
+es.addEventListener('document.deleted', (e) => {
+  const msg = JSON.parse(e.data);
+  console.log('Deleted:', msg.docId);
+});
+```
+
+Heartbeat is sent every 30 seconds.
+
+---
+
+## 15. Branches
+
+### Create a Branch
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/branches \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"branchName": "dev", "copyData": false}'
+```
+
+### List Branches
+
+```bash
+curl https://your-host/api/v1/projects/my-app/branches \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+### Delete a Branch
+
+```bash
+curl -X DELETE https://your-host/api/v1/projects/my-app/branches/dev \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+---
+
+## 16. Edge Functions
+
+### Create a Function
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/functions \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "process-order",
+    "source": "const order = ctx.body; order.processed = true; await db.insert('orders', order); return order;",
+    "timeoutMs": 5000
+  }'
+```
+
+### Invoke a Function
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/functions/process-order/invoke \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"body": {"product": "Widget", "quantity": 2}}'
+```
+
+Available in function context:
+- `ctx.body` - request body
+- `ctx.headers` - request headers
+- `ctx.env` - function environment variables
+- `db.insert(collection, doc)` - insert document
+- `db.get(collection, id)` - get document
+- `db.update(collection, id, patch)` - update document
+- `db.delete(collection, id)` - delete document
+- `db.query(collection, request)` - query documents
+
+---
+
+## 17. Webhooks
+
+### Register a Webhook
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/webhooks \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "on-user-create",
+    "url": "https://your-app.com/webhook",
+    "events": ["document.created"],
+    "collections": ["users"]
+  }'
+```
+
+Webhook deliveries include:
+- `X-Lightbase-Webhook-Id` header
+- `X-Lightbase-Signature` header (HMAC-SHA256 of body, signed with webhook secret)
+
+Retry policy: exponential backoff, max 3 retries.
+
+---
+
+## 18. File Storage
+
+### Create a Bucket
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/storage/buckets \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "uploads", "public": false, "allowedMimeTypes": ["image/png", "image/jpeg"]}'
+```
+
+### Upload a File
+
+```bash
+curl -X POST "https://your-host/api/v1/projects/my-app/storage/uploads/upload?path=avatar.png" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: image/png" \
+  --data-binary @avatar.png
+```
+
+### Download a File
+
+```bash
+curl "https://your-host/api/v1/projects/my-app/storage/uploads/download?path=avatar.png" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -o avatar.png
+```
+
+### Generate a Signed URL
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/storage/uploads/signed-url \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"path": "avatar.png", "expiresIn": 3600}'
+```
+
+Files are deduplicated via content-addressable storage (SHA-256). Identical files across projects share a single blob on disk.
+
+---
+
+## 19. API Keys
+
+### Issue a Scoped Key
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/keys \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "read-only",
+    "env": "live",
+    "scopes": ["read"],
+    "collections": ["users", "posts"]
+  }'
+```
+
+### List Keys
+
+```bash
+curl https://your-host/api/v1/projects/my-app/keys \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+### Revoke a Key
+
+```bash
+curl -X DELETE https://your-host/api/v1/projects/my-app/keys/abc123 \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+---
+
+## 20. Backups
+
+### Configure Backups
+
+```bash
+curl -X PUT https://your-host/api/v1/projects/my-app/backups/config \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "local", "schedule": "daily", "retentionDays": 30}'
+```
+
+### Trigger a Manual Backup
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/backups \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+### List Backups
+
+```bash
+curl https://your-host/api/v1/projects/my-app/backups \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+### Restore from Backup
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/backups/backup_2026-01-15/restore \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+---
+
+## 21. Seed Utility
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/seed \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "collection": "users",
+    "documents": [
+      {"email": "alice@test.com", "name": "Alice"},
+      {"email": "bob@test.com", "name": "Bob"}
+    ],
+    "dedupOn": ["email"]
+  }'
+```
+
+Response:
+```json
+{
+  "inserted": 2,
+  "skipped": 0,
+  "errors": []
+}
+```
+
+---
+
+## 22. PostgREST/Supabase Compatibility
+
+The `/rest/v1/<collection>` endpoint implements PostgREST query syntax:
+
+```bash
+# Query with filter, select, order
+curl "https://your-host/rest/v1/users?select=email,age&age=gt.18&order=age.desc&limit=10" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+
+# Insert
+curl -X POST "https://your-host/rest/v1/users" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: return=representation" \
+  -d '{"email":"alice@example.com"}'
+
+# Update
+curl -X PATCH "https://your-host/rest/v1/users?email=eq.alice@example.com" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"age": 31}'
+
+# Delete
+curl -X DELETE "https://your-host/rest/v1/users?email=eq.alice@example.com" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+Supported operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `like`, `ilike`, `is`, `isnot`, `in`, `nin`, `cs`, `cd`. Groups via `and=(...)` and `or=(...)`.
+
+---
+
+## 23. SQLite Compatibility
+
+```bash
+curl -X POST https://your-host/sql/v1 \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "SELECT * FROM users WHERE age > ? AND active = ? ORDER BY age DESC LIMIT 10",
+    "params": [18, true]
+  }'
+```
+
+Supported statements: `SELECT` (DISTINCT, WHERE, ORDER BY, LIMIT, OFFSET),
+`INSERT INTO ... (cols) VALUES (...)`, `UPDATE ... SET ... WHERE`, `DELETE FROM
+... WHERE`, `ALTER TABLE <collection> ADD COLUMN [IF NOT EXISTS] <name> <type>
+[NOT NULL]`, and `PRAGMA table_info(<collection>)`.
+
+WHERE operators: `=`, `!=`, `<>`, `<`, `<=`, `>`, `>=`, `LIKE`, `ILIKE`, `IN`,
+`IS NULL`, `IS NOT NULL`, `AND`, `OR`, `NOT`. Parenthesized groups (e.g.
+`WHERE (a = 1 OR b = 2) AND c = 3`) are supported.
+
+### SQL compatibility features
+
+The SQL parser now accepts the following SQLite-flavored constructs that
+previously returned parse errors. All features work on both the `/sql/v1`
+endpoint and the `/api/v1/sql` (better-sqlite3 adapter) endpoint, since they
+share a single executor (`src/core/compat/sql-executor.ts`).
+
+- **`UPPER(col)` / `LOWER(col)` in comparisons.** `WHERE UPPER(email) =
+  UPPER('Alice@Example.com')` is lowered to a case-insensitive equality test
+  against the column (`eqi` / `neqi` filter operators). Only `=` and `!=` are
+  supported with `UPPER`/`LOWER`; other operators fall back to the regular
+  comparison.
+- **`IN` clause with value lists.** `WHERE status IN ('active', 'pending')`
+  translates to the `in` filter operator. Negation via `NOT IN` translates to
+  `nin`. The left operand must be a column reference.
+- **`IS NULL` / `IS NOT NULL` in compound WHERE.** Previously these only worked
+  at the top level; they now combine correctly with `AND`, `OR`, and
+  parenthesized groups.
+- **`OR` in compound WHERE.** `WHERE a = 1 OR b = 2` and the parenthesized form
+  `WHERE (a = 1 OR b = 2) AND c = 3` parse and lower to the `or` filter group
+  correctly. The parser no longer silently treats `OR` as `AND`.
+- **`datetime('now')`, `date('now')`, `time('now')` in comparisons.** These
+  function calls are eagerly evaluated at parse time to the current ISO 8601
+  timestamp, so `WHERE created_at < datetime('now')` filters documents whose
+  `created_at` is earlier than the request moment. The literal is computed once
+  per request, not per row.
+- **`count(*)` with WHERE.** `SELECT count(*) FROM users WHERE active = 1`
+  delegates to `engine.countDocuments` so the `WHERE` clause is honored even on
+  large collections. The result row uses the alias `count` by default; supply
+  `count(*) AS total` to override. `count(<col>)` is also accepted and currently
+  has the same semantics as `count(*)`.
+- **`ORDER BY` with quoted column names.** `ORDER BY "order" ASC` sorts by a
+  column whose name happens to be a reserved word. Double-quoted identifiers are
+  never treated as keywords (SQL standard), so `"order"`, `"select"`, `"from"`,
+  etc. all work as column references.
+- **`LIMIT` always respected.** When `LIMIT N` is present (even without
+  `OFFSET`), the executor passes a cursor to the engine so the limit is
+  enforced. Previously a missing `OFFSET` could cause `LIMIT` to be ignored.
+- **Multi-row `INSERT`.** `INSERT INTO users (name, age) VALUES ('Alice', 30),
+  ('Bob', 25), ('Carol', 40)` inserts all three rows in a single statement. The
+  response reports `changes: 3` and `lastInsertRowid` set to the last inserted
+  document's revision.
+- **`ALTER TABLE <collection> ADD COLUMN [IF NOT EXISTS] <name> <type> [NOT
+  NULL]`.** Maps SQLite types (TEXT, INTEGER, REAL, BOOLEAN, DATE, DATETIME,
+  UUID, JSON, BLOB, etc.) to Lightbase FieldTypes and calls
+  `engine.updateCollectionSchema` to add the field without losing existing
+  documents. `IF NOT EXISTS` makes the statement a no-op when the field already
+  exists (returns `changes: 0`); without it, a duplicate field name returns
+  `409 Conflict`.
+- **`PRAGMA table_info(<collection>)`.** Returns one row per field in the
+  collection schema, mirroring SQLite's `table_info()` output shape (`cid`,
+  `name`, `type`, `notnull`, `dflt_value`, `pk`). Missing collections return an
+  empty array (matching SQLite). Other pragmas return an empty result set.
+
+### Example: schema introspection and evolution via SQL
+
+```bash
+# Introspect the schema of an existing collection
+curl -X POST https://your-host/sql/v1 \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "PRAGMA table_info(users)"}'
+
+# Add a column idempotently
+curl -X POST https://your-host/sql/v1 \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT"}'
+
+# Case-insensitive search
+curl -X POST https://your-host/sql/v1 \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "SELECT id, email FROM users WHERE UPPER(email) = UPPER(''alice@example.com'')"}'
+
+# Count with a WHERE clause
+curl -X POST https://your-host/sql/v1 \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "SELECT count(*) AS total FROM users WHERE age >= 18"}'
+
+# Multi-row insert
+curl -X POST https://your-host/sql/v1 \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "INSERT INTO users (name, age) VALUES (''Alice'', 30), (''Bob'', 25)"}'
+```
+
+---
+
+## 24. Error Handling
+
+All errors follow a consistent JSON structure. For HTTP requests, the envelope
+includes `method` and `path` fields inside `error` so clients can correlate a
+failure with the exact request that produced it:
+
+```json
+{
+  "error": {
+    "code": "validation.failed",
+    "domain": "validation",
+    "message": "Request body failed validation.",
+    "timestamp": "2026-01-15T10:30:00.000Z",
+    "details": {
+      "email": "Invalid email format"
+    },
+    "method": "POST",
+    "path": "/api/v1/projects/my-app/collections/users"
+  },
+  "correlationId": "abc123"
+}
+```
+
+The `method` and `path` fields are omitted only when the error originated
+outside an HTTP request context (e.g. internal engine calls). The top-level
+`correlationId` is preserved for backward compatibility and matches the
+`x-correlation-id` response header.
+
+### Error Codes
+
+| Status | Code | Domain | Description |
+|---|---|---|---|
+| 400 | `validation.failed` | validation | Invalid input |
+| 401 | `auth.invalid_credentials` | auth | Invalid API key or JWT |
+| 403 | `authz.forbidden` | authz | Insufficient scope |
+| 404 | `not_found` | not_found | Resource not found |
+| 409 | `storage.conflict` | storage | Unique constraint violation or revision mismatch |
+| 429 | `quota.exceeded` | quota | Quota exceeded |
+| 429 | `rate_limit.exceeded` | rate_limit | Rate limit exceeded |
+| 500 | `internal.error` | internal | Server error |
+
+The `correlationId` can be used to trace requests in server logs. The `timestamp` helps correlate client-reported errors with server logs. The `method` and `path` fields are also written to the server-side structured logs for both 4xx and 5xx responses, alongside the full stack trace for 5xx errors.
+
+---
+
+## 25. Rate Limiting
+
+Three independent rate limiters:
+
+| Limiter | Default | Scope |
+|---|---|---|
+| Per-IP | 600 req/min | All requests |
+| Per-API-key | 600 req/min | Authenticated requests |
+| Per-project | 600 req/min | All requests to a project |
+
+Rate limit headers:
+- `X-RateLimit-Limit`: Maximum requests per window
+- `X-RateLimit-Remaining`: Remaining requests in current window
+- `X-RateLimit-Reset`: Unix timestamp when the window resets
+
+When rate limited, the response is 429 with a `reset_ms` field indicating when to retry.
+
+---
+
+## 26. Security
+
+- API keys are hashed with SHA-256 + salt + per-project pepper
+- JWTs signed with HS256 using per-project HKDF-derived keys
+- All secret comparisons use constant-time comparison
+- Document checksums (SHA-256) for tamper detection
+- Unique constraint enforcement on insert and update
+- AES-256-GCM field-level encryption available
+- CORS: origin-based (not wildcard), preflight handling
+- Request body size limit: 100 MB
+- Path traversal prevention
+- Security headers on every response (HSTS, X-Frame-Options, etc.)
+- Full audit trail with before/after fingerprints
+
+---
+
+## 27. SDK Examples
+
+### JavaScript/TypeScript
+
+```typescript
+const BASE = 'https://your-lightbase-host';
+const API_KEY = 'lb_live_xxx';
+const PROJECT = 'my-app';
+
+const headers = {
+  'apikey': API_KEY,
+  'x-lightbase-project': PROJECT,
+  'Content-Type': 'application/json',
+};
+
+// Insert
+const insertRes = await fetch(`${BASE}/api/v1/projects/${PROJECT}/collections/users`, {
+  method: 'POST', headers,
+  body: JSON.stringify({ email: 'alice@example.com', age: 30 }),
+});
+const { document } = await insertRes.json();
+
+// Query
+const queryRes = await fetch(
+  `${BASE}/api/v1/projects/${PROJECT}/collections/users/docs?filter=${encodeURIComponent(JSON.stringify({field:'age',op:'gt',value:18}))}&sort=age:desc&limit=10`,
+  { headers }
+);
+const { data, hasMore, nextCursor } = await queryRes.json();
+
+// Realtime
+const es = new EventSource(`${BASE}/api/v1/projects/${PROJECT}/realtime/subscribe`, { headers });
+es.addEventListener('document.created', (e) => console.log(JSON.parse(e.data)));
+```
+
+### Python
+
+```python
+import requests
+
+BASE = 'https://your-lightbase-host'
+API_KEY = 'lb_live_xxx'
+PROJECT = 'my-app'
+headers = {'apikey': API_KEY, 'x-lightbase-project': PROJECT, 'Content-Type': 'application/json'}
+
+# Insert
+r = requests.post(f'{BASE}/api/v1/projects/{PROJECT}/collections/users', headers=headers, json={'email': 'alice@example.com', 'age': 30})
+doc = r.json()['document']
+
+# Query
+import json
+filter_param = json.dumps({'field': 'age', 'op': 'gt', 'value': 18})
+r = requests.get(f'{BASE}/api/v1/projects/{PROJECT}/collections/users/docs', headers=headers, params={'filter': filter_param, 'sort': 'age:desc', 'limit': 10})
+result = r.json()
+```
+
+### cURL
+
+```bash
+# Insert
+curl -X POST https://your-host/api/v1/projects/my-app/collections/users \
+  -H "apikey: lb_live_xxx" -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com","age":30}'
+
+# Query
+curl "https://your-host/api/v1/projects/my-app/collections/users/docs?filter=%7B%22field%22%3A%22age%22%2C%22op%22%3A%22gt%22%2C%22value%22%3A18%7D&limit=10" \
+  -H "apikey: lb_live_xxx" -H "x-lightbase-project: my-app"
+```
+
+---
+
+## Migration Guides
+
+### From Supabase
+
+1. Change base URL from `https://<project>.supabase.co/rest/v1` to `https://your-host/rest/v1`
+2. Keep the same query syntax (select, filter, order, limit)
+3. Use the `apikey` header convention
+4. Create collections in Lightbase that mirror your Supabase tables
+5. Migrate data via the bulk insert or seed API
+
+### From Firebase
+
+1. Collections map to Firestore collections
+2. Documents map to Firestore documents
+3. Use the v1 REST API for CRUD
+4. Realtime via SSE instead of Firestore listeners
+
+### From SQLite
+
+1. Replace your SQLite client's query call with `POST /sql/v1`
+2. Pass the SQL as `query` and parameters as `params`
+
+---
+
+## 28. Schema Migrations
+
+Lightbase tracks a versioned schema per collection. When you change a collection's schema through `PUT /api/v1/projects/:id/collections/:name` (see section 39), Lightbase re-validates the new schema, writes it to disk atomically, refreshes the in-memory cache, invalidates the per-collection query cache, bumps the schema `revision`, and emits a `collection.updated` audit event. The migration history endpoints below let you inspect and roll back migrations recorded by the `MigrationManager`. Note that the `PUT /collections/:name` endpoint updates the schema in place and returns the new schema; it does not by itself emit a migration record. To record explicit migration steps (with a description, before/after schemas, and rollback support), use the `MigrationManager` directly or post a migration record via the SQL endpoint's `ALTER TABLE` shim.
+
+### List Migration History
+
+```bash
+curl https://your-host/api/v1/projects/my-app/migrations/users \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+Response:
+
+```json
+{
+  "collection": "users",
+  "migrations": [
+    {
+      "id": "mig_01HQ2K7P9XY4T3N1Z5V8B6R0MJ",
+      "version": 3,
+      "appliedAt": "2026-02-14T09:31:12.482Z",
+      "steps": [
+        { "op": "addField", "field": "displayName", "type": "string" },
+        { "op": "setOptional", "field": "displayName" }
+      ]
+    },
+    {
+      "id": "mig_01HQ2J4F0DS2E1M2Q9W7V3B5NG",
+      "version": 2,
+      "appliedAt": "2026-02-10T14:02:55.118Z",
+      "steps": [
+        { "op": "changeFieldType", "field": "age", "from": "string", "to": "int" }
+      ]
+    },
+    {
+      "id": "mig_01HQ2G1H8WX9R0K3T4Y6F2B7PL",
+      "version": 1,
+      "appliedAt": "2026-02-01T08:18:01.001Z",
+      "steps": [
+        { "op": "createCollection" }
+      ]
+    }
+  ]
+}
+```
+
+### Roll Back the Latest Migration
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/migrations/users/rollback \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+Response:
+
+```json
+{
+  "rolledBack": true,
+  "collection": "users",
+  "fromVersion": 3,
+  "toVersion": 2,
+  "steps": [
+    { "op": "removeField", "field": "displayName" }
+  ]
+}
+```
+
+A rollback reverses each step in the latest migration in reverse order. Only the most recent migration can be rolled back at a time; call the endpoint again to roll back the previous one. Rollbacks are themselves recorded in history.
+
+### Migration Steps
+
+Lightbase computes and applies the following step types when diffing two schema versions. They are also the building blocks you will see in the migration history and in rollback output.
+
+| Step | Description |
+|---|---|
+| `addField` | Add a new field. Existing documents receive the field's default value (or `null` if optional and no default). |
+| `removeField` | Remove a field from the schema and strip it from all documents. |
+| `renameField` | Rename a field. Values are preserved; indexes are updated. |
+| `changeFieldType` | Convert stored values to the new type using coercions (e.g. string -> int, int -> float). Non-coercible values become `null`. |
+| `addIndex` | Create a new index on an existing field. Built incrementally over current documents. |
+| `removeIndex` | Drop an existing index. |
+| `setRequired` | Mark a previously-optional field as required. Documents missing the field are populated with the default value; the migration fails if no default is defined and any document is missing the field. |
+| `setOptional` | Mark a previously-required field as optional. No data change. |
+
+Each step records its operands (field name, type, index name, etc.) so the migration is fully reversible.
+
+### Triggering a Migration
+
+The `PUT /api/v1/projects/:id/collections/:name` endpoint updates the schema
+in place (see section 39 for the full request/response contract). The response
+is the updated collection schema with the new `revision`:
+
+```bash
+curl -X PUT https://your-host/api/v1/projects/my-app/collections/users \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "users",
+    "fields": [
+      { "name": "email", "type": "string", "required": true, "indexed": true },
+      { "name": "age", "type": "integer" },
+      { "name": "displayName", "type": "string" }
+    ],
+    "indexes": [{ "name": "by_email", "fields": ["email"], "unique": true }]
+  }'
+```
+
+```json
+{
+  "collection": {
+    "name": "users",
+    "fields": [
+      { "name": "email", "type": "string", "required": true, "indexed": true },
+      { "name": "age", "type": "integer" },
+      { "name": "displayName", "type": "string" }
+    ],
+    "indexes": [{ "name": "by_email", "fields": ["email"], "unique": true }],
+    "revision": 2,
+    "createdAt": "2026-02-01T08:18:01.001Z",
+    "updatedAt": "2026-02-14T09:31:12.482Z"
+  }
+}
+```
+
+Existing documents are preserved as-is. To coerce existing values to a new type
+or to record explicit migration steps (with rollback support), use the
+`MigrationManager` directly or the SQL endpoint's `ALTER TABLE ADD COLUMN`
+shim (section 23).
+
+---
+
+## 29. GraphQL API
+
+Every Lightbase project exposes a GraphQL endpoint at `/api/v1/projects/:id/graphql`. The schema is auto-generated from the project's collection definitions, so any change to a collection schema immediately reflects in the GraphQL schema.
+
+### Schema Introspection
+
+A `GET` request returns the GraphQL schema in SDL (schema definition language):
+
+```bash
+curl https://your-host/api/v1/projects/my-app/graphql \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+Response (truncated):
+
+```graphql
+type User {
+  id: ID!
+  email: String!
+  age: Int
+  displayName: String
+  createdAt: String!
+  updatedAt: String!
+  _revision: Int!
+}
+
+type Query {
+  user(id: ID!): User
+  users(filter: JSON, sort: String, limit: Int, after: String): UserPage!
+  usersCount(filter: JSON): Int!
+}
+
+type Mutation {
+  insertUser(input: UserInput!): User!
+  updateUser(id: ID!, input: UserInput!, revision: Int): User!
+  deleteUser(id: ID!, revision: Int): Boolean!
+}
+
+input UserInput {
+  email: String
+  age: Int
+  displayName: String
+}
+
+type UserPage {
+  data: [User!]!
+  hasMore: Boolean!
+  nextCursor: String
+}
+```
+
+### Execute Queries
+
+Send GraphQL operations as `POST` requests:
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/graphql \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "query($id: ID!){ user(id: $id){ id email age } }",
+    "variables": { "id": "01HQ2K7P9XY4T3N1Z5V8B6R0MJ" }
+  }'
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "user": {
+      "id": "01HQ2K7P9XY4T3N1Z5V8B6R0MJ",
+      "email": "alice@example.com",
+      "age": 30
+    }
+  }
+}
+```
+
+### Query Examples
+
+List documents with filter, sort, and pagination:
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/graphql \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "query { users(filter: {field: \"age\", op: \"gt\", value: 18}, sort: \"age:desc\", limit: 10) { data { id email age } hasMore nextCursor } }"
+  }'
+```
+
+Count documents matching a filter:
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/graphql \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "query { usersCount(filter: {field: \"age\", op: \"gte\", value: 18}) }"
+  }'
+```
+
+### Mutation Examples
+
+Insert a new document:
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/graphql \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "mutation($input: UserInput!){ insertUser(input: $input){ id email } }",
+    "variables": { "input": { "email": "bob@example.com", "age": 25 } }
+  }'
+```
+
+Update a document (with optimistic concurrency via `revision`):
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/graphql \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "mutation($id: ID!, $input: UserInput!, $revision: Int){ updateUser(id: $id, input: $input, revision: $revision){ id _revision } }",
+    "variables": {
+      "id": "01HQ2K7P9XY4T3N1Z5V8B6R0MJ",
+      "input": { "age": 31 },
+      "revision": 4
+    }
+  }'
+```
+
+Delete a document:
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/graphql \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "mutation($id: ID!){ deleteUser(id: $id) }",
+    "variables": { "id": "01HQ2K7P9XY4T3N1Z5V8B6R0MJ" }
+  }'
+```
+
+### Notes
+
+- The same authentication and authorization rules apply as the REST API: the API key or JWT must have `read` scope for queries and `write` scope for mutations.
+- The `filter` argument accepts the same JSON filter expression used by the REST API.
+- GraphQL queries use the query result cache described in section 29, so repeated identical queries return instantly.
+
+---
+
+## 30. Change Data Capture (CDC) Stream
+
+Lightbase exposes a per-project change data capture stream that records every insert, update, and delete across all collections. Each event has a monotonically increasing sequence number that is unique per project. Consumers can read historical events via REST or subscribe to live events via Server-Sent Events.
+
+### Read Events (REST)
+
+```bash
+curl "https://your-host/api/v1/projects/my-app/cdc?since=0&limit=100" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+Query parameters:
+
+| Param | Default | Description |
+|---|---|---|
+| `since` | `0` | Return events with `seq` strictly greater than this value. Use the highest `seq` you have processed to resume without gaps. |
+| `limit` | `100` | Maximum number of events to return (capped at 1000). |
+
+Response:
+
+```json
+{
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-02-14T09:31:12.482Z",
+      "collection": "users",
+      "operation": "insert",
+      "before": null,
+      "after": {
+        "id": "01HQ2K7P9XY4T3N1Z5V8B6R0MJ",
+        "email": "alice@example.com",
+        "age": 30,
+        "_revision": 1
+      }
+    },
+    {
+      "seq": 2,
+      "ts": "2026-02-14T09:32:50.118Z",
+      "collection": "users",
+      "operation": "update",
+      "before": { "id": "01HQ2K7P9XY4T3N1Z5V8B6R0MJ", "email": "alice@example.com", "age": 30, "_revision": 1 },
+      "after": { "id": "01HQ2K7P9XY4T3N1Z5V8B6R0MJ", "email": "alice@example.com", "age": 31, "_revision": 2 }
+    },
+    {
+      "seq": 3,
+      "ts": "2026-02-14T09:33:14.001Z",
+      "collection": "users",
+      "operation": "delete",
+      "before": { "id": "01HQ2K7P9XY4T3N1Z5V8B6R0MJ", "email": "alice@example.com", "age": 31, "_revision": 2 },
+      "after": null
+    }
+  ],
+  "nextSince": 3,
+  "hasMore": false
+}
+```
+
+### Stream Events (SSE)
+
+For real-time consumption, open an SSE connection to `/api/v1/projects/:id/cdc/stream`. The stream sends events as they are committed.
+
+```bash
+curl -N "https://your-host/api/v1/projects/my-app/cdc/stream?since=0" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Accept: text/event-stream"
+```
+
+Browser/EventSource example:
+
+```javascript
+const es = new EventSource(
+  'https://your-host/api/v1/projects/my-app/cdc/stream?since=0',
+  { headers: { apikey: 'lb_live_xxx', 'x-lightbase-project': 'my-app' } }
+);
+
+es.addEventListener('message', (e) => {
+  const event = JSON.parse(e.data);
+  console.log(event.seq, event.operation, event.collection);
+});
+
+es.onerror = () => {
+  // Reconnect with `since` set to the highest seq you have processed.
+  // The server also supports `Last-Event-ID` for automatic resume.
+};
+```
+
+Each SSE message has the same JSON shape as the REST event payload. The browser `EventSource` API does not allow custom headers, so for browser-based consumers you can pass the API key as a query parameter (`?apikey=lb_live_xxx&project=my-app`) or use a short-lived JWT in the URL.
+
+### Sequence Number Guarantees
+
+- Sequence numbers are per-project and monotonically increasing. There are no gaps within a project.
+- The `since` parameter is the contract for resumability: pass `nextSince` from the previous response as `since` on the next call to continue without duplicates or gaps.
+- Events are persisted to an append-only JSONL log in the project's meta partition, so they survive process restarts. Historical events are retained indefinitely unless a retention policy is configured.
+- The SSE stream replays any events with `seq > since` that occurred while the client was disconnected, then continues with live events.
+
+---
+
+## 31. Cloud Backup Providers
+
+In addition to the local-disk backup provider, Lightbase supports four real cloud backup providers. Each project can configure one provider at a time through the dashboard or the `PUT /api/v1/projects/:id/backups/config` endpoint.
+
+### Providers
+
+| Provider | Required Configuration |
+|---|---|
+| `local` | `localPath` (defaults to project meta directory) |
+| `s3` | `s3AccessKeyId`, `s3SecretAccessKey`, `s3Region`, `s3Bucket`, `s3Prefix`, `s3Endpoint` (optional, for S3-compatible stores like MinIO, R2, Wasabi) |
+| `gdrive` | `gdriveClientId`, `gdriveClientSecret`, `gdriveRefreshToken`, `gdriveFolderId` |
+| `dropbox` | `dropboxAppKey`, `dropboxAppSecret`, `dropboxRefreshToken` |
+| `onedrive` | `onedriveApplicationId`, `onedriveClientSecret`, `onedriveRefreshToken` |
+
+### S3 / S3-Compatible
+
+```bash
+curl -X PUT https://your-host/api/v1/projects/my-app/backups/config \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "s3",
+    "schedule": "daily",
+    "retentionDays": 30,
+    "s3AccessKeyId": "AKIAIOSFODNN7EXAMPLE",
+    "s3SecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    "s3Region": "us-east-1",
+    "s3Bucket": "my-lightbase-backups",
+    "s3Prefix": "my-app/"
+  }'
+```
+
+For S3-compatible providers (Cloudflare R2, MinIO, Wasabi, DigitalOcean Spaces, Backblaze B2), include `s3Endpoint`:
+
+```json
+{
+  "provider": "s3",
+  "s3Endpoint": "https://<account-id>.r2.cloudflarestorage.com",
+  "s3Region": "auto",
+  "s3Bucket": "lightbase",
+  "s3Prefix": "my-app/",
+  "s3AccessKeyId": "...",
+  "s3SecretAccessKey": "..."
+}
+```
+
+### Google Drive
+
+Google Drive backups use an OAuth refresh token. Obtain one as follows:
+
+1. Create an OAuth client in the Google Cloud Console (APIs & Services > Credentials) of type "Web application".
+2. Add `https://your-lightbase-host/app/oauth/google/callback` to the authorized redirect URIs.
+3. Use the dashboard's "Connect Google Drive" flow (Settings > Backups > Connect) to authorize and store the refresh token, or run the OAuth flow manually:
+
+```bash
+# 1. Open in a browser:
+https://accounts.google.com/o/oauth2/v2/auth?client_id=YOUR_CLIENT_ID&redirect_uri=https://your-lightbase-host/app/oauth/google/callback&response_type=code&scope=https://www.googleapis.com/auth/drive.file&access_type=offline&prompt=consent
+
+# 2. Exchange the returned code for a refresh token:
+curl -X POST https://oauth2.googleapis.com/token \
+  -d "client_id=YOUR_CLIENT_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  -d "code=RETURNED_CODE" \
+  -d "grant_type=authorization_code" \
+  -d "redirect_uri=https://your-lightbase-host/app/oauth/google/callback"
+```
+
+Then configure the project:
+
+```bash
+curl -X PUT https://your-host/api/v1/projects/my-app/backups/config \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "gdrive",
+    "schedule": "daily",
+    "retentionDays": 30,
+    "gdriveClientId": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "gdriveClientSecret": "YOUR_CLIENT_SECRET",
+    "gdriveRefreshToken": "1//0e...",
+    "gdriveFolderId": "1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
+  }'
+```
+
+### Dropbox
+
+Create a Dropbox app at https://www.dropbox.com/developers/apps with the "files.content.write" and "files.content.read" scopes. Use the dashboard's "Connect Dropbox" flow or exchange the OAuth code manually:
+
+```bash
+curl -X POST https://api.dropboxapi.com/oauth2/token \
+  -d "code=RETURNED_CODE" \
+  -d "grant_type=authorization_code" \
+  -d "client_id=YOUR_APP_KEY" \
+  -d "client_secret=YOUR_APP_SECRET"
+```
+
+Configure the project:
+
+```bash
+curl -X PUT https://your-host/api/v1/projects/my-app/backups/config \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "dropbox",
+    "schedule": "weekly",
+    "retentionDays": 90,
+    "dropboxAppKey": "YOUR_APP_KEY",
+    "dropboxAppSecret": "YOUR_APP_SECRET",
+    "dropboxRefreshToken": "1//0e..."
+  }'
+```
+
+### OneDrive
+
+Register an application in the Microsoft Entra ID (Azure AD) portal with the "Files.ReadWrite" Microsoft Graph scope. Use the dashboard's "Connect OneDrive" flow, or exchange the OAuth code:
+
+```bash
+curl -X POST https://login.microsoftonline.com/common/oauth2/v2.0/token \
+  -d "client_id=YOUR_APPLICATION_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  -d "code=RETURNED_CODE" \
+  -d "grant_type=authorization_code" \
+  -d "scope=https://graph.microsoft.com/.default" \
+  -d "redirect_uri=https://your-lightbase-host/app/oauth/onedrive/callback"
+```
+
+Configure the project:
+
+```bash
+curl -X PUT https://your-host/api/v1/projects/my-app/backups/config \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "onedrive",
+    "schedule": "daily",
+    "retentionDays": 30,
+    "onedriveApplicationId": "YOUR_APPLICATION_ID",
+    "onedriveClientSecret": "YOUR_CLIENT_SECRET",
+    "onedriveRefreshToken": "0.AXoA..."
+  }'
+```
+
+### Environment Variable Fallbacks
+
+Cloud credentials can be supplied at the platform level instead of per project. When a field is omitted from the project's backup config, Lightbase falls back to the matching environment variable:
+
+| Field | Env Var |
+|---|---|
+| `s3AccessKeyId` | `LIGHTBASE_BACKUP_S3_ACCESS_KEY_ID` |
+| `s3SecretAccessKey` | `LIGHTBASE_BACKUP_S3_SECRET_ACCESS_KEY` |
+| `s3Region` | `LIGHTBASE_BACKUP_S3_REGION` |
+| `s3Bucket` | `LIGHTBASE_BACKUP_S3_BUCKET` |
+| `s3Prefix` | `LIGHTBASE_BACKUP_S3_PREFIX` |
+| `s3Endpoint` | `LIGHTBASE_BACKUP_S3_ENDPOINT` |
+| `gdriveClientId` | `LIGHTBASE_BACKUP_GDRIVE_CLIENT_ID` |
+| `gdriveClientSecret` | `LIGHTBASE_BACKUP_GDRIVE_CLIENT_SECRET` |
+| `gdriveRefreshToken` | `LIGHTBASE_BACKUP_GDRIVE_REFRESH_TOKEN` |
+| `gdriveFolderId` | `LIGHTBASE_BACKUP_GDRIVE_FOLDER_ID` |
+| `dropboxAppKey` | `LIGHTBASE_BACKUP_DROPBOX_APP_KEY` |
+| `dropboxAppSecret` | `LIGHTBASE_BACKUP_DROPBOX_APP_SECRET` |
+| `dropboxRefreshToken` | `LIGHTBASE_BACKUP_DROPBOX_REFRESH_TOKEN` |
+| `onedriveApplicationId` | `LIGHTBASE_BACKUP_ONEDRIVE_APPLICATION_ID` |
+| `onedriveClientSecret` | `LIGHTBASE_BACKUP_ONEDRIVE_CLIENT_SECRET` |
+| `onedriveRefreshToken` | `LIGHTBASE_BACKUP_ONEDRIVE_REFRESH_TOKEN` |
+
+This is useful for single-tenant deployments where every project uses the same cloud account.
+
+### Backup and Restore Operations
+
+Trigger a backup, list backups, and restore exactly as with the local provider (see section 20). For cloud providers, the restore operation downloads the backup archive from the cloud and writes it back to the project's data partition. If a cloud download fails (transient network error, revoked token, deleted file), Lightbase falls back to a local copy if one exists.
+
+### Dashboard Configuration
+
+Visit **Dashboard > Backups** to:
+
+- Select a provider from a dropdown.
+- Paste credentials into the form fields. Secret fields (`*_secret`, `*_refresh_token`) are masked and write-only.
+- Use the "Connect" buttons next to Google Drive, Dropbox, and OneDrive to run the OAuth flow in a popup and store the resulting refresh token automatically.
+- Trigger a test backup to verify credentials before saving.
+- View the backup history and restore from any previous backup.
+
+---
+
+## 32. Audit Log Streaming
+
+Lightbase streams the audit log of a project over Server-Sent Events so operators can watch document operations, key events, and authentication activity in real time from a browser or any SSE-capable client.
+
+### Endpoint
+
+```
+GET /api/v1/projects/:id/audit/stream
+```
+
+- **Authentication:** API key (with `read` scope) or JWT. Pass via the `apikey` header or `Authorization: Bearer <jwt>` header, plus `x-lightbase-project: <project-id>`.
+- **Content-Type:** `text/event-stream`
+- **Cache-Control:** `no-cache, no-transform`
+- **Connection:** `keep-alive`
+- **X-Accel-Buffering:** `no` (disables proxy buffering in Nginx)
+
+### Stream Behavior
+
+1. On connect, the server reads the project's audit log JSONL file, parses the most recent 100 entries, and sends them as historical events in reverse chronological order (most recent first).
+2. After the historical burst, the server sends a comment `: ping` line every 30 seconds to keep the connection alive through proxies and load balancers.
+3. New audit events written to the log after the connection is open are NOT pushed to existing SSE clients in the current implementation; reconnect to pick up new historical entries. The dashboard's audit-stream page uses a periodic reconnect pattern when long-lived streaming is required.
+4. The connection is closed when the client aborts the request or the network drops. The server cleans up its ping interval on abort.
+
+### Event Structure
+
+Each `data:` line is a JSON object with the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `ts` | string (ISO 8601) | Timestamp of the audit event |
+| `event` | string | Event type (e.g. `document.created`, `document.updated`, `document.deleted`, `auth.failure`, `key.created`, `key.revoked`) |
+| `collection` | string \| null | Collection name (when applicable) |
+| `docId` | string \| null | Document ID (when applicable) |
+| `actor` | object | `{ type: 'apikey' \| 'dashboard' \| 'system', id: string }` describing who triggered the event |
+
+Example event:
+
+```json
+{
+  "ts": "2025-01-14T12:34:56.789Z",
+  "event": "document.updated",
+  "collection": "users",
+  "docId": "01HQ2K7P9XY4T3N1Z5V8B6R0MJ",
+  "actor": { "type": "apikey", "id": "01HQ2K8F2XY6T5N2Z6V8B7R0KP" }
+}
+```
+
+### Example: Connect with curl
+
+```bash
+curl -N -H "apikey: lb_live_xxx" \
+     -H "x-lightbase-project: my-app" \
+     https://your-host/api/v1/projects/my-app/audit/stream
+```
+
+The `-N` flag disables curl's output buffering so events are printed as they arrive.
+
+### Example: EventSource in JavaScript
+
+The browser `EventSource` API cannot set custom headers, so for browser-based streaming you must pass the API key as a query parameter (only do this over HTTPS and prefer short-lived JWTs):
+
+```javascript
+const projectId = 'my-app';
+const token = 'lb_live_xxx'; // or a short-lived JWT
+
+const url = `https://your-host/api/v1/projects/${projectId}/audit/stream?apikey=${encodeURIComponent(token)}`;
+const es = new EventSource(url);
+
+es.onopen = () => {
+  console.log('audit stream connected');
+};
+
+es.onmessage = (msg) => {
+  // Comment lines (": ping") do not trigger onmessage.
+  try {
+    const event = JSON.parse(msg.data);
+    console.log(
+      event.ts,
+      event.event,
+      event.collection,
+      event.docId,
+      event.actor,
+    );
+  } catch (err) {
+    console.warn('non-JSON audit event', msg.data);
+  }
+};
+
+es.onerror = (err) => {
+  console.error('audit stream error', err);
+  // EventSource reconnects automatically. Close with es.close() to stop.
+};
+
+// Stop streaming after 5 minutes:
+setTimeout(() => es.close(), 5 * 60 * 1000);
+```
+
+For server-side streaming (Node.js), use `undici` or `node-fetch` with a `ReadableStream` consumer and explicit `apikey` header.
+
+### Dashboard UI
+
+Visit **Dashboard > Audit > Stream** (`/app/audit/stream`) for a built-in viewer:
+
+- A connection status badge (Disconnected / Connecting / Connected) with a color-coded dot.
+- A Connect/Disconnect toggle button.
+- A live table that caps the displayed events at 200 (oldest dropped) with timestamp, event type, collection, doc ID, and actor columns.
+- An auto-scroll toggle (defaults on).
+- A Clear button to empty the in-memory table without disconnecting.
+
+The dashboard page authenticates with the user's session cookie, so no API key is required.
+
+---
+
+## 33. Field-Level Encryption
+
+Lightbase supports transparent at-rest encryption of individual fields. Mark a field as `encrypted: true` in the collection schema and Lightbase will encrypt the value with AES-256-GCM before writing it to disk and decrypt it transparently on read.
+
+### Declare an Encrypted Field
+
+Add `encrypted: true` to any string, text, number, bool, enum, or json field definition:
+
+```json
+{
+  "name": "users",
+  "fields": [
+    { "name": "email",   "type": "string", "required": true, "indexed": true },
+    { "name": "ssn",     "type": "string", "encrypted": true },
+    { "name": "notes",   "type": "text",   "encrypted": true },
+    { "name": "address", "type": "json",   "encrypted": true }
+  ],
+  "indexes": [{ "name": "email_idx", "fields": ["email"], "unique": true }]
+}
+```
+
+Create the collection via the API:
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/collections \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "users",
+    "fields": [
+      { "name": "email", "type": "string", "required": true, "indexed": true },
+      { "name": "ssn",   "type": "string", "encrypted": true }
+    ],
+    "indexes": [{ "name": "email_idx", "fields": ["email"], "unique": true }]
+  }'
+```
+
+### Insert and Read Encrypted Documents
+
+Insert a document as normal - the plaintext value is sent over HTTPS and Lightbase encrypts it before persisting:
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/collections/users \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "ada@example.com", "ssn": "123-45-6789" }'
+```
+
+Read the document back - the value is decrypted transparently:
+
+```bash
+curl -X GET https://your-host/api/v1/projects/my-app/collections/users/01HQ2K7P9XY4T3N1Z5V8B6R0MJ \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+Response (the `ssn` field is decrypted in flight):
+
+```json
+{
+  "document": {
+    "id": "01HQ2K7P9XY4T3N1Z5V8B6R0MJ",
+    "_revision": 1,
+    "_created_at": "2025-01-14T12:00:00.000Z",
+    "_updated_at": "2025-01-14T12:00:00.000Z",
+    "email": "ada@example.com",
+    "ssn": "123-45-6789"
+  }
+}
+```
+
+### Encryption Properties
+
+- **Algorithm:** AES-256-GCM (authenticated encryption). The 12-byte IV, ciphertext, and 16-byte auth tag are concatenated and base64-encoded. Tampering with the stored value causes decryption to fail with an auth-tag mismatch.
+- **Key derivation:** A 32-byte encryption key is derived from the project master key (`LIGHTBASE_MASTER_KEY`) via HKDF using a per-project info string (`encrypt:<projectId>`). Each project has a distinct encryption key.
+- **Storage format:** Encrypted values are persisted on disk with the literal prefix `enc:` so the storage engine can recognize them on read. The base64 ciphertext (IV + ciphertext + tag) follows the prefix.
+- **Object values:** When an encrypted field is of type `json` (or contains an object), the engine JSON-stringifies the value before encryption and attempts `JSON.parse` on decryption, falling back to the raw string if parsing fails.
+
+### Limitations
+
+- **No filtering or sorting on encrypted fields.** Because the ciphertext is non-deterministic (random IV), Lightbase cannot compare two encrypted values for equality or ordering. Filters and sort clauses referencing encrypted fields silently match nothing (or are rejected at validation time, depending on the field type).
+- **No unique indexes on encrypted fields.** Unique constraint checks require equality comparison, which is not possible on ciphertext.
+- **Backups:** Cloud and local backups store the encrypted ciphertext. Restoring a backup on a different Lightbase instance with a different `LIGHTBASE_MASTER_KEY` will not be readable. Keep the master key with the backups.
+- **Field removal during migration:** If a migration removes an encrypted field, the ciphertext for that field remains in already-written document files until the documents are next written. Use a migration that rewrites the documents to fully purge old ciphertext.
+- **Performance:** Encryption and decryption add a small per-field CPU cost. Benchmark with realistic document sizes if you encrypt many fields per document.
+
+### Blind Index Pattern
+
+If you need to look up documents by an encrypted field (e.g. search by SSN), maintain a separate indexed HMAC field that you populate on write:
+
+```json
+{
+  "name": "users",
+  "fields": [
+    { "name": "ssn",          "type": "string", "encrypted": true },
+    { "name": "ssnBlindIndex", "type": "string", "indexed": true }
+  ],
+  "indexes": [{ "name": "ssn_blind_idx", "fields": ["ssnBlindIndex"], "unique": true }]
+}
+```
+
+Compute the HMAC in your application code (or in a `before insert/update` edge function) and store it in `ssnBlindIndex`. Queries then filter on `ssnBlindIndex` instead of the encrypted `ssn`.
+
+### Dashboard UI
+
+Visit **Dashboard > Collections** and edit the collection schema. Each field row has an **enc** checkbox. Tick it to mark the field as encrypted. The checkbox has a tooltip explaining that AES-256-GCM encryption at rest is enabled. Save the collection to apply.
+
+---
+
+## 34. IP Allow-listing per API Key
+
+Each API key can be restricted to a set of allowed source IP addresses. When the allow-list is set on a key, Lightbase validates the client's IP on every request that uses that key and rejects requests from any other IP with `401 Unauthorized`.
+
+### Set `allowedIps` When Creating a Key
+
+Use the `allowedIps` field when creating a key via the v1 API:
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/keys \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "office-backend",
+    "env": "live",
+    "scopes": ["read", "write"],
+    "collections": ["users", "orders"],
+    "allowedIps": ["203.0.113.10", "198.51.100.0/24"]
+  }'
+```
+
+Response:
+
+```json
+{
+  "key": {
+    "id": "01HQ2K8F2XY6T5N2Z6V8B7R0KP",
+    "name": "office-backend",
+    "env": "live",
+    "scopes": ["read", "write"],
+    "collections": ["users", "orders"],
+    "allowedIps": ["203.0.113.10", "198.51.100.0/24"]
+  },
+  "secret": "lb_live_yyy",
+  "warning": "Store the secret securely. It will not be shown again."
+}
+```
+
+### Supported IP Formats
+
+- **Exact IPv4:** `203.0.113.10` matches only that IP.
+- **CIDR range:** `198.51.100.0/24` matches every IP from `198.51.100.0` to `198.51.100.255`.
+- **Wildcard:** `192.168.*.*` matches any IP in the `192.168.x.x` range. Each `*` matches one or more digits in the dotted-quad representation.
+
+Mixing formats in a single `allowedIps` array is supported. The check is OR: the request is allowed if the client IP matches any entry.
+
+### Enforcement
+
+On every authenticated request:
+
+1. The auth middleware resolves the client IP from the `x-forwarded-for` header (first hop) if present, otherwise from the socket's remote address.
+2. If the resolved API key record has a non-empty `allowedIps` array, Lightbase runs an IP allow-list check.
+3. If the client IP matches any entry, the request proceeds.
+4. If the client IP does not match, Lightbase returns `401 Unauthorized` with body:
+
+```json
+{
+  "error": {
+    "code": "AUTHENTICATION_ERROR",
+    "message": "Client IP not allowed for this API key."
+  }
+}
+```
+
+An audit event (`auth.failure` with reason `ip_not_allowed`) is written to the project's audit log. The API key's `lastUsedAt` is not updated on a denied request.
+
+### Use Cases
+
+- **Office backend:** Restrict a server-to-server key to your office NAT IP or VPN exit IP.
+- **Cloud egress:** Restrict a key to your cloud provider's egress CIDR (e.g. AWS VPC, GCP VPC, Cloudflare Workers egress range).
+- **Per-environment:** Issue separate keys to staging and production with different allow-lists.
+- **Audit hardening:** Pair IP allow-listing with 2FA-protected dashboard sessions so even a leaked API key cannot be used from outside the corporate network.
+
+### Dashboard UI
+
+Visit **Dashboard > API Keys** and open the "Create Key" form. The **IP Allow-list** field accepts a comma-separated list of IPs and CIDRs:
+
+```
+192.168.1.0/24, 10.0.0.5, 203.0.113.*
+```
+
+Leave the field empty to allow all IPs (the default). The form help text reminds the operator that CIDR ranges and wildcard IPs are supported. After creation, the key's row in the table shows the count of allowed IPs (e.g. "3 IPs") with the full list available in a tooltip.
+
+To update the allow-list of an existing key, revoke the key and create a new one. The `allowedIps` field is set at creation time and is not mutable afterwards.
+
+---
+
+## 35. BetterSQLite3 Migration
+
+Lightbase provides three ways to migrate from `better-sqlite3` - choose the one that fits your needs.
+
+### Option 1: Direct SQL API (no package needed)
+
+If you don't want to install any package, call the Lightbase SQL endpoint directly:
+
+```
+POST /api/v1/sql
+```
+
+**Headers:**
+```
+apikey: lb_live_xxx
+x-lightbase-project: my-app
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "sql": "SELECT * FROM users WHERE age > ? ORDER BY name LIMIT 10",
+  "params": [18]
+}
+```
+
+**SELECT response:**
+```json
+{
+  "data": [
+    { "id": "01HQ2...", "name": "Alice", "age": 25 },
+    { "id": "01HQ3...", "name": "Bob", "age": 30 }
+  ],
+  "meta": { "count": 2 }
+}
+```
+
+**INSERT/UPDATE/DELETE response:**
+```json
+{
+  "meta": { "changes": 1, "lastInsertRowid": 0 }
+}
+```
+
+**JavaScript example (no package):**
+```javascript
+async function query(sql, params) {
+  const resp = await fetch('https://your-host/api/v1/sql', {
+    method: 'POST',
+    headers: {
+      'apikey': 'lb_live_xxx',
+      'x-lightbase-project': 'my-app',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ sql, params }),
+  });
+  return resp.json();
+}
+
+// Usage:
+const result = await query('SELECT * FROM users WHERE id = ?', [123]);
+console.log(result.data); // array of rows
+```
+
+**Python example:**
+```python
+import requests
+
+resp = requests.post('https://your-host/api/v1/sql', json={
+    'sql': 'SELECT * FROM users WHERE id = ?',
+    'params': [123],
+}, headers={
+    'apikey': 'lb_live_xxx',
+    'x-lightbase-project': 'my-app',
+})
+data = resp.json()
+print(data['data'])  # array of rows
+```
+
+### Option 2: Adapter Package (from GitHub)
+
+Install the `@lightbase/better-sqlite3` adapter directly from the GitHub repo:
+
+```bash
+npm install github:ridwanullahh/lightbase#main
+```
+
+Then import from the packages directory:
+
+```javascript
+const Database = require('lightbase/packages/better-sqlite3');
+const db = new Database('lightbase://your-host?project=my-app&key=lb_live_xxx');
+
+const row = await db.prepare('SELECT * FROM users WHERE id = ?').getAsync(123);
+await db.prepare('INSERT INTO users (name, email) VALUES (?, ?)').runAsync('Alice', 'alice@test.com');
+```
+
+### Option 3: Install Script (no npm)
+
+If you can't use npm install from GitHub, use the install script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ridwanullahh/lightbase/main/packages/better-sqlite3/install.sh | bash
+```
+
+This downloads the adapter into `node_modules/@lightbase/better-sqlite3/`. Then:
+
+```javascript
+const Database = require('@lightbase/better-sqlite3');
+const db = new Database('lightbase://your-host?project=my-app&key=lb_live_xxx');
+```
+
+### Before (better-sqlite3)
+
+```javascript
+const Database = require('better-sqlite3');
+const db = new Database('./my.db');
+
+// Synchronous API
+const row = db.prepare('SELECT * FROM users WHERE id = ?').get(123);
+db.prepare('INSERT INTO users (name, email) VALUES (?, ?)').run('Alice', 'alice@test.com');
+```
+
+### After (Lightbase adapter)
+
+```javascript
+const Database = require('@lightbase/better-sqlite3');
+const db = new Database('lightbase://your-host?project=my-app&key=lb_live_xxx');
+
+// Async API (add 'await' and 'Async' suffix)
+const row = await db.prepare('SELECT * FROM users WHERE id = ?').getAsync(123);
+await db.prepare('INSERT INTO users (name, email) VALUES (?, ?)').runAsync('Alice', 'alice@test.com');
+```
+
+### Connection String Format
+
+```
+lightbase://host:port?project=PROJECT_ID&key=API_KEY
+lightbases://host:port?project=PROJECT_ID&key=API_KEY  (force TLS)
+```
+
+### Supported SQL
+
+- `SELECT` with `WHERE`, `ORDER BY`, `LIMIT`, `OFFSET` (LIMIT always enforced, even without OFFSET)
+- `count(*) [AS <alias>]` with `WHERE` (delegates to the engine's `countDocuments` so the filter is honored)
+- `INSERT INTO ... VALUES` (single-row and multi-row)
+- `UPDATE ... SET ... WHERE`
+- `DELETE FROM ... WHERE`
+- `ALTER TABLE <collection> ADD COLUMN [IF NOT EXISTS] <name> <type> [NOT NULL]`
+- `PRAGMA table_info(<collection>)` (returns one row per field; other pragmas return `[]`)
+- `UPPER(col)` / `LOWER(col)` in `=` / `!=` comparisons (case-insensitive)
+- `datetime('now')`, `date('now')`, `time('now')` literal function calls (eagerly evaluated)
+- WHERE operators: `=`, `!=`, `<>`, `<`, `<=`, `>`, `>=`, `LIKE`, `ILIKE`, `IN`, `NOT IN`, `IS NULL`, `IS NOT NULL`, `AND`, `OR`, `NOT`
+- Parenthesized WHERE groups: `WHERE (a = 1 OR b = 2) AND c = 3`
+- Double-quoted identifiers (`"order"`, `"select"`) for column names that collide with SQL keywords
+
+### Adapter Methods
+
+| Method | Description |
+|--------|-------------|
+| `db.prepare(sql)` | Prepare a SQL statement |
+| `db.exec(sql)` | Execute raw SQL |
+| `db.close()` | Close connection (no-op) |
+| `db.pragmaAsync(name, ...args)` | Async PRAGMA (routes through the SQL endpoint) |
+| `stmt.runAsync(...params)` | Execute INSERT/UPDATE/DELETE |
+| `stmt.getAsync(...params)` | Get a single row |
+| `stmt.allAsync(...params)` | Get all rows |
+| `stmt.iterate()` | Async iterator over rows |
+
+### Direct API Response Format
+
+The `/api/v1/sql` endpoint returns responses in a format similar to better-sqlite3:
+
+| Operation | Response |
+|-----------|----------|
+| SELECT | `{ "data": [...], "meta": { "count": N } }` |
+| INSERT (single or multi-row) | `{ "meta": { "changes": N, "lastInsertRowid": id } }` |
+| UPDATE | `{ "meta": { "changes": N } }` |
+| DELETE | `{ "meta": { "changes": N } }` |
+| ALTER TABLE ADD COLUMN | `{ "meta": { "changes": N } }` (N is 1 if the column was added, 0 if `IF NOT EXISTS` skipped) |
+| PRAGMA table_info | `{ "data": [...rows...], "meta": { "count": N } }` |
+| count(*) | `{ "data": [{ "<alias>": N }], "meta": { "count": 1 } }` |
+
+### Limitations
+
+- Adapter methods are async (use `runAsync` instead of `run`)
+- No true transactions (statements execute sequentially)
+- PRAGMA support is limited to `table_info(<collection>)`; other pragmas return an empty result set
+- DDL support is limited to `ALTER TABLE <collection> ADD COLUMN` (with optional `IF NOT EXISTS`); other DDL (DROP COLUMN, RENAME COLUMN, CREATE INDEX, DROP TABLE) is not supported
+
+---
+
+## 36. Instance-Level Backup and Restore
+
+In addition to per-project backups, Lightbase supports backing up the entire instance (all projects + meta data) into a single archive.
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/instance-backups/config` | Get instance backup config |
+| `PUT` | `/api/v1/instance-backups/config` | Update instance backup config |
+| `POST` | `/api/v1/instance-backups` | Create instance backup |
+| `GET` | `/api/v1/instance-backups` | List instance backups |
+| `POST` | `/api/v1/instance-backups/:id/restore` | Restore instance backup |
+
+### Configure Instance Backup
+
+```bash
+curl -X PUT https://your-host/api/v1/instance-backups/config \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "s3",
+    "schedule": "daily",
+    "retentionDays": 30,
+    "s3Bucket": "my-backup-bucket",
+    "s3Region": "us-east-1",
+    "s3AccessKeyId": "AKIA...",
+    "s3SecretAccessKey": "..."
+  }'
+```
+
+### Create Instance Backup
+
+```bash
+curl -X POST https://your-host/api/v1/instance-backups \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+Response:
+
+```json
+{
+  "backup": {
+    "id": "instance_backup_2026-07-15T10-30-00-000Z",
+    "projectId": "__instance__",
+    "provider": "s3",
+    "size": 1048576,
+    "sha256": "abc123...",
+    "timestamp": "2026-07-15T10:30:00.000Z",
+    "path": "s3://my-backup-bucket/lightbase-instance/instance_backup_2026-07-15T10-30-00-000Z.bak"
+  }
+}
+```
+
+### Restore Instance Backup
+
+```bash
+curl -X POST https://your-host/api/v1/instance-backups/instance_backup_2026-07-15T10-30-00-000Z/restore \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+The instance backup includes:
+- All project data (documents, collections, schemas)
+- All meta data (API keys, dashboard users, backup configs)
+- The instance backup is a single archive that can be restored in one operation
+
+---
+
+## 37. Notification System
+
+Lightbase supports notifications via multiple channels (email, Telegram, webhook) at both the instance level and per-project level.
+
+### Channels
+
+- **Email** - via SMTP (supports TLS, auth)
+- **Telegram** - via Telegram Bot API
+- **Webhook** - HTTP POST with HMAC-SHA256 signature
+
+### Events
+
+Notifications are triggered by system events:
+
+| Event | Level | Description |
+|-------|-------|-------------|
+| `backup.completed` | info | Backup completed successfully |
+| `backup.failed` | error | Backup failed |
+| `health.degraded` | warn | Health check degraded |
+| `health.recovered` | info | Health recovered |
+| `key.revoked` | warn | API key revoked |
+| `key.created` | info | API key created |
+| `document.threshold` | warn | Document count threshold reached |
+| `storage.threshold` | warn | Storage usage threshold reached |
+
+### Instance-Level Notifications
+
+Configure notifications that apply to all projects:
+
+```bash
+# Add a Telegram notification for backup events
+curl -X POST https://your-host/api/v1/notifications/configs \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Backup alerts",
+    "channel": "telegram",
+    "level": "warn",
+    "events": ["backup.completed", "backup.failed"],
+    "telegramBotToken": "123456:ABC-DEF...",
+    "telegramChatId": "-1001234567890"
+  }'
+```
+
+### Project-Level Notifications
+
+Configure notifications for a specific project:
+
+```bash
+curl -X POST https://your-host/api/v1/projects/my-app/notifications \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Storage alerts",
+    "channel": "email",
+    "level": "error",
+    "events": ["storage.threshold"],
+    "emailTo": "admin@example.com",
+    "smtpHost": "smtp.example.com",
+    "smtpPort": 587,
+    "smtpUser": "user@example.com",
+    "smtpPass": "password"
+  }'
+```
+
+### Test Notification
+
+```bash
+curl -X POST https://your-host/api/v1/notifications/test \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+### List Notification Logs
+
+```bash
+curl https://your-host/api/v1/notifications/log?limit=50 \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+---
+
+## 38. Usage Stats API
+
+Get instance-level and per-project usage statistics.
+
+### Instance Stats
+
+```bash
+curl https://your-host/api/v1/stats \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+Response includes:
+- Total projects, collections, documents, storage bytes
+- Total API keys (with active count)
+- Total webhooks, functions, branches, backups
+- Memory usage, uptime
+- Query cache stats (size, hit rate, evictions)
+- Per-project breakdown with all metrics
+
+### Per-Project Stats
+
+```bash
+curl "https://your-host/api/v1/stats?project=my-app" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+Returns detailed stats for a single project including per-collection document counts and storage usage.
+
+---
+
+## 39. Update Collection Schema
+
+`PUT /api/v1/projects/:id/collections/:collection` updates the schema of an
+existing collection in place. The request body is the new full schema
+definition (the same shape accepted by `POST /collections`). Requires the
+`admin` scope.
+
+The handler validates the body against the same Zod schema used by `POST
+/collections`, re-parses it via `parseCollectionSchema` for type safety, then
+delegates to `engine.updateCollectionSchema`, which:
+
+1. Re-validates the new schema (parses + cross-field checks: reserved names,
+   duplicate fields, unique-without-index, etc.).
+2. Writes the new schema to disk atomically (temp file + rename).
+3. Refreshes the in-memory schema cache.
+4. Invalidates the per-collection query cache so stale reads do not surface.
+5. Bumps the schema `revision` counter.
+6. Emits a `collection.updated` audit event with before/after SHA-256
+   fingerprints.
+
+Existing documents are preserved as-is. If you add a required field without a
+default, subsequent reads will return `null` for that field on old documents;
+inserts and updates will validate against the new schema. To coerce existing
+values to a new type, use the schema-migrations API (section 28) or run an
+`UPDATE` statement via the SQL endpoint.
+
+### Example: add a field and widen another field's constraints
+
+```bash
+curl -X PUT https://your-host/api/v1/projects/my-app/collections/users \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "users",
+    "fields": [
+      {"name": "email", "type": "email", "required": true, "unique": true, "indexed": true},
+      {"name": "age", "type": "integer", "minimum": 0, "maximum": 150},
+      {"name": "active", "type": "boolean", "default": true},
+      {"name": "display_name", "type": "string", "maxLength": 80},
+      {"name": "role", "type": "string", "enum": ["member", "editor", "admin"], "default": "member"}
+    ],
+    "indexes": [
+      {"name": "users_email_idx", "fields": ["email"], "unique": true}
+    ]
+  }'
+```
+
+### Response
+
+The response is the updated collection schema (with the new `revision`):
+
+```json
+{
+  "collection": {
+    "name": "users",
+    "fields": [
+      {"name": "email", "type": "email", "required": true, "unique": true, "indexed": true},
+      {"name": "age", "type": "integer", "minimum": 0, "maximum": 150},
+      {"name": "active", "type": "boolean", "default": true},
+      {"name": "display_name", "type": "string", "maxLength": 80},
+      {"name": "role", "type": "string", "enum": ["member","editor","admin"], "default": "member"}
+    ],
+    "indexes": [
+      {"name": "users_email_idx", "fields": ["email"], "unique": true}
+    ],
+    "revision": 2,
+    "createdAt": "2026-02-01T08:18:01.001Z",
+    "updatedAt": "2026-02-14T09:31:12.482Z"
+  }
+}
+```
+
+### Changing a field's type
+
+To change a field's type, supply the new `type` in the field definition. The
+new schema is written and the in-memory cache refreshed; existing documents are
+not rewritten, so reads of the renamed/retyped field will return the old stored
+value until the document is next written. To coerce existing values to the new
+type, run an `UPDATE` statement via the SQL endpoint or trigger a schema
+migration (section 28).
+
+### Errors
+
+- `400 validation.failed` - The new schema violates a schema rule (reserved
+  field name, duplicate field, unique index without an indexed field, etc.).
+- `404 not_found` - The collection does not exist.
+- `403 authz.forbidden` - The API key lacks the `admin` scope.
+
+---
+
+## 40. Health Check
+
+`GET /health` is an unauthenticated JSON endpoint that load balancers, container
+orchestrators, and external monitors can poll to verify the API is reachable
+without supplying an API key. It is intentionally simpler than the existing
+`/healthz` page (which renders a full HTML dashboard with subsystem checks):
+`/health` is a pure JSON ping.
+
+```bash
+curl https://your-host/health
+```
+
+Response (HTTP 200):
+
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "timestamp": "2026-02-14T09:31:12.482Z"
+}
+```
+
+The response includes the standard security headers (`X-Content-Type-Options`,
+`X-Frame-Options`, `Referrer-Policy`, `COOP`, `CORP`, `Permissions-Policy`,
+`Strict-Transport-Security`) and a `Cache-Control: no-cache, no-transform`
+directive so probes do not get cached by intermediate proxies. No authentication
+headers are required or consulted; the endpoint does not consume rate-limit
+quota beyond the per-IP bucket.
+
+---
+
+## 41. API Key Query Parameter Deprecation
+
+Passing the API key via the `?apikey=` query parameter is now deprecated. The
+`apikey` header remains the preferred and supported mechanism for all
+non-browser clients. The query-parameter form is still accepted (so
+`EventSource`/SSE consumers, which cannot set custom headers, continue to work)
+but every response to a request that uses `?apikey=` carries an
+`X-Deprecated` header warning the client to migrate:
+
+```
+X-Deprecated: apikey query parameter is deprecated; use apikey header instead
+```
+
+The header is set unconditionally (on both success and error responses) because
+the deprecation applies to the request mechanism, not the outcome. The
+deprecated fallback is only consulted when the `apikey` header is absent; if
+both are supplied, the header wins and no `X-Deprecated` header is added.
+
+### Migration
+
+Replace:
+
+```bash
+curl "https://your-host/api/v1/projects/my-app/collections/users/docs?apikey=lb_live_xxx&limit=25"
+```
+
+with:
+
+```bash
+curl "https://your-host/api/v1/projects/my-app/collections/users/docs?limit=25" \
+  -H "apikey: lb_live_xxx" \
+  -H "x-lightbase-project: my-app"
+```
+
+The only exception is browser-based `EventSource` consumers (realtime
+subscriptions, CDC streams, audit-log streams) that cannot set custom headers.
+For those, continue to use `?apikey=` (preferably with a short-lived JWT issued
+via `POST /api/v1/auth/token`) until a `fetch`-based SSE replacement is
+shipped.
+
+---
+
+End of API Integration Guide.
