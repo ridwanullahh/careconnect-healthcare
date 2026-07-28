@@ -3,6 +3,8 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 import { apiClient } from '../../lib/api-client';
 import { githubDB as dbHelpers, collections } from '../../lib/database';
+import KeyManagementModule from '../../components/admin/KeyManagementModule';
+import SystemMonitoringModule from '../../components/admin/SystemMonitoringModule';
 
 interface OverviewStats {
   users: number;
@@ -480,6 +482,8 @@ const SuperAdminDashboard = () => {
     { name: 'Verifications', path: 'verifications' },
     { name: 'Content', path: 'content' },
     { name: 'News', path: 'news' },
+    { name: 'Key Management', path: 'keys' },
+    { name: 'System Monitoring', path: 'monitoring' },
     { name: 'Reports', path: 'reports' },
     { name: 'Settings', path: 'settings' }
   ];
@@ -517,6 +521,8 @@ const SuperAdminDashboard = () => {
             <Route path="entities" element={<EntitiesSection />} />
             <Route path="verifications" element={<div>Verifications section coming soon...</div>} />
             <Route path="content" element={<div>Content moderation section coming soon...</div>} />
+            <Route path="keys" element={<KeyManagementModule />} />
+            <Route path="monitoring" element={<SystemMonitoringModule />} />
             <Route path="reports" element={<div>Reports section coming soon...</div>} />
             <Route path="settings" element={<div>Platform settings section coming soon...</div>} />
             <Route path="" element={<OverviewSection />} />

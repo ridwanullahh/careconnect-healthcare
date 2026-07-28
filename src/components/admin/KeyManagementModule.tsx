@@ -1,5 +1,5 @@
 // BYOK Key Management Admin Interface
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../lib/auth';
 import { KeyManagementService, KeyType, EncryptedKey } from '../../lib/key-management';
 import { Button } from '../ui/button';
@@ -11,11 +11,16 @@ import { useToast } from '../../hooks/use-toast';
 import { Key, Shield, Trash2, RefreshCw, AlertTriangle, CheckCircle } from 'lucide-react';
 import { logger } from '../../lib/observability';
 
+const errorMessage = (err: unknown): string =>
+  err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown error';
+
 const KeyManagementModule: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [keys, setKeys] = useState<Omit<EncryptedKey, 'encrypted_value'>[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newKey, setNewKey] = useState({
     type: '' as KeyType,
@@ -23,20 +28,19 @@ const KeyManagementModule: React.FC = () => {
     rateLimit: 1000
   });
 
-  useEffect(() => {
-    loadKeys();
-  }, [user]);
-
-  const loadKeys = async () => {
+  const loadKeys = useCallback(async () => {
     if (!user) return;
-    
+
     try {
       setLoading(true);
+      setError(null);
       const userKeys = await KeyManagementService.listKeys(user.id);
       setKeys(userKeys);
       await logger.info('key_management_loaded', 'User keys loaded successfully', { count: userKeys.length }, user.id);
-    } catch (error) {
-      await logger.error('key_management_load_failed', 'Failed to load user keys', { error: error.message }, user.id);
+    } catch (err) {
+      const msg = errorMessage(err);
+      setError(msg);
+      await logger.error('key_management_load_failed', 'Failed to load user keys', { error: msg }, user.id);
       toast({
         title: 'Error',
         description: 'Failed to load API keys',
@@ -45,7 +49,11 @@ const KeyManagementModule: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    loadKeys();
+  }, [loadKeys]);
 
   const handleAddKey = async () => {
     if (!user || !newKey.type || !newKey.value) {
@@ -68,6 +76,7 @@ const KeyManagementModule: React.FC = () => {
     }
 
     try {
+      setSubmitting(true);
       await KeyManagementService.storeKey(
         newKey.type,
         newKey.value,
@@ -86,13 +95,16 @@ const KeyManagementModule: React.FC = () => {
       setNewKey({ type: '' as KeyType, value: '', rateLimit: 1000 });
       setShowAddForm(false);
       loadKeys();
-    } catch (error) {
-      await logger.error('api_key_store_failed', 'Failed to store API key', { keyType: newKey.type, error: error.message }, user.id);
+    } catch (err) {
+      const msg = errorMessage(err);
+      await logger.error('api_key_store_failed', 'Failed to store API key', { keyType: newKey.type, error: msg }, user.id);
       toast({
         title: 'Error',
-        description: 'Failed to store API key',
+        description: msg || 'Failed to store API key',
         variant: 'destructive'
       });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -105,20 +117,21 @@ const KeyManagementModule: React.FC = () => {
 
     try {
       await KeyManagementService.deleteKey(keyId, user.id);
-      
+
       await logger.info('api_key_deleted', 'API key deleted successfully', { keyType }, user.id);
-      
+
       toast({
         title: 'Success',
         description: 'API key deleted successfully',
       });
 
       loadKeys();
-    } catch (error) {
-      await logger.error('api_key_delete_failed', 'Failed to delete API key', { keyType, error: error.message }, user.id);
+    } catch (err) {
+      const msg = errorMessage(err);
+      await logger.error('api_key_delete_failed', 'Failed to delete API key', { keyType, error: msg }, user.id);
       toast({
         title: 'Error',
-        description: 'Failed to delete API key',
+        description: msg || 'Failed to delete API key',
         variant: 'destructive'
       });
     }
@@ -132,17 +145,18 @@ const KeyManagementModule: React.FC = () => {
 
     try {
       await KeyManagementService.refreshQuota(keyId, user.id, Number(newQuota));
-      
+
       toast({
         title: 'Success',
         description: 'Quota refreshed successfully',
       });
 
       loadKeys();
-    } catch (error) {
+    } catch (err) {
+      const msg = errorMessage(err);
       toast({
         title: 'Error',
-        description: 'Failed to refresh quota',
+        description: msg || 'Failed to refresh quota',
         variant: 'destructive'
       });
     }
@@ -174,11 +188,28 @@ const KeyManagementModule: React.FC = () => {
     return descriptions[type as KeyType] || 'API integration key';
   };
 
-  if (loading) {
+  if (loading && keys.length === 0) {
     return (
       <Card>
         <CardContent className="flex items-center justify-center p-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <span className="ml-3 text-sm text-gray-600">Loading your API keys...</span>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error && keys.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 text-sm mb-4">
+            {error}
+          </div>
+          <Button variant="outline" onClick={loadKeys}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
         </CardContent>
       </Card>
     );
@@ -198,12 +229,12 @@ const KeyManagementModule: React.FC = () => {
         </CardHeader>
         <CardContent>
           {/* Security Notice */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
             <div className="flex items-start">
-              <Shield className="w-5 h-5 text-blue-600 mt-0.5 mr-2" />
+              <Shield className="w-5 h-5 text-green-600 mt-0.5 mr-2" />
               <div className="text-sm">
-                <p className="font-medium text-blue-900 mb-1">Security Notice</p>
-                <p className="text-blue-700">
+                <p className="font-medium text-green-900 mb-1">Security Notice</p>
+                <p className="text-green-700">
                   Your API keys are encrypted using AES-256-GCM before being stored. They are never transmitted or stored in plain text.
                   Only you can decrypt and use your keys.
                 </p>
@@ -212,6 +243,12 @@ const KeyManagementModule: React.FC = () => {
           </div>
 
           {/* Add New Key Button */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm mb-4">
+              {error}
+            </div>
+          )}
+
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-semibold">Your API Keys</h3>
             <Button onClick={() => setShowAddForm(!showAddForm)}>
@@ -225,13 +262,18 @@ const KeyManagementModule: React.FC = () => {
               <CardContent className="p-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <Label>Service Type</Label>
-                    <Select value={newKey.type} onValueChange={(value: KeyType) => setNewKey({...newKey, type: value})}>
+                    <Label className="block mb-1">Service Type</Label>
+                    <Select
+                      value={newKey.type}
+                      onValueChange={(value: string) =>
+                        setNewKey({ ...newKey, type: value as KeyType })
+                      }
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select service" />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.values(KeyType).map(type => (
+                        {Object.values(KeyType).map((type) => (
                           <SelectItem key={type} value={type}>
                             {getKeyTypeDisplay(type)}
                           </SelectItem>
@@ -240,7 +282,7 @@ const KeyManagementModule: React.FC = () => {
                     </Select>
                   </div>
                   <div>
-                    <Label>API Key</Label>
+                    <Label className="block mb-1">API Key</Label>
                     <Input
                       type="password"
                       value={newKey.value}
@@ -249,7 +291,7 @@ const KeyManagementModule: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <Label>Rate Limit</Label>
+                    <Label className="block mb-1">Rate Limit</Label>
                     <Input
                       type="number"
                       value={newKey.rateLimit}
@@ -259,8 +301,11 @@ const KeyManagementModule: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex justify-end mt-4">
-                  <Button onClick={handleAddKey} disabled={!newKey.type || !newKey.value}>
-                    Store Key Securely
+                  <Button
+                    onClick={handleAddKey}
+                    disabled={!newKey.type || !newKey.value || submitting}
+                  >
+                    {submitting ? 'Storing...' : 'Store Key Securely'}
                   </Button>
                 </div>
               </CardContent>

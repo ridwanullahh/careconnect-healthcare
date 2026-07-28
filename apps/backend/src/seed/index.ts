@@ -30,6 +30,9 @@ function perms(userType: string): string[] {
     billing_clerk: ['view_patient_data', 'process_billing', 'manage_insurance_claims', 'view_payments'],
     patient: ['view_patient_data', 'manage_access_grants'],
     public_user: [],
+    compliance_officer: ['verify_entity', 'view_user_data', 'moderate_content', 'view_analytics', 'audit_logs'],
+    moderator: ['moderate_content', 'update_content', 'delete_content'],
+    support_agent: ['view_user_data', 'update_user', 'view_payments'],
   };
   return map[userType] || [];
 }
@@ -116,6 +119,9 @@ export async function runSeed(db: StorageAdapter): Promise<Record<string, number
     { email: 'patient.emeka@careconnect.health', user_type: 'patient', first_name: 'Emeka', last_name: 'Nwosu', entity_id: entityIds['Abuja Family Health Center'], phone: '+2348012345623', bio: 'Patient at Abuja Family Health Center for routine care.' },
     { email: 'public.zainab@careconnect.health', user_type: 'public_user', first_name: 'Zainab', last_name: 'Ahmed', entity_id: null, phone: '+2348012345631', bio: 'Public user exploring healthcare resources.' },
     { email: 'public.david@careconnect.health', user_type: 'public_user', first_name: 'David', last_name: 'Okafor', entity_id: null, phone: '+2348012345632', bio: 'Public user seeking health information.' },
+    { email: 'compliance@careconnect.health', user_type: 'compliance_officer', first_name: 'Halima', last_name: 'Bello', entity_id: null, phone: '+2348012345641', bio: 'Compliance officer overseeing entity verification and regulatory adherence.' },
+    { email: 'moderator@careconnect.health', user_type: 'moderator', first_name: 'Yusuf', last_name: 'Idris', entity_id: null, phone: '+2348012345642', bio: 'Community moderator reviewing forum posts and user-generated content.' },
+    { email: 'support@careconnect.health', user_type: 'support_agent', first_name: 'Maryam', last_name: 'Suleiman', entity_id: null, phone: '+2348012345643', bio: 'Support agent assisting users with platform inquiries and issues.' },
   ];
 
   const userIds: Record<string, string> = {};
@@ -442,6 +448,82 @@ export async function runSeed(db: StorageAdapter): Promise<Record<string, number
   await db.insert('insurance_providers', { name: 'NHIS', is_active: true, created_at: NOW() });
   await db.insert('insurance_providers', { name: 'Hygeia HMO', is_active: true, created_at: NOW() });
   counts.specialties = specs.length;
+
+  // ============================================================
+  // SECTION 13: Verification documents + queue entries
+  // ============================================================
+  const complianceId = userIds['compliance@careconnect.health'];
+  for (const [name, eid] of Object.entries(entityIds)) {
+    await db.insert('verification_documents', {
+      entity_id: eid, user_id: complianceId, document_type: 'license',
+      title: `${name} - Operating License`, filename: 'license.pdf', mime_type: 'application/pdf',
+      size_bytes: 245000, status: 'approved', reviewed_by: complianceId,
+      reviewed_at: NOW(), notes: 'License verified and current.', created_at: NOW(),
+    });
+    await db.insert('verification_documents', {
+      entity_id: eid, user_id: complianceId, document_type: 'registration',
+      title: `${name} - Facility Registration`, filename: 'registration.pdf', mime_type: 'application/pdf',
+      size_bytes: 180000, status: 'approved', reviewed_by: complianceId,
+      reviewed_at: NOW(), notes: 'Registration confirmed.', created_at: NOW(),
+    });
+  }
+  counts.verification_documents = Object.keys(entityIds).length * 2;
+
+  // Add a pending verification queue entry (for the admin to review).
+  const pendingEntity = await db.insert('entities', {
+    name: 'Ibadan Children Clinic', entity_type: 'health_center',
+    description: 'Pediatric clinic seeking verification on the CareConnect platform.',
+    address: { street: '5 Ring Road', city: 'Ibadan', state: 'Oyo', country: 'Nigeria', postal_code: '200001', coordinates: { lat: 7.3776, lng: 3.9470 } },
+    phone: '+2348012345699', email: 'info@ibadanchildren.health',
+    specialties: ['Pediatrics'], services: ['Outpatient Care', 'Vaccinations'],
+    verification_status: 'pending', is_active: true, is_featured: false, subscription_tier: 'standard',
+    features: { online_booking: true, telehealth: false, emergency_services: false, insurance_accepted: false, payment_methods: ['Cash'] },
+    rating: 0, review_count: 0, badges: [], color_theme: '#0d9488', logo_url: '', banner_url: '',
+    created_at: NOW(), updated_at: NOW(),
+  });
+  await db.insert('verification_queue', {
+    entity_id: pendingEntity.id, reviewer_id: null, action: 'pending',
+    notes: 'Awaiting document review.', reviewed_at: null, created_at: NOW(),
+  });
+  await db.insert('verification_requests', {
+    entityId: pendingEntity.id, entity_id: pendingEntity.id, requestType: 'initial',
+    status: 'pending', documents: [], expiresAt: '', reminders: { thirtyDays: false, sevenDays: false, oneDay: false },
+    created_at: NOW(),
+  });
+  counts.verification_queue = 1;
+
+  // ============================================================
+  // SECTION 14: Sample orders + payment intents
+  // ============================================================
+  const productForOrder = products[0];
+  const order = await db.insert('orders', {
+    user_id: userIds['public.zainab@careconnect.health'],
+    items: [{ product_id: productForOrder.id || '', product_name: productForOrder.name, quantity: 2, unit_price: productForOrder.price, image_url: '' }],
+    total_amount: productForOrder.price * 2,
+    status: 'delivered',
+    shipping_address: { name: 'Zainab Ahmed', street: '12 Allen Avenue', city: 'Lagos', state: 'Lagos', country: 'Nigeria' },
+    payment_reference: 'pi_seed_order_1',
+    created_at: NOW(),
+  });
+  await db.insert('payment_intents', {
+    id: 'pi_seed_order_1', amount: productForOrder.price * 2, currency: 'NGN',
+    description: `Order: ${productForOrder.name} x2`, type: 'order', linked_id: order.id,
+    status: 'completed', gateway: 'paystack', gateway_reference: 'ref_seed_1',
+    created_at: NOW(), updated_at: NOW(), completed_at: NOW(),
+  });
+  counts.orders = 1;
+  counts.payment_intents = 1;
+
+  // ============================================================
+  // SECTION 15: Forum interactions (votes) sample data
+  // ============================================================
+  for (let i = 0; i < qIds.length; i++) {
+    await db.insert('forum_interactions', {
+      target_type: 'question', target_id: qIds[i], user_id: userIds['public.zainab@careconnect.health'],
+      interaction_type: 'upvote', created_at: NOW(),
+    });
+  }
+  counts.forum_interactions = qIds.length;
 
   console.log('[seed] complete:', counts);
   return counts;
