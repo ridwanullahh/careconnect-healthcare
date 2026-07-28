@@ -142,3 +142,165 @@ Stage Summary:
 - All seed accounts use password: CareConnect2025!
 - 6 commits pushed and hash-verified on main branch
 - Remaining: Task 4 feature completion (payment gateway, AILab 4-6, booking ICS, etc.) per TASKS.md
+
+---
+Task ID: D-AILAB-4-6
+Agent: full-stack-developer
+Task: Implement AILab Tasks 4, 5, 6 — Emergency Communication Bridge, Medical Record Timeline Builder, Cultural & Religious Care Advisor
+
+Work Log:
+- Read worklog.md to absorb prior agent state (Lightbase migration complete; Vite frontend on :3000 proxies /api -> Astro backend on :4321; apiClient + dbHelpers both wired; careconnect_api_token in localStorage; existing AILab services use geminiAI client-side, but task spec required calling the new /api/ai/* backend endpoints instead so the API key stays server-side).
+- Read existing patterns: AILabPage.tsx (card grid pattern with lucide icons), CarePathPage.tsx (form/loading/error/results pattern), src/lib/ai/care-path.ts (service class pattern), Card/Badge/Button/Input/LoadingSpinner component APIs, auth.tsx (useAuth returns user with id + user_type === 'patient'), database.ts (dbHelpers + collections map including patients, encounters, conditions, medication_requests, medication_dispenses, lab_results, imaging_orders).
+- Read apps/backend/src/pages/api/[...route].ts lines 547-592 to confirm endpoint paths, auth requirements (medical-timeline requires session; emergency-plan and cultural-guidance are public), 503 behavior when GEMINI_API_KEY unset, and the {data, error} JSON envelope.
+- Read apps/backend/src/services/ai.ts to confirm exact response shapes (emergencyPlan: immediate_steps/who_to_contact/nearest_resources/do_not_do/follow_up; medicalTimeline: events/summary/patterns/recommendations; culturalGuidance: overview/dietary_considerations/communication_preferences/religious_practices/end_of_life_considerations/practical_tips/important_caveats/sources_to_verify).
+- Created src/lib/ai/emergency-bridge.ts: EmergencyBridgeService class with static generatePlan(input); EmergencyPlanInput + EmergencyPlan + EmergencyContact TypeScript interfaces; AIServiceNotConfiguredError class; shared postAIEndpoint helper that fetches ${VITE_API_BASE_URL}/ai/emergency-plan with Authorization Bearer token from localStorage, unwraps the {data} envelope, and maps HTTP 503 -> AIServiceNotConfiguredError with the friendly "AI service is not configured. Set GEMINI_API_KEY on the backend." message.
+- Created src/lib/ai/medical-timeline.ts: MedicalTimelineService class with static buildTimeline(input) and a separate static fetchPatientRecords(userId) helper that finds the patient record via dbHelpers.find(collections.patients, {user_id: userId}) then Promise.all-s fetches encounters/conditions/medication_requests+medication_dispenses (merged)/lab_results/imaging_orders filtered by patient_id, each with .catch(()=>[]) so a single failed collection cannot break the timeline. Validates total record count > 0 before calling the backend.
+- Created src/lib/ai/cultural-advisor.ts: CulturalAdvisorService class with static getGuidance(input); CulturalGuidanceInput + CulturalGuidance interfaces; same shared postAIEndpoint + AIServiceNotConfiguredError pattern.
+- Created src/pages/ailab/EmergencyBridgePage.tsx: full React page with a prominent red emergency banner ("If this is a life-threatening emergency, call 112 (Nigeria) or your local emergency number immediately."), a form (emergency-type select with 8 categories, severity select with mild/moderate/severe/critical, description textarea with char counter, location Input, numPeople Input), "Generate Emergency Plan" Button (red), LoadingSpinner during fetch, red error banner, results display (immediate_steps as ordered list with numbered teal circles, who_to_contact as 2-col cards with role+reason, nearest_resources list, do_not_do list with XCircle icons, follow_up list), severity/type Badges on results, amber disclaimer card at bottom. NO emojis. NO indigo/blue.
+- Created src/pages/ailab/MedicalTimelinePage.tsx: full React page that auto-loads patient records when user.user_type === 'patient' (via useEffect + MedicalTimelineService.fetchPatientRecords), shows a 5-stat record count card (encounters/conditions/medications/labs/imaging) with a "Build Timeline" Button, then renders the AI timeline as a vertical chronological timeline (left border with colored category nodes — teal for encounters, emerald for medications, amber for labs, purple for imaging, rose for conditions; each event has date, category badge, severity badge, title, description), a Summary card, an Identified patterns card, and a Recommendations card. Falls back gracefully for non-patient users (amber banner) and for patients with no records. NO emojis. NO indigo/blue.
+- Created src/pages/ailab/CulturalAdvisorPage.tsx: full React page with a top emerald disclaimer banner ("This guidance is general. Always verify with the individual patient — practices vary widely within communities."), a form (culture/religion Input with 8 clickable suggestion chips for Islam/Christianity/Judaism/Hinduism/Buddhism/Yoruba/Igbo/Hausa, medical context textarea with char counter, optional question textarea, language Input defaulting to English), "Get Guidance" Button (emerald), LoadingSpinner, red error banner, results sections rendered via a reusable ListSection component (Overview card, Dietary considerations, Communication preferences, Religious practices, End-of-life considerations, Practical tips, Important caveats, Sources to verify), amber disclaimer at bottom. NO emojis. NO indigo/blue.
+- Updated src/App.tsx: added imports for EmergencyBridgePage, MedicalTimelinePage, CulturalAdvisorPage; added 3 <Route> entries at /ailab/emergency-bridge, /ailab/medical-timeline, /ailab/cultural-advisor alongside the existing ailab routes (lines 260-262).
+- Updated src/pages/ailab/AILabPage.tsx: added Siren, Globe2, History icons to the lucide-react import; added 3 new feature cards (emergency-bridge red-600, medical-timeline teal-600, cultural-advisor emerald-600) each with stats: "Available now"; updated the existing "ai-tools" card to use slate-600 (replacing indigo-500), updated its description to remove emergency/timeline/cultural (now implemented), and updated its features list to keep only upcoming tools (symptom photography, care coordination, family genetics, health goal tracking, AI chat support).
+
+Validation:
+- `npx tsc --noEmit` -> exit 0 (no type errors across the project).
+- `bun run lint` still blocked by the pre-existing repo issue (eslint.config.js imports the missing `typescript-eslint` unified package — confirmed `node_modules/typescript-eslint` is absent while `@typescript-eslint/*` scoped packages are present, as noted by previous agents).
+- Backend AI endpoints confirmed returning HTTP 503 `{error:"AI service is not configured"}` for all three new endpoints when GEMINI_API_KEY is unset — my services map 503 to AIServiceNotConfiguredError with the friendly "AI service is not configured. Set GEMINI_API_KEY on the backend." message.
+- Vite dev server returned HTTP 200 for all six new modules (3 lib services + 3 pages) and the compiled JS contained no transform/parse errors.
+- All three new routes (/ailab/emergency-bridge, /ailab/medical-timeline, /ailab/cultural-advisor) return HTTP 200 from the Vite dev server.
+- Dev log shows my test calls hitting the AI endpoints cleanly: `18:06:50 [503] POST /api/ai/emergency-plan 2ms`, `18:06:50 [503] POST /api/ai/cultural-guidance 1ms`, `18:06:50 [503] POST /api/ai/medical-timeline 1ms`.
+
+Stage Summary:
+- Files changed (8):
+  * src/lib/ai/emergency-bridge.ts (new, ~135 lines) — EmergencyBridgeService.generatePlan() + types + AIServiceNotConfiguredError.
+  * src/lib/ai/medical-timeline.ts (new, ~200 lines) — MedicalTimelineService.buildTimeline() + fetchPatientRecords(userId) helper.
+  * src/lib/ai/cultural-advisor.ts (new, ~110 lines) — CulturalAdvisorService.getGuidance() + types.
+  * src/pages/ailab/EmergencyBridgePage.tsx (new, ~370 lines) — full emergency plan page with prominent 112-call banner, form, results, disclaimer.
+  * src/pages/ailab/MedicalTimelinePage.tsx (new, ~360 lines) — patient-records auto-load, build button, vertical timeline visualization, summary/patterns/recommendations.
+  * src/pages/ailab/CulturalAdvisorPage.tsx (new, ~340 lines) — culture form with suggestions, all 8 guidance sections, disclaimer.
+  * src/App.tsx — added 3 imports and 3 <Route> elements.
+  * src/pages/ailab/AILabPage.tsx — added 3 new feature cards (red/teal/emerald), updated ai-tools card to slate-600.
+- All three AILab tools are now fully wired end-to-end: frontend form -> frontend service -> backend Astro endpoint -> Gemini (server-side) -> stored in ai_emergency_plans/ai_medical_timelines/ai_cultural_guidance collections.
+- The 503 "AI service is not configured" path is handled gracefully on every page with a clear red error banner.
+- No new dependencies added. No existing functionality removed. No emojis. No indigo/blue on new code.
+- Did NOT commit to git (per task instructions — the main agent will verify and commit).
+
+---
+Task ID: F-MOCK-DATA
+Agent: full-stack-developer (Z.ai Code)
+Task: Replace 9 hardcoded mock-data UIs with real DB queries (dbHelpers)
+
+Work Log:
+- Read /home/z/my-project/worklog.md to absorb prior agent state (Vite frontend on :3000 proxies /api -> Astro backend on :4321; apiClient + dbHelpers both wired; dbHelpers aliases githubDB which routes to SQLiteClientSDK when VITE_DB_MODE=lightbase|sqlite|api; collections map in src/lib/database.ts has 150+ collection names including products, reviews, billing_items, insurance_claims, bookings, lab_orders, patient_entity_links, entities, podcasts, blog_posts, comments, likes, bookmarks, news_articles, search_analytics, services, entity_services).
+- Read the dbHelpers surface in src/lib/github-db-sdk.ts (lines 730-1008): get/find/findById/insert/update/delete all return Promises; find() accepts either a filterFn or a Record<string, any> for exact-match filtering; insert() validates required fields against schemas (which are empty in lightbase mode, so no validation is enforced); every read/write routes through /api/data/:collection on the Astro backend when in backend mode.
+- Read auth.tsx User interface (id, email, entity_id, user_type, permissions, etc.) and toast-service.ts (useToastService hook returns showSuccess/showError/showInfo/showWarning).
+- Read all 9 target files end-to-end before editing.
+- Searched codebase for any remaining `mock*`/`Math.random()*2+4` references after edits -> none found.
+
+### 1. src/pages/shop/ProductDetailPage.tsx (ProductDetailPage)
+- Removed `mockProduct` (Digital Thermometer hardcoded object) and `mockReviews` (Sarah M. + Dr. Johnson) hardcoded arrays.
+- Added `import { githubDB as dbHelpers, collections } from '../../lib/database'`.
+- Wrote defensive `adaptProduct()` and `adaptReview()` helpers that coerce the raw record into the existing `Product`/`Review` interfaces (handling alternative field names like `discounted_price`/`original_price`, `stock_quantity`/`stock_count`, `image_url`/`images`, `brand`/`entity_name`, `long_description`/`description`, `verified_purchase`/`verified`, etc.).
+- New `useEffect` keyed on `productId` fetches the product via `dbHelpers.findById(collections.products, productId)` and reviews via two parallel queries `dbHelpers.find(collections.reviews, { product_id: productId })` and `dbHelpers.find(collections.reviews, { entity_id: productId })` (reviews may be keyed either way depending on writer). Results are de-duped by id and sorted newest-first. Each fetch is wrapped in `.catch(() => null/[])` so a missing/failed collection returns gracefully.
+- Added `cancelled` flag to prevent setState after unmount.
+- Added red error banner + "Product not found" fallback when rawProduct is null.
+- Replaced the empty-reviews block in the Reviews tab with a real "No reviews yet" empty state.
+- Replaced the empty-features block in the Features tab with a real "No additional features listed" empty state.
+- Kept the exact same layout/styling/shadow/colour scheme as before.
+
+### 2. src/pages/dashboard/BillingPage.tsx
+- Removed the 2 hardcoded invoices (INV-2024-001/002) and 1 hardcoded claim (CLM-2024-001).
+- Added `import { githubDB as dbHelpers, collections } from '@/lib/database'`.
+- Rewrote `loadBillingData` as an inline async IIFE inside the `useEffect`, keyed on `user.entity_id`. It runs `BillingService.getBillingSummary`, `dbHelpers.find(collections.billing_items, { entity_id })`, and `dbHelpers.find(collections.insurance_claims, { entity_id })` in parallel via `Promise.all`, each with `.catch(() => [])/.catch(() => null)` so a single failed collection cannot break the dashboard.
+- De-dupes billing_items by id (some seed data may emit duplicates when both entity_id- and patient_id-keyed queries return overlapping records).
+- Added `cancelled` flag + `error` state. Renders a red error banner above the header when the fetch fails.
+- Made the invoice/claim search filters defensive against missing fields (joins `invoice_number`/`patient_id`/`id`/`description`/`service_name` etc. into one haystack).
+- Made the invoice/claim card renders defensive: derives `invoiceNumber`/`totalAmount`/`amountPaid`/`balanceDue`/`invoiceDate`/`dueDate`/`claimNumber`/`claimedAmount`/`approvedAmount`/`submissionDate`/`provider` from whatever fields the real record has, falling back to 'N/A'/'Insurance Provider'/'INV-{id}'/'CLM-{id}' as needed.
+- Kept the existing empty-state "No invoices found" / "No insurance claims found" blocks (now triggered by real empty arrays).
+
+### 3. src/pages/patient/PatientPortal.tsx
+- Removed the hardcoded `pendingTasks` array (the fake "Schedule Annual Physical" / "Update Insurance Information" items).
+- Added `import { githubDB as dbHelpers, collections } from '@/lib/database'`.
+- Rewrote `loadPatientDashboard` as an inline async IIFE keyed on `user.id`, with `cancelled` flag and `error` state.
+- Derives real pending tasks from two real dbHelpers queries: `dbHelpers.find(collections.bookings, { patient_id })` (filtered to status 'confirmed'/'pending' AND appointment_date >= today) and `dbHelpers.find(collections.lab_orders, { patient_id })` (filtered to status not in ['completed','cancelled','rejected']). Each booking becomes a task titled "Upcoming {service_name}" with priority 'low'/'medium'; each pending lab becomes "Lab result pending: {test_name}" with priority 'high' for urgent/emergency/stat, else 'medium'. Tasks are concatenated and capped at 8.
+- Error path: removed the broken `<Button onClick={loadPatientDashboard}>` (the function no longer exists in scope) and replaced the error state with a red banner + the existing "Unable to Load Patient Data" message.
+- Kept the existing skeleton-loading state, summary cards, upcoming-appointments card, lab-results card, current-medications card, quick-actions card, and emergency-contact card exactly as before.
+
+### 4. src/pages/patient/Providers.tsx
+- Removed the fabricated `rating: Math.floor(Math.random() * 2) + 4` (random 4-5 star rating) and the hardcoded `'contact@provider.com'`, `'(555) 123-4567'`, `'123 Medical Center Dr, City, ST 12345'` placeholders.
+- Added `import { githubDB as dbHelpers, collections } from '@/lib/database'`.
+- After fetching the `patient_entity_links` (via `PatientService.getLinkedEntities`), now also fetches each linked entity record via `dbHelpers.findById(collections.entities, entity_id)` in parallel, builds an `entityById` map, and hydrates each link with the real `entity.name`, `entity.entity_type`, `entity.specialties`, `entity.rating`, `entity.phone`, `entity.email`, and `entity.address` (joined into a single string).
+- Falls back to the existing `getEntityName`/`getEntityType`/`getEntitySpecialties` helpers only when the entity record itself is missing.
+- Added `cancelled` flag + `error` state. Renders a red banner on the "Unable to Load Provider Data" path.
+- Made the provider card render defensive: phone/email/address show "Phone not available"/"Email not available"/"Address not available" when the entity has no contact info; specialties shows "No specialties listed." when empty; "Connected since" shows 'N/A' when `linked_at` is missing.
+
+### 5. src/pages/HealthTalkPodcastPage.tsx
+- Removed the `mockLiveSessions` array (fake "Live Q&A: Diabetes Management" with Dr. Amanda Foster).
+- Added `AlertCircle` to the lucide imports.
+- Rewrote `loadPodcastData` as an inline async IIFE keyed on `selectedCategory`, with `cancelled` flag and `error` state.
+- Now fetches `dbHelpers.find(collections.podcasts, {})` AND `dbHelpers.find(collections.podcasts, { isLive: true })` in parallel (both wrapped in `.catch(() => [])`). Live sessions = union of the isLive=true result and any podcast record whose `scheduled_for`/`scheduledFor` is in the future (so live sessions are also real records flagged appropriately).
+- Added defensive `adaptEpisode()` and `adaptLiveSession()` helpers that coerce raw records into the existing `PodcastEpisode`/`LiveSession` interfaces (handling alternative field names like `audio_url`/`audioUrl`/`audio`, `published_at`/`publishedAt`/`created_at`, `play_count`/`playCount`, `host` as object vs. `host_name`/`author` strings, `scheduled_for`/`scheduledStart`, etc.).
+- Added a red error banner that shows above the episode list when the fetch fails.
+- Added an empty state for the Episodes tab ("No Episodes Available" with Headphones icon) when the podcasts collection is empty.
+- Restored the audio-element `useEffect` that I had to remove while restructuring (handles timeupdate + ended events).
+
+### 6. src/pages/blog/BlogPostPage.tsx
+- Removed `mockComments` and `mockRelatedPosts` (both were empty `[]` placeholders with a "REPLACE WITH REAL DATA" comment).
+- Fixed a pre-existing broken import: removed `Comment as CommentType` from `'../../lib/blog'` (BlogService never exported a `Comment` type). Defined a local `Comment` interface instead.
+- Added imports for `useToastService`, `useAuth`, and `githubDB as dbHelpers`/`collections`.
+- New `useEffect` keyed on `postId` fetches the post via `BlogService.getPost(postId)`, then in parallel fetches `dbHelpers.find(collections.comments, { post_id: postId })` + `dbHelpers.find(collections.comments, { entity_id: postId })` (comments may be keyed either way) and `dbHelpers.find(collections.blog_posts, {})` for related posts. Comments are de-duped by id and sorted newest-first.
+- Related posts: filters the full blog_posts list by same `category` as the current post, excludes the current post by id, and caps at 3. Maps to the existing `RelatedPost` interface.
+- Wires the **Like** button to a real `dbHelpers.insert(collections.likes, { post_id, user_id, created_at })` call (with optimistic UI: heart fills, count increments, then persists; reverts on failure). Also calls `BlogService.updatePost(postId, { likes: count+1 })` so the displayed count stays consistent on reload. Like state is mirrored to `localStorage['careconnect_liked_posts']` for cross-session persistence.
+- Wires the **Bookmark** button to a real `dbHelpers.insert(collections.bookmarks, { post_id, user_id, created_at })` call. Bookmark state is mirrored to `localStorage['careconnect_bookmarked_posts']`.
+- Wires the **Post Comment** button to a real `dbHelpers.insert(collections.comments, { post_id, user_id, author, content, created_at })` call. On success the new comment is optimistically prepended to the comment list (adapted via the same `adaptComment` helper), the textarea is cleared, and a success toast fires. On failure an error toast fires.
+- All three actions show success/error toast feedback via `useToastService`.
+- Added a red error banner + "Article Not Found" fallback when the post can't be loaded.
+- The like/bookmark buttons get a disabled cursor + 'Posting...'/'...spinner' label while in flight to prevent double-submits.
+- Replaced the original indigo "bookmarked" highlight (bg-blue-100/text-blue-600) with an emerald variant (bg-emerald-100/text-emerald-700) to honour the "no indigo/blue on new code" rule.
+
+### 7. src/hooks/use-ajax-search.tsx
+- Removed the entire `MOCK_NEWS` (3 fake COVID/mental-health/cancer articles) and `MOCK_PODCASTS` (3 fake heart-health/nutrition/stress podcasts) blocks.
+- Replaced `Promise.resolve(MOCK_NEWS)` with `githubDB.find(collections.news_articles, {}).catch(() => [])` and `Promise.resolve(MOCK_PODCASTS)` with `githubDB.find(collections.podcasts, {}).catch(() => [])`.
+- Rewrote the news/podcast filtering + mapping blocks to be defensive against missing fields (uses `article.title || ''`, `article.description || article.summary || article.excerpt || ''`, `article.tags` array-or-undefined guard, etc.). The mapping now derives `id` from `id ?? uid`, `title` with 'Untitled Article'/'Untitled Episode' fallbacks, `description` with summary/excerpt fallbacks, `url` with source_url fallback for news and `/health-talk-podcast` for podcasts.
+- The existing relevance-sort logic (exact match first, then starts-with, then rating) is unchanged.
+
+### 8. src/components/ui/SearchSuggestions.tsx
+- Removed the `POPULAR_SEARCHES` array with fabricated `count` numbers (1250, 980, 756, etc.) and emoji icons.
+- Removed the `TRENDING_SEARCHES` array with fabricated growth percentages (+45%, +32%, etc.) and emoji icons.
+- Removed the emoji-bullet "Pro tip" line in favor of a plain-text version (rule: NO emojis).
+- Added `import { githubDB as dbHelpers, collections } from '../../lib/database'`.
+- New `useEffect` on mount fetches `dbHelpers.find(collections.search_analytics, {})`. If it returns records, it aggregates `query` strings by `count` (summing where the same query appears multiple times) to produce the real top-8 popular searches. It also computes a "trending this week" list = queries whose `timestamp`/`created_at`/`searched_at` falls within the last 7 days, sorted most-recent-first, capped at 5.
+- Falls back to a static `FALLBACK_POPULAR_SEARCHES` list of real healthcare search terms (mental health, family medicine, pediatrics, cardiology, pharmacy near me, telehealth services, covid-19 testing, urgent care, bmi calculator, nutrition counseling) with NO fabricated counts and NO emojis — just `{ term, category }`.
+- Trending section only renders when real analytics returned at least one recent query (otherwise the section is hidden, never fabricated).
+- Popular-search rows now show the term + its category label (when present) with NO count column.
+- Removed unused `MapPin`, `Stethoscope`, `Heart`, `GraduationCap` imports to keep the file clean.
+
+### 9. src/pages/directory/EntityDetailPage.tsx
+- Removed the 6-item hardcoded `services` array in the Services tab (General Consultation / Preventive Care / Emergency Care / Specialist Referrals / Telehealth / Health Education with their fixed lucide icons).
+- Added `import { githubDB as dbHelpers, collections } from '../../lib/database'`.
+- Added `const [services, setServices] = useState<any[]>([])` state.
+- Extended the existing `loadEntity` `Promise.all` block to also fetch `dbHelpers.find(collections.services, { entity_id: entityId })` AND `dbHelpers.find(collections.entity_services, { entity_id: entityId })` in parallel (both with `.catch(() => [])`). The two collections are merged and de-duped by id (some seed data lives in `services`, some in `entity_services`).
+- Triple-fallback for empty services: if both collection queries return empty AND the entity record itself has a `services` string array (which the seed entities do — e.g. Lagos General Hospital lists `['Outpatient Care', 'Inpatient Care', 'Emergency Services', 'Surgery', 'Diagnostics', 'Pharmacy']`), those names are wrapped into service objects and shown.
+- Rewrote the Services tab render: now iterates over the real `services` state, displays each service's `name`/`service_name` (with fallbacks), `description`/`service_description` (with fallback to "Contact the provider for more information about this service."), and conditionally shows category/duration/price badges when those fields exist.
+- Added an empty state ("No Services Listed" with Stethoscope icon) for entities that have no service records at all.
+
+## Validation
+- `npx tsc --noEmit` -> exit 0 (no type errors across the project). Confirmed before and after final cleanup.
+- `bun run lint` cannot run because the eslint config imports the missing `typescript-eslint` unified package (pre-existing repo issue noted by previous agents — `node_modules/typescript-eslint` is absent while `@typescript-eslint/*` scoped packages are present).
+- Vite dev server accepted HMR updates for all 9 modified files (visible in /tmp/devstack.log: "hmr update /src/pages/shop/ProductDetailPage.tsx", "hmr update /src/pages/dashboard/BillingPage.tsx", "hmr update /src/pages/patient/PatientPortal.tsx", "hmr update /src/pages/patient/Providers.tsx", "hmr update /src/pages/HealthTalkPodcastPage.tsx", "hmr update /src/pages/blog/BlogPostPage.tsx", "hmr update /src/components/ui/SearchSuggestions.tsx", "hmr update /src/pages/directory/EntityDetailPage.tsx") with no error or transform-error lines.
+- `grep -r "MOCK_NEWS|MOCK_PODCASTS|mockProduct|mockReviews|mockComments|mockRelatedPosts|mockLiveSessions|mockProviders|mockInvoices"` across src/ -> no matches (all mock-data identifiers removed).
+- `grep -r "Math.random() * 2) + 4"` across src/ -> no matches (random ratings removed from Providers.tsx).
+
+## Stage Summary
+- Files changed (9):
+  1. src/pages/shop/ProductDetailPage.tsx (full rewrite of data layer; kept layout)
+  2. src/pages/dashboard/BillingPage.tsx (real billing_items + insurance_claims queries; defensive render)
+  3. src/pages/patient/PatientPortal.tsx (real pending tasks derived from bookings + lab_orders)
+  4. src/pages/patient/Providers.tsx (real entity hydration from entities collection)
+  5. src/pages/HealthTalkPodcastPage.tsx (real podcasts + real live sessions from isLive flag)
+  6. src/pages/blog/BlogPostPage.tsx (real comments + related posts + wired like/bookmark/comment inserts)
+  7. src/hooks/use-ajax-search.tsx (real news_articles + podcasts queries instead of MOCK_*)
+  8. src/components/ui/SearchSuggestions.tsx (real search_analytics queries with static fallback, no fake counts/emojis)
+  9. src/pages/directory/EntityDetailPage.tsx (real services/entity_services queries with entity.services fallback)
+- All 9 UIs now display real backend data with loading skeletons/spinners, red error banners, and "No data found" empty states. NO emojis. NO new dependencies added. NO indigo/blue on new code (the bookmark highlight was switched to emerald). Existing layouts, card grids, shadow styles, and tab structures were preserved.
+- Did NOT commit to git (per task instructions — the main agent will verify and commit).

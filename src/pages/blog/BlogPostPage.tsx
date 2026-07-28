@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   Calendar,
-  User,
   Clock,
   Heart,
   MessageSquare,
@@ -11,11 +10,22 @@ import {
   ArrowLeft,
   Eye,
   BookmarkPlus,
-  ChevronRight
+  AlertCircle
 } from 'lucide-react';
-import { BlogService, BlogPost, Comment as CommentType } from '../../lib/blog';
+import { BlogService, BlogPost } from '../../lib/blog';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { useToastService } from '../../lib/toast-service';
+import { useAuth } from '../../lib/auth';
+import { githubDB as dbHelpers, collections } from '../../lib/database';
 
+interface Comment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  author: { name: string; avatar?: string };
+  content: string;
+  created_at: string;
+}
 
 interface RelatedPost {
   id: string;
@@ -26,50 +36,214 @@ interface RelatedPost {
   readTime: number;
 }
 
+const adaptComment = (raw: any): Comment => {
+  const authorName =
+    raw.author?.name ||
+    raw.user_name ||
+    raw.author_name ||
+    (raw.author && typeof raw.author === 'string' ? raw.author : 'Anonymous');
+  const authorAvatar = raw.author?.avatar || raw.author_avatar || raw.avatar;
+  return {
+    id: String(raw.id ?? raw.uid ?? ''),
+    post_id: String(raw.post_id ?? raw.entity_id ?? raw.blog_post_id ?? ''),
+    user_id: String(raw.user_id ?? raw.author_id ?? ''),
+    author: { name: authorName, avatar: authorAvatar },
+    content: raw.content || raw.body || raw.text || '',
+    created_at: raw.created_at || raw.date || new Date().toISOString()
+  };
+};
+
 const BlogPostPage: React.FC = () => {
   const { postId } = useParams<{ postId: string }>();
+  const toast = useToastService();
+  const { user } = useAuth();
   const [post, setPost] = useState<BlogPost | null>(null);
-  const [comments, setComments] = useState<CommentType[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [relatedPosts, setRelatedPosts] = useState<RelatedPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
   const [newComment, setNewComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [togglingLike, setTogglingLike] = useState(false);
+  const [togglingBookmark, setTogglingBookmark] = useState(false);
 
   useEffect(() => {
-    loadPost();
-  }, [postId]);
-
-  const loadPost = async () => {
-    setIsLoading(true);
-    try {
+    let cancelled = false;
+    const loadPost = async () => {
       if (!postId) {
+        setError('Article ID not provided.');
         setIsLoading(false);
         return;
       }
-      const fetchedPost = await BlogService.getPost(postId);
-      setPost(fetchedPost);
+      setIsLoading(true);
+      setError(null);
+      try {
+        const fetchedPost = await BlogService.getPost(postId);
+        if (cancelled) return;
 
-      // MOCK DATA FOR COMMENTS AND RELATED POSTS - REPLACE WITH REAL DATA
-      const mockComments: CommentType[] = [];
-      const mockRelatedPosts: RelatedPost[] = [];
-      setComments(mockComments);
-      setRelatedPosts(mockRelatedPosts);
-    } catch (error) {
-      console.error('Failed to load blog post:', error);
+        if (!fetchedPost) {
+          setError('Article not found.');
+          setPost(null);
+          setComments([]);
+          setRelatedPosts([]);
+          return;
+        }
+        setPost(fetchedPost);
+        setLikeCount(Number(fetchedPost.likes ?? 0) || 0);
+
+        // Fetch real comments + related posts in parallel. Comments may be
+        // keyed under post_id OR entity_id depending on the writer; query
+        // both and de-dupe.
+        const [commentsByPost, commentsByEntity, allPosts] = await Promise.all([
+          dbHelpers.find<any>(collections.comments, { post_id: postId }).catch(() => []),
+          dbHelpers.find<any>(collections.comments, { entity_id: postId }).catch(() => []),
+          dbHelpers.find<any>(collections.blog_posts, {}).catch(() => [])
+        ]);
+        if (cancelled) return;
+
+        const merged = [...(commentsByPost || []), ...(commentsByEntity || [])];
+        const seen = new Set<string>();
+        const deduped: Comment[] = [];
+        for (const raw of merged) {
+          const id = String(raw.id ?? raw.uid ?? '');
+          if (id && !seen.has(id)) {
+            seen.add(id);
+            deduped.push(adaptComment(raw));
+          }
+        }
+        deduped.sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        setComments(deduped);
+
+        // Related posts: same category, excluding the current post, top 3.
+        const related = (allPosts || [])
+          .filter((p: any) => String(p.id) !== String(postId))
+          .filter((p: any) => (p.category || '') === (fetchedPost.category || ''))
+          .slice(0, 3)
+          .map((p: any) => ({
+            id: String(p.id),
+            title: p.title || 'Untitled',
+            excerpt: p.excerpt || p.summary || '',
+            featuredImage: p.featuredImage || p.featured_image,
+            publishedAt: p.publishedAt || p.published_at || new Date().toISOString(),
+            readTime: Number(p.readTime ?? p.read_time ?? 0) || 0
+          }));
+        setRelatedPosts(related);
+
+        // Restore like/bookmark state from localStorage so the UI reflects
+        // prior interactions even before any backend round-trip.
+        try {
+          const liked = JSON.parse(localStorage.getItem('careconnect_liked_posts') || '[]');
+          if (Array.isArray(liked) && liked.includes(postId)) setIsLiked(true);
+          const bookmarked = JSON.parse(localStorage.getItem('careconnect_bookmarked_posts') || '[]');
+          if (Array.isArray(bookmarked) && bookmarked.includes(postId)) setIsBookmarked(true);
+        } catch {
+          /* ignore malformed localStorage */
+        }
+      } catch (err) {
+        console.error('Failed to load blog post:', err);
+        if (!cancelled) {
+          setError('Failed to load the article. Please try again later.');
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    loadPost();
+    return () => {
+      cancelled = true;
+    };
+  }, [postId]);
+
+  const handleLike = async () => {
+    if (!post || !postId || togglingLike) return;
+    const previouslyLiked = isLiked;
+    setTogglingLike(true);
+    // Optimistic UI update so the user gets immediate feedback.
+    setIsLiked(!previouslyLiked);
+    setLikeCount((c) => Math.max(0, c + (previouslyLiked ? -1 : 1)));
+    try {
+      // Persist the like in the likes collection. We always insert a new like
+      // record (the backend can de-dupe by user+post later). For an unlike,
+      // we just skip the insert — the optimistic state is enough for the UI.
+      if (!previouslyLiked) {
+        await dbHelpers.insert(collections.likes, {
+          post_id: postId,
+          user_id: user?.id || 'anonymous',
+          created_at: new Date().toISOString()
+        });
+        // Mirror the change on the blog post so the displayed count stays
+        // consistent on reload.
+        await BlogService.updatePost(postId, {
+          likes: Math.max(0, likeCount + 1)
+        }).catch(() => undefined);
+      }
+      // Persist locally so the heart stays filled across reloads.
+      try {
+        const liked = JSON.parse(localStorage.getItem('careconnect_liked_posts') || '[]');
+        const updated = Array.isArray(liked) ? liked : [];
+        if (previouslyLiked) {
+          const idx = updated.indexOf(postId);
+          if (idx >= 0) updated.splice(idx, 1);
+        } else if (!updated.includes(postId)) {
+          updated.push(postId);
+        }
+        localStorage.setItem('careconnect_liked_posts', JSON.stringify(updated));
+      } catch {
+        /* ignore */
+      }
+      toast.showSuccess(previouslyLiked ? 'Like removed.' : 'Article liked.');
+    } catch (err) {
+      console.error('Failed to toggle like:', err);
+      // Revert optimistic update on failure.
+      setIsLiked(previouslyLiked);
+      setLikeCount((c) => Math.max(0, c + (previouslyLiked ? 1 : -1)));
+      toast.showError('Failed to update like. Please try again.');
     } finally {
-      setIsLoading(false);
+      setTogglingLike(false);
     }
   };
 
-  const handleLike = () => {
-    setIsLiked(!isLiked);
-    // Update like count in database
-  };
-
-  const handleBookmark = () => {
-    setIsBookmarked(!isBookmarked);
-    // Save/remove bookmark in database
+  const handleBookmark = async () => {
+    if (!post || !postId || togglingBookmark) return;
+    const previouslyBookmarked = isBookmarked;
+    setTogglingBookmark(true);
+    setIsBookmarked(!previouslyBookmarked);
+    try {
+      if (!previouslyBookmarked) {
+        await dbHelpers.insert(collections.bookmarks, {
+          post_id: postId,
+          user_id: user?.id || 'anonymous',
+          created_at: new Date().toISOString()
+        });
+      }
+      try {
+        const bookmarked = JSON.parse(localStorage.getItem('careconnect_bookmarked_posts') || '[]');
+        const updated = Array.isArray(bookmarked) ? bookmarked : [];
+        if (previouslyBookmarked) {
+          const idx = updated.indexOf(postId);
+          if (idx >= 0) updated.splice(idx, 1);
+        } else if (!updated.includes(postId)) {
+          updated.push(postId);
+        }
+        localStorage.setItem('careconnect_bookmarked_posts', JSON.stringify(updated));
+      } catch {
+        /* ignore */
+      }
+      toast.showSuccess(
+        previouslyBookmarked ? 'Bookmark removed.' : 'Article bookmarked.'
+      );
+    } catch (err) {
+      console.error('Failed to toggle bookmark:', err);
+      setIsBookmarked(previouslyBookmarked);
+      toast.showError('Failed to update bookmark. Please try again.');
+    } finally {
+      setTogglingBookmark(false);
+    }
   };
 
   const handleShare = () => {
@@ -80,18 +254,39 @@ const BlogPostPage: React.FC = () => {
         url: window.location.href
       });
     } else {
-      // Fallback - copy to clipboard
       navigator.clipboard.writeText(window.location.href);
+      toast.showInfo('Link copied to clipboard.');
     }
   };
 
-  const handleCommentSubmit = (e: React.FormEvent) => {
+  const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
-
-    // Add comment logic here
-    console.log('New comment:', newComment);
-    setNewComment('');
+    if (!newComment.trim() || !postId) return;
+    if (submittingComment) return;
+    setSubmittingComment(true);
+    const trimmed = newComment.trim();
+    try {
+      const inserted = await dbHelpers.insert<any>(collections.comments, {
+        post_id: postId,
+        user_id: user?.id || 'anonymous',
+        author: {
+          name: user?.email || 'Anonymous',
+          avatar: undefined
+        },
+        content: trimmed,
+        created_at: new Date().toISOString()
+      });
+      // Optimistically render the new comment at the top of the list.
+      const adapted = adaptComment(inserted);
+      setComments((prev) => [adapted, ...prev]);
+      setNewComment('');
+      toast.showSuccess('Comment posted.');
+    } catch (err) {
+      console.error('Failed to submit comment:', err);
+      toast.showError('Failed to post comment. Please try again.');
+    } finally {
+      setSubmittingComment(false);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -110,10 +305,16 @@ const BlogPostPage: React.FC = () => {
     );
   }
 
-  if (!post) {
+  if (error || !post) {
     return (
       <div className="min-h-screen bg-light flex items-center justify-center">
         <div className="text-center">
+          {error && (
+            <div className="mb-4 inline-flex items-center bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-sm">
+              <AlertCircle className="w-4 h-4 mr-2" />
+              {error}
+            </div>
+          )}
           <h2 className="text-2xl font-bold text-gray-800 mb-4">Article Not Found</h2>
           <p className="text-gray-600 mb-6">The requested article could not be found.</p>
           <Link
@@ -195,17 +396,19 @@ const BlogPostPage: React.FC = () => {
               <div className="flex items-center space-x-4">
                 <button
                   onClick={handleLike}
-                  className={`flex items-center space-x-1 px-3 py-2 rounded-lg transition-colors ${
+                  disabled={togglingLike}
+                  className={`flex items-center space-x-1 px-3 py-2 rounded-lg transition-colors disabled:opacity-60 ${
                     isLiked ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
                   <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
-                  <span>{post.likes}</span>
+                  <span>{likeCount}</span>
                 </button>
                 <button
                   onClick={handleBookmark}
-                  className={`flex items-center space-x-1 px-3 py-2 rounded-lg transition-colors ${
-                    isBookmarked ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  disabled={togglingBookmark}
+                  className={`flex items-center space-x-1 px-3 py-2 rounded-lg transition-colors disabled:opacity-60 ${
+                    isBookmarked ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
                   <BookmarkPlus className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
@@ -257,13 +460,15 @@ const BlogPostPage: React.FC = () => {
               placeholder="Share your thoughts..."
               className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
               rows={4}
+              disabled={submittingComment}
             />
             <div className="mt-4 flex justify-end">
               <button
                 type="submit"
-                className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                disabled={!newComment.trim() || submittingComment}
+                className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Post Comment
+                {submittingComment ? 'Posting...' : 'Post Comment'}
               </button>
             </div>
           </form>
@@ -288,7 +493,7 @@ const BlogPostPage: React.FC = () => {
                       <div className="flex items-center space-x-2 mb-2">
                         <h4 className="font-semibold text-dark">{comment.author.name}</h4>
                         <span className="text-sm text-gray-500">
-                          {formatDate(comment.createdAt)}
+                          {formatDate(comment.created_at)}
                         </span>
                       </div>
                       <p className="text-gray-700">{comment.content}</p>

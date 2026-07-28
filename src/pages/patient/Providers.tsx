@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/lib/auth';
 import { PatientService } from '@/lib/patients';
 import { ReferralService } from '@/lib/referrals';
+import { githubDB as dbHelpers, collections } from '@/lib/database';
 import { 
   Stethoscope, 
   Building, 
@@ -25,60 +26,100 @@ import {
 export default function Providers() {
   const { user } = useAuth();
   const [patientData, setPatientData] = useState(null);
-  const [linkedProviders, setLinkedProviders] = useState([]);
-  const [referrals, setReferrals] = useState([]);
+  const [linkedProviders, setLinkedProviders] = useState<any[]>([]);
+  const [referrals, setReferrals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user?.id) {
-      loadProviderData();
-    }
-  }, [user?.id]);
-
-  const loadProviderData = async () => {
+    let cancelled = false;
     if (!user?.id) return;
-
-    try {
+    (async () => {
       setLoading(true);
-      
-      // Get patient details first
-      const patientDetails = await PatientService.getPatientDetails(user.id, user.id);
-      
-      if (!patientDetails) {
-        throw new Error('Patient record not found');
+      setError(null);
+      try {
+        // Get patient details first
+        const patientDetails = await PatientService.getPatientDetails(user.id, user.id);
+        if (cancelled) return;
+        if (!patientDetails) {
+          if (!cancelled) {
+            setError('Patient record not found.');
+            setPatientData(null);
+          }
+          return;
+        }
+
+        // Load patient_entity_links + referrals in parallel
+        const [entityLinks, patientReferrals] = await Promise.all([
+          PatientService.getLinkedEntities(patientDetails.id),
+          ReferralService.getPatientReferrals(patientDetails.id)
+        ]);
+        if (cancelled) return;
+
+        // Hydrate each link with the real entity record so we can show real
+        // contact info (phone/email/address) instead of fabricated values.
+        const entityIds = Array.from(
+          new Set((entityLinks || []).map((l: any) => l.entity_id).filter(Boolean))
+        ) as string[];
+        const entityRecords = await Promise.all(
+          entityIds.map((id) =>
+            dbHelpers.findById<any>(collections.entities, id).catch(() => null)
+          )
+        );
+        if (cancelled) return;
+        const entityById = new Map<string, any>();
+        entityRecords.forEach((rec) => {
+          if (rec && rec.id != null) entityById.set(String(rec.id), rec);
+        });
+
+        const providers = (entityLinks || []).map((link: any) => {
+          const entity = entityById.get(String(link.entity_id)) || {};
+          const address = entity.address || {};
+          const addressStr = [
+            address.street,
+            address.city,
+            address.state,
+            address.postal_code,
+            address.country
+          ]
+            .filter(Boolean)
+            .join(', ');
+          const rating = Number(entity.rating ?? 0) || 0;
+          return {
+            ...link,
+            entity_name:
+              entity.name || link.entity_name || getEntityName(link.relationship_type),
+            entity_type:
+              entity.entity_type || getEntityType(link.relationship_type),
+            specialties:
+              Array.isArray(entity.specialties) && entity.specialties.length > 0
+                ? entity.specialties
+                : getEntitySpecialties(link.relationship_type),
+            rating,
+            phone: entity.phone || '',
+            email: entity.email || '',
+            address: addressStr || ''
+          };
+        });
+
+        if (!cancelled) {
+          setPatientData(patientDetails);
+          setLinkedProviders(providers);
+          setReferrals(patientReferrals || []);
+        }
+      } catch (err) {
+        console.error('Failed to load provider data:', err);
+        if (!cancelled) {
+          setError('Failed to load your provider data. Please try again.');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      // Load provider and referral data
-      const [
-        entityLinks,
-        patientReferrals
-      ] = await Promise.all([
-        PatientService.getLinkedEntities(patientDetails.id),
-        ReferralService.getPatientReferrals(patientDetails.id)
-      ]);
-
-      // Mock provider details (in real implementation, would fetch from entities collection)
-      const mockProviders = entityLinks.map(link => ({
-        ...link,
-        entity_name: getEntityName(link.relationship_type),
-        entity_type: getEntityType(link.relationship_type),
-        specialties: getEntitySpecialties(link.relationship_type),
-        rating: Math.floor(Math.random() * 2) + 4, // 4-5 star rating
-        phone: '(555) 123-4567',
-        email: 'contact@provider.com',
-        address: '123 Medical Center Dr, City, ST 12345'
-      }));
-
-      setPatientData(patientDetails);
-      setLinkedProviders(mockProviders);
-      setReferrals(patientReferrals);
-
-    } catch (error) {
-      console.error('Failed to load provider data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const getEntityName = (relationshipType: string) => {
     const names = {
@@ -178,6 +219,12 @@ export default function Providers() {
   if (!patientData) {
     return (
       <div className="text-center py-12">
+        {error && (
+          <div className="mb-4 inline-flex items-center bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-sm">
+            <Building className="w-4 h-4 mr-2" />
+            {error}
+          </div>
+        )}
         <Building className="h-12 w-12 text-red-500 mx-auto mb-4" />
         <h2 className="text-xl font-semibold mb-2">Unable to Load Provider Data</h2>
         <p className="text-muted-foreground">
@@ -287,33 +334,40 @@ export default function Providers() {
                     <div className="space-y-3">
                       <div>
                         <p className="text-sm font-medium mb-1">Specialties:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {provider.specialties.map((specialty, index) => (
-                            <Badge key={index} variant="secondary" className="text-xs">
-                              {specialty}
-                            </Badge>
-                          ))}
-                        </div>
+                        {provider.specialties && provider.specialties.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {provider.specialties.map((specialty: string, index: number) => (
+                              <Badge key={index} variant="secondary" className="text-xs">
+                                {specialty}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No specialties listed.</p>
+                        )}
                       </div>
                       
                       <div className="space-y-2">
                         <div className="flex items-center space-x-2 text-sm">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
-                          <span>{provider.phone}</span>
+                          <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span>{provider.phone || 'Phone not available'}</span>
                         </div>
                         <div className="flex items-center space-x-2 text-sm">
-                          <Mail className="h-4 w-4 text-muted-foreground" />
-                          <span>{provider.email}</span>
+                          <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span>{provider.email || 'Email not available'}</span>
                         </div>
                         <div className="flex items-center space-x-2 text-sm">
-                          <MapPin className="h-4 w-4 text-muted-foreground" />
-                          <span>{provider.address}</span>
+                          <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span>{provider.address || 'Address not available'}</span>
                         </div>
                       </div>
                       
                       <div className="pt-2 border-t">
                         <p className="text-xs text-muted-foreground mb-2">
-                          Connected since: {new Date(provider.linked_at).toLocaleDateString()}
+                          Connected since:{' '}
+                          {provider.linked_at
+                            ? new Date(provider.linked_at).toLocaleDateString()
+                            : 'N/A'}
                         </p>
                         <div className="flex space-x-2">
                           <Button size="sm" className="flex-1">

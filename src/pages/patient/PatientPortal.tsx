@@ -9,6 +9,7 @@ import { PatientService } from '@/lib/patients';
 import { EncounterService } from '@/lib/encounters';
 import { LabService } from '@/lib/labs';
 import { MedicationService } from '@/lib/medications';
+import { githubDB as dbHelpers, collections } from '@/lib/database';
 import { 
   User, 
   Calendar, 
@@ -39,80 +40,126 @@ export default function PatientPortal() {
   const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState<PatientDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user?.id) {
-      loadPatientDashboard();
-    }
-  }, [user?.id]);
-
-  const loadPatientDashboard = async () => {
+    let cancelled = false;
     if (!user?.id) return;
-
-    try {
+    (async () => {
       setLoading(true);
-      
-      // Get patient details
-      const patientDetails = await PatientService.getPatientDetails(user.id, user.id);
-      
-      if (!patientDetails) {
-        throw new Error('Patient record not found');
-      }
-
-      // Get encounters
-      const allEncounters = await EncounterService.getPatientEncounters(patientDetails.id);
-      const upcomingAppointments = allEncounters.filter(encounter => {
-        const appointmentDate = new Date(encounter.scheduled_start);
-        const now = new Date();
-        return appointmentDate > now && encounter.status === 'scheduled';
-      }).slice(0, 5);
-
-      const recentEncounters = allEncounters.filter(encounter => {
-        const appointmentDate = new Date(encounter.scheduled_start);
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        return appointmentDate > thirtyDaysAgo && encounter.status === 'completed';
-      }).slice(0, 5);
-
-      // Get medications
-      const activeMedications = await MedicationService.getPatientActiveMedications(patientDetails.id);
-
-      // Get lab results
-      const recentLabResults = await LabService.getPatientLabResults(patientDetails.id, true);
-
-      // Mock pending tasks (would be implemented based on care plans)
-      const pendingTasks = [
-        {
-          id: '1',
-          title: 'Schedule Annual Physical',
-          description: 'Your annual physical examination is due',
-          priority: 'medium',
-          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-        },
-        {
-          id: '2',
-          title: 'Update Insurance Information',
-          description: 'Please update your insurance details',
-          priority: 'low',
-          due_date: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString()
+      setError(null);
+      try {
+        // Get patient details
+        const patientDetails = await PatientService.getPatientDetails(user.id, user.id);
+        if (cancelled) return;
+        if (!patientDetails) {
+          if (!cancelled) {
+            setError('Patient record not found.');
+            setDashboardData(null);
+          }
+          return;
         }
-      ];
 
-      setDashboardData({
-        patient: patientDetails,
-        upcomingAppointments,
-        recentEncounters,
-        activeMedications: activeMedications.slice(0, 5),
-        recentLabResults: recentLabResults.slice(0, 5),
-        pendingTasks
-      });
+        // Get encounters
+        const allEncounters = await EncounterService.getPatientEncounters(patientDetails.id);
+        if (cancelled) return;
+        const upcomingAppointments = allEncounters
+          .filter((encounter: any) => {
+            const appointmentDate = new Date(encounter.scheduled_start);
+            return appointmentDate > new Date() && encounter.status === 'scheduled';
+          })
+          .slice(0, 5);
 
-    } catch (error) {
-      console.error('Failed to load patient dashboard:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+        const recentEncounters = allEncounters
+          .filter((encounter: any) => {
+            const appointmentDate = new Date(encounter.scheduled_start);
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            return appointmentDate > thirtyDaysAgo && encounter.status === 'completed';
+          })
+          .slice(0, 5);
+
+        // Get medications
+        const activeMedications = await MedicationService.getPatientActiveMedications(
+          patientDetails.id
+        );
+        if (cancelled) return;
+
+        // Get lab results
+        const recentLabResults = await LabService.getPatientLabResults(patientDetails.id, true);
+        if (cancelled) return;
+
+        // Derive real pending tasks from upcoming bookings + pending lab orders.
+        // Bookings and lab_orders are scoped by patient_id; statuses indicate
+        // what still needs the patient's attention.
+        const [upcomingBookings, pendingLabOrders] = await Promise.all([
+          dbHelpers
+            .find(collections.bookings, { patient_id: patientDetails.id })
+            .catch(() => []),
+          dbHelpers
+            .find(collections.lab_orders, { patient_id: patientDetails.id })
+            .catch(() => [])
+        ]);
+        if (cancelled) return;
+
+        const now = new Date();
+        const pendingBookings = (upcomingBookings || [])
+          .filter((b: any) => ['confirmed', 'pending'].includes(b.status))
+          .filter((b: any) => {
+            const d = b.appointment_date ? new Date(b.appointment_date) : null;
+            return !d || d >= now;
+          })
+          .map((b: any) => ({
+            id: `booking-${b.id}`,
+            title: `Upcoming ${b.service_name || b.type || 'appointment'}`,
+            description: b.notes || `Scheduled for ${b.appointment_date || 'a future date'} at ${b.appointment_time || ''}`.trim(),
+            priority: b.status === 'pending' ? 'medium' : 'low',
+            due_date: b.appointment_date
+              ? new Date(b.appointment_date).toISOString()
+              : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+          }));
+
+        const pendingLabs = (pendingLabOrders || [])
+          .filter((l: any) => !['completed', 'cancelled', 'rejected'].includes(l.status))
+          .map((l: any) => ({
+            id: `lab-${l.id}`,
+            title: `Lab result pending: ${l.test_name || l.panel || 'Ordered test'}`,
+            description:
+              l.notes ||
+              (l.status
+                ? `Status: ${l.status.replace(/_/g, ' ')}`
+                : 'Awaiting results from the laboratory.'),
+            priority: ['urgent', 'emergency', 'stat'].includes(l.priority) ? 'high' : 'medium',
+            due_date: l.ordered_at
+              ? new Date(l.ordered_at).toISOString()
+              : new Date().toISOString()
+          }));
+
+        const pendingTasks = [...pendingBookings, ...pendingLabs].slice(0, 8);
+
+        if (!cancelled) {
+          setDashboardData({
+            patient: patientDetails,
+            upcomingAppointments,
+            recentEncounters,
+            activeMedications: activeMedications.slice(0, 5),
+            recentLabResults: recentLabResults.slice(0, 5),
+            pendingTasks
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load patient dashboard:', err);
+        if (!cancelled) {
+          setError('Failed to load your patient data. Please try again.');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const getEncounterTypeIcon = (type: string) => {
     switch (type) {
@@ -152,17 +199,20 @@ export default function PatientPortal() {
     );
   }
 
-  if (!dashboardData) {
+  if (error || !dashboardData) {
     return (
       <div className="text-center py-12">
+        {error && (
+          <div className="mb-4 inline-flex items-center bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-sm">
+            <AlertCircle className="w-4 h-4 mr-2" />
+            {error}
+          </div>
+        )}
         <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
         <h2 className="text-xl font-semibold mb-2">Unable to Load Patient Data</h2>
         <p className="text-muted-foreground mb-4">
           We couldn't find your patient record. Please contact support.
         </p>
-        <Button onClick={loadPatientDashboard}>
-          Try Again
-        </Button>
       </div>
     );
   }

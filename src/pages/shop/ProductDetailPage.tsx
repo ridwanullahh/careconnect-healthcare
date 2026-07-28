@@ -15,6 +15,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { githubDB as dbHelpers, collections } from '../../lib/database';
 
 interface Product {
   id: string;
@@ -56,104 +57,156 @@ interface Review {
   verified: boolean;
 }
 
+// Coerce a raw product record from the products collection into the shape this
+// component expects. Real records vary (some fields may be missing), so every
+// access is defensive.
+const adaptProduct = (raw: any): Product | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  const price = Number(raw.price ?? 0);
+  const originalPrice =
+    raw.discounted_price != null
+      ? Number(raw.discounted_price)
+      : raw.original_price != null
+        ? Number(raw.original_price)
+        : undefined;
+  const stockCount = Number(raw.stock_quantity ?? raw.stock_count ?? 0);
+  const images =
+    Array.isArray(raw.images) && raw.images.length > 0
+      ? raw.images.filter(Boolean)
+      : raw.image_url
+        ? [raw.image_url]
+        : ['/images/placeholder-product.jpg'];
+  const tags = Array.isArray(raw.tags)
+    ? raw.tags
+    : Array.isArray(raw.specialties)
+      ? raw.specialties
+      : [];
+  const features = Array.isArray(raw.features)
+    ? raw.features
+    : Array.isArray(raw.highlights)
+      ? raw.highlights
+      : [];
+  const warnings = Array.isArray(raw.warnings)
+    ? raw.warnings
+    : Array.isArray(raw.precautions)
+      ? raw.precautions
+      : undefined;
+  const ingredients = Array.isArray(raw.ingredients) ? raw.ingredients : undefined;
+  return {
+    id: String(raw.id),
+    name: raw.name || raw.title || 'Product',
+    description: raw.description || raw.short_description || '',
+    longDescription:
+      raw.long_description ||
+      raw.description ||
+      raw.longDescription ||
+      raw.short_description ||
+      '',
+    price: isNaN(price) ? 0 : price,
+    originalPrice:
+      originalPrice != null && !isNaN(originalPrice) ? originalPrice : undefined,
+    images,
+    category: raw.category || raw.product_type || 'general',
+    tags,
+    rating: Number(raw.rating ?? 0) || 0,
+    reviewCount: Number(raw.review_count ?? 0) || 0,
+    inStock: raw.is_in_stock != null ? !!raw.is_in_stock : stockCount > 0,
+    stockCount,
+    isPrescriptionRequired: !!raw.is_prescription_required,
+    entityId: raw.entity_id || '',
+    entityName: raw.brand || raw.entity_name || raw.seller || 'CareConnect Marketplace',
+    entityType: raw.entity_type === 'pharmacy' ? 'pharmacy' : 'health_center',
+    features,
+    ingredients,
+    warnings,
+    dosage: raw.dosage || raw.usage_instructions || undefined,
+    shipping: {
+      freeShipping: raw.free_shipping != null ? !!raw.free_shipping : true,
+      estimatedDays: Number(raw.estimated_days ?? 2) || 2,
+      cost: raw.shipping_cost != null ? Number(raw.shipping_cost) : undefined
+    }
+  };
+};
+
+const adaptReview = (raw: any): Review => ({
+  id: String(raw.id ?? raw.uid ?? ''),
+  userId: String(raw.user_id ?? raw.reviewer_id ?? ''),
+  userName: raw.user_name || raw.author_name || raw.reviewer_name || 'Anonymous',
+  rating: Number(raw.rating ?? 0) || 0,
+  title: raw.title || raw.subject || '',
+  content: raw.content || raw.comment || raw.body || '',
+  date: raw.date || raw.created_at || raw.review_date || new Date().toISOString(),
+  verified: !!raw.verified_purchase
+});
+
 const ProductDetailPage: React.FC = () => {
   const { productId } = useParams<{ productId: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [activeTab, setActiveTab] = useState('description');
 
   useEffect(() => {
+    let cancelled = false;
+    const loadProduct = async () => {
+      if (!productId) {
+        setError('Product ID not provided.');
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Reviews may be keyed under product_id OR entity_id depending on the
+        // seed/migration source, so we query both and de-dupe by id.
+        const [rawProduct, reviewsByProduct, reviewsByEntity] = await Promise.all([
+          dbHelpers.findById<any>(collections.products, productId).catch(() => null),
+          dbHelpers.find<any>(collections.reviews, { product_id: productId }).catch(() => []),
+          dbHelpers.find<any>(collections.reviews, { entity_id: productId }).catch(() => [])
+        ]);
+        if (cancelled) return;
+
+        if (!rawProduct) {
+          setProduct(null);
+          setReviews([]);
+          setError('Product not found.');
+          return;
+        }
+        const adapted = adaptProduct(rawProduct);
+        if (adapted) setProduct(adapted);
+
+        const merged = [...(reviewsByProduct || []), ...(reviewsByEntity || [])];
+        const seen = new Set<string>();
+        const deduped: Review[] = [];
+        for (const raw of merged) {
+          const id = String(raw.id ?? raw.uid ?? '');
+          if (id && !seen.has(id)) {
+            seen.add(id);
+            deduped.push(adaptReview(raw));
+          }
+        }
+        deduped.sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+        setReviews(deduped);
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to load product:', err);
+          setError('Failed to load product details.');
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
     loadProduct();
+    return () => {
+      cancelled = true;
+    };
   }, [productId]);
-
-  const loadProduct = async () => {
-    setIsLoading(true);
-    try {
-      // Mock product data (in real app, fetch from database)
-      const mockProduct: Product = {
-        id: productId!,
-        name: 'Digital Thermometer - Instant Read',
-        description: 'Fast and accurate digital thermometer with large display and fever alarm.',
-        longDescription: `The CareFirst Digital Thermometer provides fast, accurate temperature readings in just 10 seconds. 
-        
-Featuring a large, easy-to-read LCD display and audible fever alarm, this thermometer is perfect for families. The flexible tip ensures comfortable use for all ages, while the memory function stores the last reading for easy tracking.
-        
-This FDA-approved thermometer meets the highest standards for accuracy and safety. The waterproof design makes cleaning easy and hygienic.`,
-        price: 24.99,
-        originalPrice: 34.99,
-        images: [
-          '/images/products/thermometer-1.jpg',
-          '/images/products/thermometer-2.jpg',
-          '/images/products/thermometer-3.jpg'
-        ],
-        category: 'medical-devices',
-        tags: ['thermometer', 'digital', 'fever', 'medical'],
-        rating: 4.8,
-        reviewCount: 234,
-        inStock: true,
-        stockCount: 45,
-        isPrescriptionRequired: false,
-        entityId: '1',
-        entityName: 'CareFirst Medical Center',
-        entityType: 'health_center',
-        features: [
-          'Fast 10-second reading',
-          'Large LCD display',
-          'Audible fever alarm',
-          'Memory function',
-          'Flexible tip',
-          'Waterproof design',
-          'FDA approved',
-          'Auto shut-off'
-        ],
-        warnings: [
-          'Clean before and after each use',
-          'Store in protective case when not in use',
-          'Do not expose to extreme temperatures',
-          'Replace battery when low battery indicator appears'
-        ],
-        dosage: 'For oral, rectal, or underarm use. Follow included instructions for proper measurement technique.',
-        shipping: {
-          freeShipping: true,
-          estimatedDays: 2
-        }
-      };
-
-      const mockReviews: Review[] = [
-        {
-          id: '1',
-          userId: '1',
-          userName: 'Sarah M.',
-          rating: 5,
-          title: 'Excellent thermometer!',
-          content: 'Very accurate and fast. The fever alarm is really helpful with kids.',
-          date: '2024-01-15',
-          verified: true
-        },
-        {
-          id: '2',
-          userId: '2',
-          userName: 'Dr. Johnson',
-          rating: 5,
-          title: 'Professional quality',
-          content: 'I recommend this to all my patients. Reliable and easy to use.',
-          date: '2024-01-10',
-          verified: true
-        }
-      ];
-
-      setProduct(mockProduct);
-      setReviews(mockReviews);
-    } catch (error) {
-      console.error('Failed to load product:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleAddToCart = () => {
     // Add to cart logic
@@ -182,10 +235,16 @@ This FDA-approved thermometer meets the highest standards for accuracy and safet
     );
   }
 
-  if (!product) {
+  if (error || !product) {
     return (
       <div className="min-h-screen bg-light flex items-center justify-center">
         <div className="text-center">
+          {error && (
+            <div className="mb-4 inline-flex items-center bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-sm">
+              <AlertCircle className="w-4 h-4 mr-2" />
+              {error}
+            </div>
+          )}
           <h2 className="text-2xl font-bold text-gray-800 mb-4">Product Not Found</h2>
           <p className="text-gray-600 mb-6">The requested product could not be found.</p>
           <Link
@@ -415,48 +474,61 @@ This FDA-approved thermometer meets the highest standards for accuracy and safet
             {activeTab === 'features' && (
               <div>
                 <h3 className="text-lg font-semibold mb-4">Key Features</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {product.features.map((feature, index) => (
-                    <div key={index} className="flex items-center space-x-3">
-                      <div className="w-2 h-2 bg-primary rounded-full"></div>
-                      <span className="text-gray-700">{feature}</span>
-                    </div>
-                  ))}
-                </div>
+                {product.features.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {product.features.map((feature, index) => (
+                      <div key={index} className="flex items-center space-x-3">
+                        <div className="w-2 h-2 bg-primary rounded-full"></div>
+                        <span className="text-gray-700">{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm">No additional features listed for this product.</p>
+                )}
               </div>
             )}
             
             {activeTab === 'reviews' && (
               <div className="space-y-6">
-                {reviews.map((review) => (
-                  <div key={review.id} className="border-b border-gray-200 pb-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-medium">{review.userName}</span>
-                        {review.verified && (
-                          <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                            Verified Purchase
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-sm text-gray-500">{review.date}</span>
-                    </div>
-                    <div className="flex items-center mb-2">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`w-4 h-4 ${
-                            i < review.rating 
-                              ? 'text-yellow-400 fill-current' 
-                              : 'text-gray-300'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <h4 className="font-medium mb-2">{review.title}</h4>
-                    <p className="text-gray-700">{review.content}</p>
+                {reviews.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Star className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500">No reviews yet. Be the first to share your experience.</p>
                   </div>
-                ))}
+                ) : (
+                  reviews.map((review) => (
+                    <div key={review.id} className="border-b border-gray-200 pb-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-medium">{review.userName}</span>
+                          {review.verified && (
+                            <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                              Verified Purchase
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-sm text-gray-500">
+                          {new Date(review.date).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center mb-2">
+                        {[...Array(5)].map((_, i) => (
+                          <Star
+                            key={i}
+                            className={`w-4 h-4 ${
+                              i < review.rating 
+                                ? 'text-yellow-400 fill-current' 
+                                : 'text-gray-300'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      {review.title && <h4 className="font-medium mb-2">{review.title}</h4>}
+                      <p className="text-gray-700">{review.content}</p>
+                    </div>
+                  ))
+                )}
               </div>
             )}
             
