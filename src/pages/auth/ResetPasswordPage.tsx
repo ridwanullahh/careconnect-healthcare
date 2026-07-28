@@ -33,7 +33,24 @@ export default function ResetPasswordPage() {
     try {
       const { token: resetToken } = await PasswordResetService.createResetToken(email);
       const url = PasswordResetService.generateResetURL(resetToken);
-      setMessage(`Password reset link generated. In production, this would be emailed to ${email}. For development: ${url}`);
+      // Send the reset link via the backend email service (SMTP creds stay server-side).
+      // Never display the reset URL in the UI — that is a security hole.
+      try {
+        const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+        await fetch(`${apiBase}/email/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: email,
+            subject: 'Reset Your CareConnect Password',
+            html: `<p>We received a request to reset your CareConnect account password.</p><p>Click the link below to reset it (valid for 1 hour):</p><p><a href="${url}">${url}</a></p><p>If you did not request this, you can safely ignore this email.</p>`,
+          }),
+        });
+      } catch (emailErr) {
+        console.warn('Failed to send reset email:', emailErr);
+      }
+      // Generic message — does not reveal whether the email exists.
+      setMessage('If an account exists for that email address, a password reset link has been sent. Please check your inbox and spam folder.');
       setStep('verify');
     } catch (err: any) {
       setError(err.message || 'Failed to create reset token');
