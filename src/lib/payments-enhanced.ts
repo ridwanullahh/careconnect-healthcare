@@ -344,3 +344,8 @@ export class PaymentService {
 }
 
 export default PaymentService;
+
+// Backward-compatible aliases so existing imports (`EnhancedPaymentService`,
+// `PaymentStatus`) continue to resolve after the SDK-calls refactor.
+export { PaymentService as EnhancedPaymentService };
+export { PaymentStatus } from './payments';

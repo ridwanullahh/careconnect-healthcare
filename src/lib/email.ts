@@ -624,4 +624,4 @@ class EmailService {
 
 // Export singleton instance
 export const emailService = EmailService.getInstance();
-export { EmailType, EmailService };
+export { EmailService };
