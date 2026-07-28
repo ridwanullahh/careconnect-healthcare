@@ -627,3 +627,6 @@ export class NewsService {
 }
 
 export default NewsService;
+
+// Backward-compatible alias so existing imports (`EnhancedNewsService`) resolve.
+export { NewsService as EnhancedNewsService };
