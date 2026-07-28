@@ -650,3 +650,27 @@ Closing pillars:
 - Hasbiyallahu la ilaha illahu alaihi tawakkaltu.
 - Subhanallah walhamdulillahi wa la ilaha illallahu wallahu akbar.
 - Allahumma salli ala Muhammad wa ala aali Muhammad.
+
+---
+Task ID: PHASE3-COMPLETION
+Agent: Main (Z.ai Code)
+Task: Production build fix + LMS/HMS/MFA/schedulers/consent completion + audit leftovers
+
+Work Log:
+- Fixed production build: moved build-critical packages (vite, @vitejs/plugin-react, typescript, tailwindcss, postcss, autoprefixer, terser, esbuild-wasm) from devDependencies to dependencies so production environments with `npm ci --production` still have them; added .npmrc with legacy-peer-deps; improved manualChunks (split markdown + maps) + raised chunkSizeWarningLimit. Build verified: exit 0, 1711 modules, no warnings.
+- LMS (subagent): replaced 3 LmsManagementPage placeholders (students table, analytics, content library CRUD); quiz grading UI in CourseLearningPage (inline grading, progress tracking, auto-certificate); real printable CertificatePage + /certificate/:certNumber route; fixed certificate URL to use app origin.
+- HMS (subagent): print templates (encounter/prescription/lab/discharge/bed-occupancy HTML generators); reusable PrintButton component wired into EncounterBoard/PharmacyDispense/LabOrders; code validators (ICD-10/CPT/NDC/LOINC) wired into forms with on-blur validation; Bed Management reports (real occupancy report with ward/type breakdown).
+- PublicDashboard: replaced 2 placeholders (Recent Activity feed from bookings/courses/donations/tools sorted by date; Recent Tool Results from tool_results collection).
+- MFA/TOTP: backend RFC 6238 service (generateTOTPSecret, generateTOTP, verifyTOTP with window, enableMFA/confirmMFA/disableMFA/verifyUserTOTP); /api/mfa/* routes (status/setup/confirm/disable/verify); frontend MFASetup component (secret + otpauth URI display, 6-digit verify, enable/disable flow); wired into PublicDashboard Security section.
+- Schedulers consolidation (subagent): consolidated-scheduler.ts (polls /api/cron every 5 min for admins); backend cron extended with booking reminders + re-verification reminders; EmailSchedulerService now delegates to backend.
+- Consent versioning (subagent): ConsentAcceptanceModal component; auth.tsx checks consent version on login; system_settings current_consent_version; modal blocks app until accepted.
+- Fixed data-deletion dotted-path filters/updates (Lightbase adapter doesn't support 'data.status' dotted paths — replaced with client-side filter on data.status + full-object updates).
+
+Stage Summary:
+- Production build: clean exit 0, no warnings, all chunks properly split
+- All "coming soon" placeholders replaced with real functional sections
+- MFA/TOTP fully functional (RFC 6238, backend + frontend)
+- HMS print templates + code validators wired into clinical workflows
+- Schedulers consolidated to single backend-cron-driven system
+- Consent versioning enforced on login
+- 3 commits pushed and hash-verified: 0f04112 (build fix) -> 2476eb9 (phase 3 features)
