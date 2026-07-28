@@ -4,6 +4,7 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
 import { githubDB, collections } from '../../lib/database';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import MFASetup from '../../components/auth/MFASetup';
 
 // Dashboard sections
 const OverviewSection = () => {
@@ -16,6 +17,7 @@ const OverviewSection = () => {
     donations: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [activity, setActivity] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -33,6 +35,14 @@ const OverviewSection = () => {
           tools: tools.length,
           donations: donations.reduce((acc, d) => acc + d.amount, 0),
         });
+        // Build a recent activity feed from multiple sources, sorted by date.
+        const items: any[] = [];
+        appointments.forEach((b: any) => items.push({ type: 'Appointment', title: b.service_name || 'Appointment', date: b.created_at || b.appointment_date, status: b.status }));
+        courses.forEach((e: any) => items.push({ type: 'Course', title: e.course_title || 'Course Enrollment', date: e.enrolled_at || e.created_at, status: e.status }));
+        donations.forEach((d: any) => items.push({ type: 'Donation', title: `Donation to ${d.cause_title || 'cause'}`, date: d.created_at, status: d.status }));
+        tools.forEach((t: any) => items.push({ type: 'Health Tool', title: t.tool_name || 'Health Tool', date: t.created_at, status: 'completed' }));
+        items.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+        setActivity(items.slice(0, 8));
       } catch (error) {
         console.error("Failed to fetch dashboard stats:", error);
       } finally {
@@ -73,8 +83,24 @@ const OverviewSection = () => {
       {/* Recent Activity */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h3 className="text-lg font-semibold text-dark mb-4">Recent Activity</h3>
-        <div className="space-y-4">
-          <p className="text-gray-500">Recent activity feed coming soon...</p>
+        <div className="space-y-3">
+          {activity.length === 0 ? (
+            <p className="text-gray-500">No recent activity. Book an appointment or explore health tools to get started.</p>
+          ) : activity.map((item, idx) => (
+            <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+              <div className="flex items-center gap-3">
+                <span className={`inline-block w-2 h-2 rounded-full ${item.type === 'Appointment' ? 'bg-teal-500' : item.type === 'Course' ? 'bg-emerald-500' : item.type === 'Donation' ? 'bg-amber-500' : 'bg-slate-500'}`}></span>
+                <div>
+                  <p className="text-sm font-medium text-dark">{item.title}</p>
+                  <p className="text-xs text-gray-500">{item.type}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-500">{item.date ? new Date(item.date).toLocaleDateString() : ''}</p>
+                {item.status && <span className="text-xs text-gray-400 capitalize">{item.status}</span>}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -265,16 +291,48 @@ const AppointmentsSection = () => {
 };
 
 const HealthToolsSection = () => {
+  const { user } = useAuth();
+  const [toolResults, setToolResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchResults = async () => {
+      if (!user) return;
+      try {
+        const results = await githubDB.find(collections.tool_results, { user_id: user.id });
+        results.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+        setToolResults(results.slice(0, 10));
+      } catch (e) {
+        console.error('Failed to load tool results:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchResults();
+  }, [user]);
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-dark">My Health Tools</h2>
-      
+
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h3 className="text-lg font-semibold text-dark mb-4">Recent Tool Results</h3>
-        <div className="space-y-4">
-          <p className="text-gray-500">Recent tool results coming soon...</p>
+        <div className="space-y-3">
+          {loading ? (
+            <LoadingSpinner />
+          ) : toolResults.length === 0 ? (
+            <p className="text-gray-500">No tool results yet. Explore the health tools to start tracking your wellness.</p>
+          ) : toolResults.map((r, idx) => (
+            <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+              <div>
+                <p className="text-sm font-medium text-dark">{r.tool_name || r.tool_id || 'Health Tool'}</p>
+                <p className="text-xs text-gray-500">{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</p>
+              </div>
+              {r.result_summary && <span className="text-sm text-gray-600">{r.result_summary}</span>}
+            </div>
+          ))}
         </div>
-        
+
         <div className="mt-6">
           <Link
             to="/health-tools"
@@ -440,6 +498,15 @@ const DonationsSection = () => {
   );
 };
 
+const SecuritySection = () => {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-dark">Security Settings</h2>
+      <MFASetup />
+    </div>
+  );
+};
+
 const PublicDashboard = () => {
   const location = useLocation();
   const currentPath = location.pathname.split('/').pop() || 'overview';
@@ -451,7 +518,8 @@ const PublicDashboard = () => {
     { name: 'Health Tools', path: 'health-tools' },
     { name: 'Courses', path: 'courses' },
     { name: 'Orders', path: 'orders' },
-    { name: 'Donations', path: 'donations' }
+    { name: 'Donations', path: 'donations' },
+    { name: 'Security', path: 'security' }
   ];
 
   return (
@@ -489,6 +557,7 @@ const PublicDashboard = () => {
             <Route path="courses" element={<CoursesSection />} />
             <Route path="orders" element={<OrdersSection />} />
             <Route path="donations" element={<DonationsSection />} />
+            <Route path="security" element={<SecuritySection />} />
             <Route path="" element={<OverviewSection />} />
           </Routes>
         </div>

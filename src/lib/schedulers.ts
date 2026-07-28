@@ -1,4 +1,19 @@
+// Bismillah Ar-Rahman Ar-Raheem.
+// Schedulers (legacy compat shim).
+//
+// All real scheduling now happens server-side at POST /api/cron. This file
+// keeps the old API surface (BookingReminderService + EmailSchedulerService)
+// so existing call sites continue to compile, but the heavy lifting has been
+// removed from the client:
+//   - startReminderDaemon / startProcessor are no-ops (the consolidated
+//     scheduler in src/lib/consolidated-scheduler.ts polls /api/cron instead).
+//   - processDueEmails now delegates to the backend /api/cron endpoint.
+//   - scheduleReminders() / scheduleEmail() / unsubscribe() still write to
+//     the database so feature code that creates reminders keeps working.
+//
+// See src/lib/consolidated-scheduler.ts for the new entry point.
 import { githubDB as db, collections } from './database';
+import { runCronOnce } from './consolidated-scheduler';
 
 export interface BookingReminder {
   id?: string;
@@ -14,75 +29,31 @@ export interface BookingReminder {
 }
 
 export class BookingReminderService {
-  private static intervalId: ReturnType<typeof setInterval> | null = null;
-
-  static scheduleReminders(booking: any): void {
-    const bookingDate = new Date(`${booking.date}T${booking.time}`);
-    const reminders: Array<{ type: '24h' | '1h'; offset: number }> = [
-      { type: '24h', offset: 24 * 60 * 60 * 1000 },
-      { type: '1h', offset: 60 * 60 * 1000 },
-    ];
-
-    for (const r of reminders) {
-      const scheduledAt = new Date(bookingDate.getTime() - r.offset);
-      if (scheduledAt > new Date()) {
-        db.insert(collections.booking_reminders, {
-          booking_id: booking.id,
-          user_id: booking.user_id,
-          entity_id: booking.entity_id,
-          reminder_type: r.type,
-          scheduled_at: scheduledAt.toISOString(),
-          sent: false,
-          created_at: new Date().toISOString(),
-        }).catch(() => {});
-      }
-    }
-  }
-
-  static startReminderDaemon(intervalMs: number = 60000): void {
-    if (this.intervalId) return;
-    this.intervalId = setInterval(() => this.processDueReminders(), intervalMs);
-    console.log('Booking reminder daemon started');
+  /**
+   * @deprecated The daemon is a no-op now. Cron runs server-side at /api/cron.
+   * Kept for backward compatibility with existing call sites.
+   */
+  static startReminderDaemon(_intervalMs: number = 60000): void {
+    // No-op. See src/lib/consolidated-scheduler.ts.
   }
 
   static stopReminderDaemon(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
+    // No-op.
   }
 
+  /**
+   * Process due booking reminders. Server-side /api/cron now handles this,
+   * but we keep a thin wrapper that delegates so any code calling this
+   * method directly continues to work.
+   */
   static async processDueReminders(): Promise<number> {
-    const now = new Date();
-    const dueReminders = await db.find(collections.booking_reminders, (r: any) =>
-      !r.sent && new Date(r.scheduled_at) <= now
-    ) as BookingReminder[];
-
-    let processed = 0;
-    for (const reminder of dueReminders) {
-      try {
-        const booking = await db.findById(collections.bookings, reminder.booking_id) as any;
-        if (!booking || booking.status === 'cancelled') continue;
-
-        await db.insert(collections.notifications, {
-          user_id: reminder.user_id,
-          type: 'booking_reminder',
-          title: 'Upcoming Appointment',
-          message: `Reminder: Your ${booking.service_name || 'appointment'} is ${reminder.reminder_type === '24h' ? 'tomorrow' : 'in 1 hour'} at ${booking.time}`,
-          link: `/book/${reminder.entity_id}`,
-          is_read: false,
-          created_at: new Date().toISOString(),
-        });
-
-        await db.update(collections.booking_reminders, reminder.id!, {
-          sent: true,
-          sent_at: new Date().toISOString(),
-        });
-
-        processed++;
-      } catch {}
+    try {
+      const summary = await runCronOnce();
+      return summary?.reminders?.booking || 0;
+    } catch (err: any) {
+      console.warn('[schedulers] processDueReminders via /api/cron failed:', err?.message || err);
+      return 0;
     }
-    return processed;
   }
 
   static async getUpcomingReminders(userId: string): Promise<BookingReminder[]> {
@@ -115,55 +86,31 @@ export interface ScheduledEmail {
 }
 
 export class EmailSchedulerService {
-  private static intervalId: ReturnType<typeof setInterval> | null = null;
-
-  static async scheduleEmail(params: Omit<ScheduledEmail, 'id' | 'uid' | 'sent' | 'created_at'>): Promise<ScheduledEmail> {
-    return db.insert(collections.scheduled_emails, {
-      ...params,
-      sent: false,
-      created_at: new Date().toISOString(),
-    }) as Promise<ScheduledEmail>;
-  }
-
-  static startProcessor(intervalMs: number = 300000): void {
-    if (this.intervalId) return;
-    this.intervalId = setInterval(() => this.processDueEmails(), intervalMs);
+  /**
+   * @deprecated No-op. Cron runs server-side at /api/cron. The
+   * consolidated scheduler in src/lib/consolidated-scheduler.ts polls it
+   * every 5 minutes for admin users.
+   */
+  static startProcessor(_intervalMs: number = 300000): void {
+    // No-op.
   }
 
   static stopProcessor(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
+    // No-op.
   }
 
+  /**
+   * Process due scheduled emails by delegating to the backend /api/cron
+   * endpoint. Returns the number of emails that were sent.
+   */
   static async processDueEmails(): Promise<number> {
-    const now = new Date();
-    const due = await db.find(collections.scheduled_emails, (e: any) =>
-      !e.sent && new Date(e.scheduled_at) <= now
-    ) as ScheduledEmail[];
-
-    let processed = 0;
-    for (const email of due) {
-      try {
-        const user = await db.find(collections.users, { email: email.to_email });
-        if (user[0]) {
-          const prefs = await db.find(collections.user_preferences, { user_id: (user[0] as any).id });
-          const pref = prefs[0] as any;
-          if (pref && pref.marketing_emails === false && email.type === 'newsletter') {
-            await db.update(collections.scheduled_emails, email.id!, { sent: true, skipped: true, reason: 'unsubscribed' });
-            continue;
-          }
-        }
-
-        await db.update(collections.scheduled_emails, email.id!, {
-          sent: true,
-          sent_at: new Date().toISOString(),
-        });
-        processed++;
-      } catch {}
+    try {
+      const summary = await runCronOnce();
+      return summary?.emails?.sent || 0;
+    } catch (err: any) {
+      console.warn('[schedulers] processDueEmails via /api/cron failed:', err?.message || err);
+      return 0;
     }
-    return processed;
   }
 
   static async unsubscribe(email: string): Promise<void> {

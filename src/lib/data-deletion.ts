@@ -101,9 +101,9 @@ export class DataDeletionService {
       const userId = request.user_id;
       const deletionData = request.data as DataDeletionRequest;
 
-      // Update status to in progress
+      // Update status to in progress (update the nested `data` object atomically).
       await githubDB.update(collections.audit_logs, requestId, {
-        'data.status': DeletionStatus.IN_PROGRESS
+        data: { ...deletionData, status: DeletionStatus.IN_PROGRESS }
       });
 
       // Check if retention period has passed
@@ -126,9 +126,7 @@ export class DataDeletionService {
 
       // Update request status
       await githubDB.update(collections.audit_logs, requestId, {
-        'data.status': DeletionStatus.COMPLETED,
-        'data.completed_at': new Date().toISOString(),
-        'data.deletion_results': deletionResults
+        data: { ...deletionData, status: DeletionStatus.COMPLETED, completed_at: new Date().toISOString(), deletion_results: deletionResults }
       });
 
       await logger.info(
@@ -140,8 +138,7 @@ export class DataDeletionService {
 
     } catch (error) {
       await githubDB.update(collections.audit_logs, requestId, {
-        'data.status': DeletionStatus.FAILED,
-        'data.error': error.message
+        data: { ...deletionData, status: DeletionStatus.FAILED, error: error.message }
       });
 
       await logger.error(
@@ -249,16 +246,18 @@ export class DataDeletionService {
 
   static async cancelDeletionRequest(userId: string): Promise<void> {
     try {
-      const requests = await githubDB.find(collections.audit_logs, {
+      // Filter on the flat action + user_id (indexed), then refine client-side
+      // on the nested data.status field (the adapter does not support dotted-path filters).
+      const allRequests = await githubDB.find(collections.audit_logs, {
         user_id: userId,
         action: 'data_deletion_requested',
-        'data.status': DeletionStatus.REQUESTED
       });
+      const requests = allRequests.filter((r: any) => r.data?.status === DeletionStatus.REQUESTED);
 
       for (const request of requests) {
+        const data = request.data || {};
         await githubDB.update(collections.audit_logs, request.id, {
-          'data.status': 'cancelled',
-          'data.cancelled_at': new Date().toISOString()
+          data: { ...data, status: 'cancelled', cancelled_at: new Date().toISOString() }
         });
       }
 
@@ -315,10 +314,11 @@ export class DataDeletionService {
   // Process all pending deletions (called by background job)
   static async processPendingDeletions(): Promise<void> {
     try {
-      const pendingRequests = await githubDB.find(collections.audit_logs, {
+      // Filter on the indexed action field, then refine client-side on data.status.
+      const allDeletionLogs = await githubDB.find(collections.audit_logs, {
         action: 'data_deletion_requested',
-        'data.status': DeletionStatus.REQUESTED
       });
+      const pendingRequests = allDeletionLogs.filter((r: any) => r.data?.status === DeletionStatus.REQUESTED);
 
       await logger.info(
         'processing_pending_deletions',

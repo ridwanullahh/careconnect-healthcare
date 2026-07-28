@@ -8,7 +8,8 @@ import { initializeContentSeeds } from './lib/content-initializer';
 import { initializeMasterHealthTools } from './lib/health-tools-master';
 import { initializeTheme } from './lib/theme';
 import { LMSService } from './lib/lms';
-import { BookingReminderService, EmailSchedulerService } from './lib/schedulers';
+import { startScheduler as startConsolidatedScheduler } from './lib/consolidated-scheduler';
+import ConsentAcceptanceModal from './components/auth/ConsentAcceptanceModal';
 
 // Layout Components
 import Header from './components/layout/Header';
@@ -31,6 +32,7 @@ import CourseDetailPage from './pages/lms/CourseDetailPage';
 import CourseCreationPage from './pages/lms/CourseCreationPage';
 import CourseLearningPage from './pages/lms/CourseLearningPage';
 import CourseCompletionPage from './pages/lms/CourseCompletionPage';
+import CertificatePage from './pages/lms/CertificatePage';
 import CausesPage from './pages/crowdfunding/CausesPage';
 import CauseDetailPage from './pages/crowdfunding/CauseDetailPage';
 import BookingPage from './pages/booking/BookingPage';
@@ -109,7 +111,7 @@ import ConsentBanner from './components/ui/ConsentBanner';
 import LoadingSpinner from './components/ui/LoadingSpinner';
 
 function App() {
-  const { user, isLoading, refreshUser } = useAuth();
+  const { user, isLoading, refreshUser, fetchCurrentConsentVersion } = useAuth();
 
   useEffect(() => {
     // Initialize application
@@ -127,6 +129,15 @@ function App() {
         await refreshUser();
       } catch (e) {
         console.warn('App: Session restore failed:', e);
+      }
+
+      // Fetch the current platform consent version (system_settings).
+      // Public collection — safe to call before login. Falls back to env var.
+      try {
+        await fetchCurrentConsentVersion();
+        console.log('App: Consent version fetched');
+      } catch (e) {
+        console.warn('App: Consent version fetch failed:', e);
       }
 
       // Each subsequent init step is independent; a failure in one must not
@@ -163,12 +174,15 @@ function App() {
         console.warn('App: LMS init failed:', e);
       }
 
+      // Start the consolidated scheduler (replaces the 3 legacy schedulers).
+      // It polls /api/cron every 5 minutes, but only when an admin user is
+      // signed in and VITE_SEED_KEY is configured. Cron can also be triggered
+      // externally — see the `cron:run` script in package.json.
       try {
-        BookingReminderService.startReminderDaemon();
-        EmailSchedulerService.startProcessor();
-        console.log('App: Background schedulers started');
+        startConsolidatedScheduler();
+        console.log('App: Consolidated scheduler started');
       } catch (e) {
-        console.warn('App: Schedulers failed:', e);
+        console.warn('App: Consolidated scheduler failed:', e);
       }
 
       console.log('CareConnect application initialized successfully');
@@ -202,6 +216,10 @@ function App() {
 
   return (
     <ToastProvider>
+      {/* Consent versioning gate: shown over the main app when an
+          authenticated user hasn't accepted the current platform consent
+          version. Blocks interaction until the user accepts or logs out. */}
+      <ConsentAcceptanceModal />
       <Router>
         <div className="min-h-screen bg-gradient-to-br from-light to-white dark:from-gray-900 dark:to-gray-800 flex flex-col transition-colors duration-300">
         <Header />
@@ -227,6 +245,7 @@ function App() {
               <Route path="/courses/:courseId" element={<CourseDetailPage />} />
               <Route path="/courses/:courseId/learn/:moduleId/:lessonId" element={<CourseLearningPage />} />
               <Route path="/courses/:courseId/complete" element={<CourseCompletionPage />} />
+              <Route path="/certificate/:certNumber" element={<CertificatePage />} />
               <Route path="/causes" element={<CausesPage />} />
               <Route path="/causes/:causeId" element={<CauseDetailPage />} />
               <Route path="/book/:entityId" element={<BookingPage />} />
