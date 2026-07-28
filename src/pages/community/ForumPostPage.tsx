@@ -1,15 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ForumService, ForumQuestion, ForumAnswer } from '../../lib/forum';
+import { ForumInteractionService } from '../../lib/forum-interactions';
+import { useAuth } from '../../lib/auth';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import { ArrowLeft, MessageSquare, ThumbsUp, Eye, CheckCircle, User } from 'lucide-react';
+import { ArrowLeft, MessageSquare, ThumbsUp, ThumbsDown, Eye, CheckCircle, User, Flag } from 'lucide-react';
 
 const ForumPostPage: React.FC = () => {
   const { postId } = useParams<{ postId: string }>();
+  const { user } = useAuth();
   const [question, setQuestion] = useState<ForumQuestion | null>(null);
   const [answers, setAnswers] = useState<ForumAnswer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [voteCounts, setVoteCounts] = useState({ upvotes: 0, downvotes: 0, userVote: null as string | null });
+  const [reporting, setReporting] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportMsg, setReportMsg] = useState('');
 
   useEffect(() => {
     if (postId) {
@@ -26,6 +33,11 @@ const ForumPostPage: React.FC = () => {
         setQuestion(fetchedQuestion);
         const fetchedAnswers = await ForumService.getAnswers(fetchedQuestion.id);
         setAnswers(fetchedAnswers);
+        // Load real vote counts.
+        try {
+          const vc = await ForumInteractionService.getVoteCounts(fetchedQuestion.id);
+          setVoteCounts(vc);
+        } catch {}
       } else {
         setError('Post not found.');
       }
@@ -76,10 +88,6 @@ const ForumPostPage: React.FC = () => {
             </div>
             <span>{new Date(question.created_at).toLocaleDateString()}</span>
             <div className="flex items-center">
-              <ThumbsUp className="w-4 h-4 mr-1" />
-              {question.likes}
-            </div>
-            <div className="flex items-center">
               <MessageSquare className="w-4 h-4 mr-1" />
               {question.answer_count}
             </div>
@@ -88,6 +96,84 @@ const ForumPostPage: React.FC = () => {
               {question.views}
             </div>
           </div>
+
+          {/* Voting + Reporting */}
+          <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
+            <button
+              onClick={async () => {
+                if (!user) return;
+                try {
+                  const res = await ForumInteractionService.vote(question.id, user.id, 'upvote');
+                  setVoteCounts({ upvotes: res.upvotes, downvotes: res.downvotes, userVote: res.userVote });
+                } catch (e) { console.error(e); }
+              }}
+              disabled={!user}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm transition-colors ${voteCounts.userVote === 'upvote' ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'} disabled:opacity-50 disabled:cursor-not-allowed`}
+              title={user ? 'Upvote' : 'Login to vote'}
+            >
+              <ThumbsUp className="w-4 h-4" />
+              {voteCounts.upvotes}
+            </button>
+            <button
+              onClick={async () => {
+                if (!user) return;
+                try {
+                  const res = await ForumInteractionService.vote(question.id, user.id, 'downvote');
+                  setVoteCounts({ upvotes: res.upvotes, downvotes: res.downvotes, userVote: res.userVote });
+                } catch (e) { console.error(e); }
+              }}
+              disabled={!user}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm transition-colors ${voteCounts.userVote === 'downvote' ? 'bg-rose-50 border-rose-300 text-rose-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'} disabled:opacity-50 disabled:cursor-not-allowed`}
+              title={user ? 'Downvote' : 'Login to vote'}
+            >
+              <ThumbsDown className="w-4 h-4" />
+              {voteCounts.downvotes}
+            </button>
+            <button
+              onClick={() => setReporting(!reporting)}
+              disabled={!user}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={user ? 'Report this post' : 'Login to report'}
+            >
+              <Flag className="w-4 h-4" />
+              Report
+            </button>
+          </div>
+
+          {reporting && user && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Report this post</h4>
+              <select
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-lg mb-2 text-sm"
+              >
+                <option value="">Select a reason...</option>
+                <option value="spam">Spam or promotional</option>
+                <option value="harassment">Harassment or hate speech</option>
+                <option value="misinformation">Medical misinformation</option>
+                <option value="off_topic">Off-topic</option>
+                <option value="other">Other</option>
+              </select>
+              <button
+                onClick={async () => {
+                  if (!reportReason) return;
+                  try {
+                    await ForumInteractionService.reportPost(question.id, user.id, reportReason);
+                    setReportMsg('Thank you. Your report has been submitted for review.');
+                    setReporting(false);
+                    setReportReason('');
+                  } catch (e: any) {
+                    setReportMsg(e.message || 'Failed to submit report.');
+                  }
+                }}
+                className="px-4 py-2 bg-rose-600 text-white rounded-lg text-sm hover:bg-rose-700"
+              >
+                Submit Report
+              </button>
+              {reportMsg && <p className="mt-2 text-sm text-gray-600">{reportMsg}</p>}
+            </div>
+          )}
           <div className="prose max-w-none text-gray-800 mb-8">{question.content}</div>
 
           {/* Answers */}
