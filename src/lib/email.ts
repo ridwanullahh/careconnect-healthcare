@@ -67,13 +67,11 @@ interface EmailContext {
 
 class EmailService {
   private static instance: EmailService;
-  private gmailUser: string;
-  private gmailPassword: string;
   private templates: Map<EmailType, EmailTemplate> = new Map();
 
   private constructor() {
-    this.gmailUser = import.meta.env.VITE_GMAIL_USER || 'marzuqcares@gmail.com';
-    this.gmailPassword = import.meta.env.VITE_GMAIL_PASSWORD || 'wwba yyer glpm cher';
+    // Email credentials live server-side only (apps/backend/.env SMTP_*).
+    // The client routes all email through the backend /api/email/send endpoint.
     this.initializeTemplates();
   }
 
@@ -155,33 +153,21 @@ class EmailService {
   }
 
   private async sendEmailViaSmtp(to: string, subject: string, html: string): Promise<void> {
-    // Using SMTPjs library (need to include it in the HTML or load dynamically)
-    const smtpConfig = {
-      Host: 'smtp.gmail.com',
-      Username: this.gmailUser,
-      Password: this.gmailPassword,
-      To: to,
-      From: this.gmailUser,
-      Subject: subject,
-      Body: html
-    };
-
-    // For browser environment, we'll use a proxy service or Email.js
-    // For production, this should be handled by a backend service
-    return this.sendEmailProxy(smtpConfig);
-  }
-
-  private async sendEmailProxy(config: any): Promise<void> {
-    // For demo purposes, we'll simulate email sending
-    // In production, this would call a backend email service
-    console.log('Email would be sent:', {
-      to: config.To,
-      subject: config.Subject,
-      timestamp: new Date().toISOString()
+    // Route through the backend email service (SMTP creds stay server-side).
+    const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+    const token = localStorage.getItem('careconnect_api_token');
+    const res = await fetch(`${apiBase}/email/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ to, subject, html }),
     });
-    
-    // Simulate delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Email send failed: ${res.status}`);
+    }
   }
 
   private processTemplate(template: string, context: EmailContext): string {

@@ -69,7 +69,7 @@ export class BackgroundScheduler {
       const now = new Date().toISOString();
       
       // Get all active tasks that are due
-      const dueTasks = await githubDB.findMany(collections.analytics_events, {
+      const dueTasks = await githubDB.find(collections.analytics_events, {
         action: 'scheduled_task',
         'data.status': 'active',
         'data.schedule.nextRun': { $lte: now }
@@ -231,7 +231,7 @@ export class BackgroundScheduler {
     }
 
     // Update the task in database
-    const taskEvents = await githubDB.findMany(collections.analytics_events, {
+    const taskEvents = await githubDB.find(collections.analytics_events, {
       action: 'scheduled_task',
       'data.id': task.id
     });
@@ -267,7 +267,7 @@ export class BackgroundScheduler {
       updatedAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.analytics_events, {
+    await githubDB.insert(collections.analytics_events, {
       id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       action: 'scheduled_task',
       entityType: 'task',
@@ -336,10 +336,10 @@ export class BackgroundScheduler {
 
     for (const taskConfig of defaultTasks) {
       // Check if task already exists
-      const existing = await githubDB.findOne(collections.analytics_events, {
+      const existing = (await githubDB.find(collections.analytics_events, {
         action: 'scheduled_task',
         'data.action': taskConfig.action
-      });
+      }))[0];
 
       if (!existing) {
         const nextRun = new Date(Date.now() + taskConfig.interval * 60 * 1000);
@@ -361,7 +361,7 @@ export class BackgroundScheduler {
   static async cleanupOldNotifications(): Promise<void> {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     
-    const oldNotifications = await githubDB.findMany(collections.notifications, {
+    const oldNotifications = await githubDB.find(collections.notifications, {
       createdAt: { $lt: thirtyDaysAgo },
       read: true
     });
@@ -387,12 +387,12 @@ export class BackgroundScheduler {
       const backupData: Record<string, any[]> = {};
       
       for (const collectionName of collections_to_backup) {
-        const data = await githubDB.findMany(collectionName, {});
+        const data = await githubDB.find(collectionName, {});
         backupData[collectionName] = data;
       }
 
       // Store backup metadata
-      await githubDB.create(collections.analytics_events, {
+      await githubDB.insert(collections.analytics_events, {
         id: `backup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         action: 'database_backup',
         entityType: 'backup',
@@ -415,7 +415,7 @@ export class BackgroundScheduler {
 
   // Get all scheduled tasks
   static async getAllTasks(): Promise<ScheduledTask[]> {
-    const taskEvents = await githubDB.findMany(collections.analytics_events, {
+    const taskEvents = await githubDB.find(collections.analytics_events, {
       action: 'scheduled_task'
     });
 

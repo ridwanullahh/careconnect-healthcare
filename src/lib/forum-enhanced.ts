@@ -133,7 +133,7 @@ export class ForumService {
       moderationStatus: 'approved' // Auto-approve for now, can be changed to 'pending'
     };
 
-    await githubDB.create(collections.forum_posts, post);
+    await githubDB.insert(collections.forum_posts, post);
 
     // Update category stats
     await this.updateCategoryStats(category);
@@ -175,7 +175,7 @@ export class ForumService {
       moderationStatus: 'approved'
     };
 
-    await githubDB.create(collections.forum_replies, reply);
+    await githubDB.insert(collections.forum_replies, reply);
 
     // Update post stats
     await this.updatePostStats(postId);
@@ -196,12 +196,12 @@ export class ForumService {
     voteType: 'up' | 'down'
   ): Promise<{ success: boolean; newVoteCount: number }> {
     // Check if user already voted
-    const existingVote = await githubDB.findOne(collections.analytics_events, {
+    const existingVote = (await githubDB.find(collections.analytics_events, {
       userId,
       entityType,
       entityId,
       action: 'vote'
-    });
+    }))[0];
 
     if (existingVote) {
       // Remove existing vote if same type, or update if different
@@ -215,7 +215,7 @@ export class ForumService {
       }
     } else {
       // Create new vote
-      await githubDB.create(collections.analytics_events, {
+      await githubDB.insert(collections.analytics_events, {
         id: `vote_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId,
         action: 'vote',
@@ -227,7 +227,7 @@ export class ForumService {
     }
 
     // Recalculate vote count
-    const votes = await githubDB.findMany(collections.analytics_events, {
+    const votes = await githubDB.find(collections.analytics_events, {
       entityType,
       entityId,
       action: 'vote'
@@ -258,7 +258,7 @@ export class ForumService {
     if (reply.postId !== postId) throw new Error('Reply does not belong to this post');
 
     // Unmark previous accepted answers
-    const existingAccepted = await githubDB.findMany(collections.forum_replies, {
+    const existingAccepted = await githubDB.find(collections.forum_replies, {
       postId,
       isAcceptedAnswer: true
     });
@@ -286,7 +286,7 @@ export class ForumService {
 
     // Notify reply author
     if (reply.userId !== userId) {
-      await githubDB.create(collections.notifications, {
+      await githubDB.insert(collections.notifications, {
         id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: reply.userId,
         type: 'answer_accepted',
@@ -319,10 +319,10 @@ export class ForumService {
       createdAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.moderation_queue, report);
+    await githubDB.insert(collections.moderation_queue, report);
 
     // Create notification for moderators
-    await githubDB.create(collections.notifications, {
+    await githubDB.insert(collections.notifications, {
       id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       userId: 'moderator',
       type: 'content_reported',
@@ -357,7 +357,7 @@ export class ForumService {
       performedAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.audit_logs, {
+    await githubDB.insert(collections.audit_logs, {
       id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       action: 'forum_moderation',
       entityType,
@@ -415,7 +415,7 @@ export class ForumService {
     },
     sortBy: 'newest' | 'oldest' | 'mostVoted' | 'mostReplies' | 'lastActivity' = 'lastActivity'
   ): Promise<{ posts: ForumPost[]; total: number; hasMore: boolean }> {
-    let posts = await githubDB.findMany(collections.forum_posts, {
+    let posts = await githubDB.find(collections.forum_posts, {
       moderationStatus: 'approved'
     });
 
@@ -482,7 +482,7 @@ export class ForumService {
       updatedAt: new Date().toISOString()
     });
 
-    const replies = await githubDB.findMany(collections.forum_replies, {
+    const replies = await githubDB.find(collections.forum_replies, {
       postId,
       moderationStatus: 'approved'
     });
@@ -506,7 +506,7 @@ export class ForumService {
       authorRole?: string;
     }
   ): Promise<ForumPost[]> {
-    let posts = await githubDB.findMany(collections.forum_posts, {
+    let posts = await githubDB.find(collections.forum_posts, {
       moderationStatus: 'approved'
     });
 
@@ -535,7 +535,7 @@ export class ForumService {
 
   // Update post stats
   private static async updatePostStats(postId: string): Promise<void> {
-    const replies = await githubDB.findMany(collections.forum_replies, {
+    const replies = await githubDB.find(collections.forum_replies, {
       postId,
       moderationStatus: 'approved'
     });
@@ -561,7 +561,7 @@ export class ForumService {
 
   // Send reply notification
   private static async sendReplyNotification(post: ForumPost, reply: ForumReply): Promise<void> {
-    await githubDB.create(collections.notifications, {
+    await githubDB.insert(collections.notifications, {
       id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       userId: post.userId,
       type: 'forum_reply',
@@ -576,19 +576,19 @@ export class ForumService {
 
   // Get moderation queue
   static async getModerationQueue(): Promise<ForumReport[]> {
-    return await githubDB.findMany(collections.moderation_queue, {
+    return await githubDB.find(collections.moderation_queue, {
       status: 'pending'
     });
   }
 
   // Get user's posts
   static async getUserPosts(userId: string): Promise<ForumPost[]> {
-    return await githubDB.findMany(collections.forum_posts, { userId });
+    return await githubDB.find(collections.forum_posts, { userId });
   }
 
   // Get user's replies
   static async getUserReplies(userId: string): Promise<ForumReply[]> {
-    return await githubDB.findMany(collections.forum_replies, { userId });
+    return await githubDB.find(collections.forum_replies, { userId });
   }
 }
 

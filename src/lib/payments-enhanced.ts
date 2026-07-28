@@ -54,79 +54,91 @@ export class PaymentService {
       updatedAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.payments, paymentIntent);
+    await githubDB.insert(collections.payments, paymentIntent);
     return paymentIntent;
   }
 
-  // Initialize Paystack checkout
-  static initializePaystackCheckout(
+  // Initialize Paystack checkout via the backend (which holds the SECRET key
+  // and calls Paystack's transaction/initialize API). Returns the authorization
+  // URL the client should redirect to.
+  static async initializePaystackCheckout(
     paymentIntent: PaymentIntent,
     customerEmail: string,
     onSuccess: (reference: string) => void,
     onCancel: () => void
-  ): void {
-    // @ts-ignore - Paystack script loaded externally
-    const handler = PaystackPop.setup({
-      key: process.env.REACT_APP_PAYSTACK_PUBLIC_KEY,
-      email: customerEmail,
-      amount: paymentIntent.amount * 100, // Convert to kobo
-      currency: paymentIntent.currency,
-      ref: paymentIntent.id,
-      metadata: {
-        custom_fields: [
-          {
-            display_name: "Payment Intent ID",
-            variable_name: "payment_intent_id",
-            value: paymentIntent.id
-          }
-        ]
-      },
-      callback: function(response: any) {
-        onSuccess(response.reference);
-      },
-      onClose: function() {
-        onCancel();
+  ): Promise<void> {
+    const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+    const token = localStorage.getItem('careconnect_api_token');
+    try {
+      const res = await fetch(`${apiBase}/payments/initiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          amount: paymentIntent.amount,
+          currency: paymentIntent.currency,
+          description: paymentIntent.description,
+          customerEmail,
+          metadata: paymentIntent.metadata,
+          gateway: 'paystack',
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Paystack init failed');
       }
-    });
-
-    handler.openIframe();
+      const { data } = await res.json();
+      // Redirect to Paystack's hosted checkout page.
+      window.location.href = data.authorization_url;
+      // The callback/redirect will carry the reference; the PaymentCallbackPage
+      // calls /api/payments/verify to confirm.
+      onSuccess(data.reference);
+    } catch (err) {
+      console.error('Paystack checkout failed:', err);
+      onCancel();
+    }
   }
 
-  // Initialize Flutterwave checkout
-  static initializeFlutterwaveCheckout(
+  // Initialize Flutterwave checkout via the backend.
+  static async initializeFlutterwaveCheckout(
     paymentIntent: PaymentIntent,
     customerEmail: string,
     customerName: string,
     onSuccess: (reference: string) => void,
     onCancel: () => void
-  ): void {
-    // @ts-ignore - Flutterwave script loaded externally
-    FlutterwaveCheckout({
-      public_key: process.env.REACT_APP_FLUTTERWAVE_PUBLIC_KEY,
-      tx_ref: paymentIntent.id,
-      amount: paymentIntent.amount,
-      currency: paymentIntent.currency,
-      payment_options: "card,mobilemoney,ussd",
-      customer: {
-        email: customerEmail,
-        name: customerName,
-      },
-      customizations: {
-        title: "CareConnect Payment",
-        description: paymentIntent.description,
-        logo: "/logo.png",
-      },
-      callback: function (data: any) {
-        if (data.status === "successful") {
-          onSuccess(data.tx_ref);
-        } else {
-          onCancel();
-        }
-      },
-      onclose: function() {
-        onCancel();
+  ): Promise<void> {
+    const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+    const token = localStorage.getItem('careconnect_api_token');
+    try {
+      const res = await fetch(`${apiBase}/payments/initiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          amount: paymentIntent.amount,
+          currency: paymentIntent.currency,
+          description: paymentIntent.description,
+          customerEmail,
+          customerName,
+          metadata: paymentIntent.metadata,
+          gateway: 'flutterwave',
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Flutterwave init failed');
       }
-    });
+      const { data } = await res.json();
+      window.location.href = data.link;
+      onSuccess(data.tx_ref);
+    } catch (err) {
+      console.error('Flutterwave checkout failed:', err);
+      onCancel();
+    }
   }
 
   // Handle payment callback (success)
@@ -149,7 +161,7 @@ export class PaymentService {
     await githubDB.update(collections.payments, paymentIntentId, updatedIntent);
 
     // Create notification for admin review
-    await githubDB.create(collections.notifications, {
+    await githubDB.insert(collections.notifications, {
       id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       userId: 'admin',
       type: 'payment_review_required',
@@ -225,7 +237,7 @@ export class PaymentService {
       performedAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.audit_logs, {
+    await githubDB.insert(collections.audit_logs, {
       id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       action: 'payment_reconciliation',
       entityType: 'payment',
@@ -238,7 +250,7 @@ export class PaymentService {
 
     // Notify customer
     if (paymentIntent.customerId) {
-      await githubDB.create(collections.notifications, {
+      await githubDB.insert(collections.notifications, {
         id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: paymentIntent.customerId,
         type: 'payment_status_update',
@@ -318,14 +330,14 @@ export class PaymentService {
 
   // Get payments for reconciliation queue
   static async getPaymentsForReview(): Promise<PaymentIntent[]> {
-    return await githubDB.findMany(collections.payments, {
+    return await githubDB.find(collections.payments, {
       status: 'pending_review'
     });
   }
 
   // Get payment history for customer
   static async getCustomerPayments(customerId: string): Promise<PaymentIntent[]> {
-    return await githubDB.findMany(collections.payments, {
+    return await githubDB.find(collections.payments, {
       customerId
     });
   }

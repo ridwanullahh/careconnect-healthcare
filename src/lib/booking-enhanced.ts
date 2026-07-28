@@ -90,7 +90,7 @@ export class EnhancedBookingService {
       updatedAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.services, service);
+    await githubDB.insert(collections.services, service);
     return service;
   }
 
@@ -109,12 +109,12 @@ export class EnhancedBookingService {
 
     // Get existing bookings and locks
     const [bookings, locks] = await Promise.all([
-      githubDB.findMany(collections.bookings, {
+      githubDB.find(collections.bookings, {
         serviceId,
         appointmentDateTime: { $gte: startDate, $lte: endDate },
         status: { $ne: 'cancelled' }
       }),
-      githubDB.findMany(collections.slot_locks, {
+      githubDB.find(collections.slot_locks, {
         serviceId,
         slotDateTime: { $gte: startDate, $lte: endDate },
         status: 'active',
@@ -166,17 +166,17 @@ export class EnhancedBookingService {
   ): Promise<SlotLock> {
     // Check if slot is already locked or booked
     const [existingLock, existingBooking] = await Promise.all([
-      githubDB.findOne(collections.slot_locks, {
+      (githubDB.find(collections.slot_locks, {
         serviceId,
         slotDateTime,
         status: 'active',
         expiresAt: { $gt: new Date().toISOString() }
-      }),
-      githubDB.findOne(collections.bookings, {
+      }))[0],
+      (githubDB.find(collections.bookings, {
         serviceId,
         appointmentDateTime: slotDateTime,
         status: { $ne: 'cancelled' }
-      })
+      }))[0]
     ]);
 
     if (existingLock) throw new Error('Slot is already locked');
@@ -193,7 +193,7 @@ export class EnhancedBookingService {
       status: 'active'
     };
 
-    await githubDB.create(collections.slot_locks, slotLock);
+    await githubDB.insert(collections.slot_locks, slotLock);
     return slotLock;
   }
 
@@ -222,7 +222,7 @@ export class EnhancedBookingService {
       updatedAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.bookings, booking);
+    await githubDB.insert(collections.bookings, booking);
 
     // Convert slot lock to booking
     if (lockId) {
@@ -271,7 +271,7 @@ export class EnhancedBookingService {
     ];
 
     for (const reminder of reminders) {
-      await githubDB.create(collections.booking_reminders, {
+      await githubDB.insert(collections.booking_reminders, {
         id: `rem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         ...reminder
       });
@@ -355,7 +355,7 @@ END:VCALENDAR`;
     });
 
     // Cancel reminders
-    const reminders = await githubDB.findMany(collections.booking_reminders, { 
+    const reminders = await githubDB.find(collections.booking_reminders, { 
       bookingId, 
       status: 'pending' 
     });
@@ -441,7 +441,7 @@ END:VCALENDAR`;
     });
 
     // Cancel old reminders and schedule new ones
-    const oldReminders = await githubDB.findMany(collections.booking_reminders, {
+    const oldReminders = await githubDB.find(collections.booking_reminders, {
       bookingId,
       status: 'pending'
     });
@@ -464,7 +464,7 @@ END:VCALENDAR`;
   // Process due reminders
   static async processDueReminders(): Promise<void> {
     const now = new Date().toISOString();
-    const dueReminders = await githubDB.findMany(collections.booking_reminders, {
+    const dueReminders = await githubDB.find(collections.booking_reminders, {
       status: 'pending',
       scheduledFor: { $lte: now }
     });
@@ -480,7 +480,7 @@ END:VCALENDAR`;
         }
 
         // Send notification
-        await githubDB.create(collections.notifications, {
+        await githubDB.insert(collections.notifications, {
           id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           userId: booking.patientId,
           type: 'booking_reminder',
@@ -512,7 +512,7 @@ END:VCALENDAR`;
   // Clean up expired locks
   static async cleanupExpiredLocks(): Promise<void> {
     const now = new Date().toISOString();
-    const expiredLocks = await githubDB.findMany(collections.slot_locks, {
+    const expiredLocks = await githubDB.find(collections.slot_locks, {
       status: 'active',
       expiresAt: { $lt: now }
     });

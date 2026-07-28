@@ -75,7 +75,7 @@ export interface Address {
 export class ShopService {
   // Get or create cart for user
   static async getOrCreateCart(userId: string): Promise<Cart> {
-    let cart = await githubDB.findOne(collections.carts, { userId });
+    let cart = (await githubDB.find(collections.carts, { userId }))[0];
     
     if (!cart || new Date(cart.expiresAt) < new Date()) {
       // Create new cart
@@ -93,7 +93,7 @@ export class ShopService {
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
       };
       
-      await githubDB.create(collections.carts, cart);
+      await githubDB.insert(collections.carts, cart);
     }
     
     return cart;
@@ -258,7 +258,7 @@ export class ShopService {
       updatedAt: new Date().toISOString()
     };
     
-    await githubDB.create(collections.orders, order);
+    await githubDB.insert(collections.orders, order);
     return order;
   }
 
@@ -325,7 +325,7 @@ export class ShopService {
     await githubDB.update(collections.orders, orderId, updates);
     
     // Send notification
-    await githubDB.create(collections.notifications, {
+    await githubDB.insert(collections.notifications, {
       id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       userId: order.userId,
       type: 'order_status_update',
@@ -342,7 +342,7 @@ export class ShopService {
 
   // Get user orders
   static async getUserOrders(userId: string): Promise<Order[]> {
-    return await githubDB.findMany(collections.orders, { userId });
+    return await githubDB.find(collections.orders, { userId });
   }
 
   // Get order by ID

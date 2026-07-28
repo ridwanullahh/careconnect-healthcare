@@ -474,15 +474,30 @@ export class PaymentWebhookService {
     }
   }
 
-  // Verify webhook signature (simplified - implement gateway-specific verification)
+  // Verify webhook signature by delegating to the backend (which holds the
+  // gateway SECRET keys and performs real HMAC-SHA512 / SHA256 verification).
+  // The client must NEVER verify signatures itself — it does not have the secret.
   private static async verifyWebhookSignature(
     gateway: string,
     eventData: any,
     signature?: string
   ): Promise<boolean> {
-    // In production, implement proper signature verification for each gateway
-    // For now, return true for demo purposes
-    return true;
+    try {
+      const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+      const raw = typeof eventData === 'string' ? eventData : JSON.stringify(eventData);
+      const res = await fetch(`${apiBase}/payments/webhook`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(gateway === 'paystack' && signature ? { 'x-paystack-signature': signature } : {}),
+          ...(gateway === 'flutterwave' && signature ? { 'verif-hash': signature } : {}),
+        },
+        body: raw,
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   }
 
   // Mark webhook with error

@@ -143,7 +143,7 @@ export class CrowdfundingService {
       updatedAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.causes, cause);
+    await githubDB.insert(collections.causes, cause);
     return cause;
   }
 
@@ -189,7 +189,7 @@ export class CrowdfundingService {
       source: 'web'
     };
 
-    await githubDB.create(collections.donations, donation);
+    await githubDB.insert(collections.donations, donation);
     return { donation, paymentIntent };
   }
 
@@ -239,7 +239,7 @@ export class CrowdfundingService {
 
   // Update cause totals after donation
   private static async updateCauseTotals(causeId: string): Promise<void> {
-    const donations = await githubDB.findMany(collections.donations, {
+    const donations = await githubDB.find(collections.donations, {
       causeId,
       status: 'completed'
     });
@@ -267,7 +267,7 @@ export class CrowdfundingService {
     const cause = await githubDB.findById(collections.causes, donation.causeId);
     if (!cause) return;
 
-    await githubDB.create(collections.notifications, {
+    await githubDB.insert(collections.notifications, {
       id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       userId: donation.donorId,
       type: 'donation_thank_you',
@@ -305,7 +305,7 @@ export class CrowdfundingService {
       postedBy
     };
 
-    await githubDB.create(collections.cause_updates, update);
+    await githubDB.insert(collections.cause_updates, update);
 
     // Update cause last activity
     await githubDB.update(collections.causes, causeId, {
@@ -323,7 +323,7 @@ export class CrowdfundingService {
 
   // Notify donors of cause update
   private static async notifyDonorsOfUpdate(causeId: string, update: CauseUpdate): Promise<void> {
-    const donations = await githubDB.findMany(collections.donations, {
+    const donations = await githubDB.find(collections.donations, {
       causeId,
       status: 'completed',
       donorId: { $ne: null }
@@ -332,7 +332,7 @@ export class CrowdfundingService {
     const uniqueDonorIds = [...new Set(donations.map(d => d.donorId).filter(Boolean))];
 
     for (const donorId of uniqueDonorIds) {
-      await githubDB.create(collections.notifications, {
+      await githubDB.insert(collections.notifications, {
         id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: donorId!,
         type: 'cause_update',
@@ -374,10 +374,10 @@ export class CrowdfundingService {
       bankDetails
     };
 
-    await githubDB.create(collections.disbursements, disbursement);
+    await githubDB.insert(collections.disbursements, disbursement);
 
     // Create notification for admins
-    await githubDB.create(collections.notifications, {
+    await githubDB.insert(collections.notifications, {
       id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       userId: 'admin',
       type: 'disbursement_request',
@@ -433,7 +433,7 @@ export class CrowdfundingService {
     await githubDB.update(collections.disbursements, disbursementId, updates);
 
     // Notify requester
-    await githubDB.create(collections.notifications, {
+    await githubDB.insert(collections.notifications, {
       id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       userId: disbursement.requestedBy,
       type: 'disbursement_status',
@@ -460,7 +460,7 @@ export class CrowdfundingService {
       requestedAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.analytics_events, {
+    await githubDB.insert(collections.analytics_events, {
       id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       action: 'in_kind_request_created',
       entityType: 'in_kind_request',
@@ -490,7 +490,7 @@ export class CrowdfundingService {
     const cause = await githubDB.findById(collections.causes, causeId);
     if (cause) {
       // Notify organizer
-      await githubDB.create(collections.notifications, {
+      await githubDB.insert(collections.notifications, {
         id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: cause.organizer.userId,
         type: 'cause_verified',
@@ -506,7 +506,7 @@ export class CrowdfundingService {
 
   // Schedule monthly update reminders
   static async scheduleMonthlyUpdateReminders(): Promise<void> {
-    const activeCauses = await githubDB.findMany(collections.causes, {
+    const activeCauses = await githubDB.find(collections.causes, {
       status: 'active'
     });
 
@@ -518,7 +518,7 @@ export class CrowdfundingService {
       
       if (lastUpdate < thirtyDaysAgo) {
         // Send reminder to organizer
-        await githubDB.create(collections.notifications, {
+        await githubDB.insert(collections.notifications, {
           id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           userId: cause.organizer.userId,
           type: 'update_reminder',
@@ -535,7 +535,7 @@ export class CrowdfundingService {
 
   // Get cause donations
   static async getCauseDonations(causeId: string): Promise<Donation[]> {
-    return await githubDB.findMany(collections.donations, {
+    return await githubDB.find(collections.donations, {
       causeId,
       status: 'completed'
     });
@@ -543,13 +543,13 @@ export class CrowdfundingService {
 
   // Get cause updates
   static async getCauseUpdates(causeId: string): Promise<CauseUpdate[]> {
-    const updates = await githubDB.findMany(collections.cause_updates, { causeId });
+    const updates = await githubDB.find(collections.cause_updates, { causeId });
     return updates.sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime());
   }
 
   // Get disbursement history
   static async getDisbursementHistory(causeId: string): Promise<Disbursement[]> {
-    return await githubDB.findMany(collections.disbursements, { causeId });
+    return await githubDB.find(collections.disbursements, { causeId });
   }
 
   // Search causes
@@ -563,7 +563,7 @@ export class CrowdfundingService {
     },
     sortBy: 'newest' | 'ending_soon' | 'most_funded' | 'most_urgent' = 'newest'
   ): Promise<Cause[]> {
-    let causes = await githubDB.findMany(collections.causes, {
+    let causes = await githubDB.find(collections.causes, {
       status: 'active'
     });
 
@@ -617,14 +617,14 @@ export class CrowdfundingService {
   // Get featured causes
   static async getFeaturedCauses(limit: number = 6): Promise<Cause[]> {
     const now = new Date().toISOString();
-    let featured = await githubDB.findMany(collections.causes, {
+    let featured = await githubDB.find(collections.causes, {
       status: 'active',
       featuredUntil: { $gt: now }
     });
 
     // If not enough featured causes, add popular ones
     if (featured.length < limit) {
-      const popular = await githubDB.findMany(collections.causes, {
+      const popular = await githubDB.find(collections.causes, {
         status: 'active'
       });
       

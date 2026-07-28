@@ -125,19 +125,51 @@ export class PaymentGatewayService {
   }
 
   static async handleCallback(reference: string): Promise<PaymentIntent> {
+    // Verify the payment with the gateway via the backend (which holds the
+    // SECRET key). This is the ONLY source of truth for payment success —
+    // never trust the client-side reference alone.
+    const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+    let verifiedPayment: any;
+    try {
+      const res = await fetch(`${apiBase}/payments/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Payment verification failed');
+      }
+      const { data } = await res.json();
+      verifiedPayment = data;
+    } catch (err: any) {
+      // Fallback: look up the payment locally so the UI can still render.
+      const payments = await db.find(collections.payments, { reference }) as PaymentIntent[];
+      const payment = payments[0];
+      if (!payment) throw new Error('Payment not found and verification failed: ' + err.message);
+      await db.update(collections.payments, payment.id!, {
+        status: 'pending_review',
+        gateway_reference: reference,
+        callback_at: new Date().toISOString(),
+      });
+      return { ...payment, status: 'pending_review', gateway_reference: reference };
+    }
+
+    // Find the local payment record to process post-payment side effects.
     const payments = await db.find(collections.payments, { reference }) as PaymentIntent[];
-    const payment = payments[0];
-    if (!payment) throw new Error('Payment not found');
-
-    await db.update(collections.payments, payment.id!, {
-      status: 'pending_review',
-      gateway_reference: reference,
-      callback_at: new Date().toISOString(),
-    });
-
-    await this.processPostPayment(payment, reference);
-
-    return { ...payment, status: 'pending_review', gateway_reference: reference };
+    const payment = payments[0] || verifiedPayment;
+    if (payment) {
+      await db.update(collections.payments, payment.id!, {
+        status: verifiedPayment.status,
+        gateway_reference: reference,
+        callback_at: new Date().toISOString(),
+      });
+      // Only process post-payment effects if the gateway confirmed success.
+      if (verifiedPayment.status === 'completed') {
+        await this.processPostPayment(payment, reference);
+      }
+    }
+    return { ...payment, ...verifiedPayment };
   }
 
   private static async processPostPayment(payment: PaymentIntent, gatewayRef: string): Promise<void> {

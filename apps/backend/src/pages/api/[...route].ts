@@ -450,6 +450,166 @@ export const ALL: APIRoute = async ({ request }) => {
       }
     }
 
+    // --- PAYMENTS ---
+    if (segments[0] === 'payments') {
+      const payments = await import('../../services/payments.ts');
+      if (segments[1] === 'initiate' && method === 'POST') {
+        if (!session) return error('Unauthorized', 401);
+        const body = await request.json();
+        if (!body.amount || !body.customerEmail) return error('amount and customerEmail required', 422);
+        const intent = await payments.createPaymentIntent(db, {
+          amount: body.amount,
+          currency: body.currency || 'NGN',
+          description: body.description || 'CareConnect payment',
+          customerId: session.userId,
+          customerEmail: body.customerEmail,
+          metadata: body.metadata || {},
+          gateway: body.gateway || 'paystack',
+        });
+        if (intent.gateway === 'flutterwave') {
+          const result = await payments.initiateFlutterwave(db, intent, body.customerName);
+          return json({ data: { intent, ...result } });
+        }
+        const result = await payments.initiatePaystack(db, intent);
+        return json({ data: { intent, ...result } });
+      }
+      if (segments[1] === 'verify' && method === 'POST') {
+        const body = await request.json();
+        if (!body.reference) return error('reference required', 422);
+        const gateway = body.gateway || 'paystack';
+        const result =
+          gateway === 'flutterwave'
+            ? await payments.verifyFlutterwave(db, body.reference)
+            : await payments.verifyPaystack(db, body.reference);
+        return json({ data: result });
+      }
+      if (segments[1] === 'webhook' && method === 'POST') {
+        // Public endpoint (called by gateway). Verify signature.
+        const raw = await request.text();
+        const sig = request.headers.get('x-paystack-signature') || '';
+        const flwSig = request.headers.get('verif-hash') || '';
+        if (sig) {
+          if (!payments.verifyPaystackWebhook(sig, raw)) return error('Invalid signature', 401);
+          const evt = JSON.parse(raw);
+          if (evt.event === 'charge.success') {
+            await payments.verifyPaystack(db, evt.data.reference);
+          }
+          return json({ status: 'ok' });
+        }
+        if (flwSig) {
+          if (!payments.verifyFlutterwaveWebhook(flwSig, raw)) return error('Invalid signature', 401);
+          const evt = JSON.parse(raw);
+          if (evt.event === 'successful' && evt.data) {
+            await payments.verifyFlutterwave(db, evt.data.tx_ref);
+          }
+          return json({ status: 'ok' });
+        }
+        return error('Missing signature', 401);
+      }
+      if (segments[1] === 'refund' && method === 'POST') {
+        if (!session) return error('Unauthorized', 401);
+        const user = await db.findById('users', session.userId);
+        if (!user || user.user_type !== 'super_admin') return error('Forbidden', 403);
+        const body = await request.json();
+        if (!body.paymentIntentId) return error('paymentIntentId required', 422);
+        const result = await payments.refundPaystack(db, body.paymentIntentId, body.amount);
+        return json({ data: result });
+      }
+      if (segments[1] === 'config' && method === 'GET') {
+        // Return which gateways are available (no secrets).
+        return json({ data: payments.isPaymentConfigured() });
+      }
+    }
+
+    // --- EMAIL ---
+    if (segments[0] === 'email') {
+      const emailSvc = await import('../../services/email.ts');
+      if (segments[1] === 'send' && method === 'POST') {
+        if (!session) return error('Unauthorized', 401);
+        const body = await request.json();
+        if (!body.to || !body.subject || !body.html) return error('to, subject, html required', 422);
+        const ok = await emailSvc.sendEmail({ to: body.to, subject: body.subject, html: body.html, text: body.text });
+        return json({ data: { sent: ok } });
+      }
+      if (segments[1] === 'schedule' && method === 'POST') {
+        if (!session) return error('Unauthorized', 401);
+        const body = await request.json();
+        if (!body.to || !body.subject || !body.html || !body.scheduled_for) return error('to, subject, html, scheduled_for required', 422);
+        const record = await emailSvc.scheduleEmail(db, body);
+        return json({ data: record }, 201);
+      }
+      if (segments[1] === 'status' && method === 'GET') {
+        return json({ data: { enabled: emailSvc.isEmailEnabled() } });
+      }
+    }
+
+    // --- AI ---
+    if (segments[0] === 'ai') {
+      const ai = await import('../../services/ai.ts');
+      if (!ai.isAIConfigured()) return error('AI service is not configured', 503);
+      if (segments[1] === 'chat' && method === 'POST') {
+        if (!session) return error('Unauthorized', 401);
+        const body = await request.json();
+        if (!body.prompt) return error('prompt required', 422);
+        try {
+          const text = await ai.generateText(body.prompt, body.systemInstruction, body.history);
+          return json({ data: { text } });
+        } catch (err: any) {
+          return error(err.message, 502);
+        }
+      }
+      if (segments[1] === 'emergency-plan' && method === 'POST') {
+        const body = await request.json();
+        try {
+          const plan = await ai.generateEmergencyPlan(body);
+          await db.insert('ai_emergency_plans', { ...plan, input: body, created_at: new Date().toISOString() });
+          return json({ data: plan });
+        } catch (err: any) {
+          return error(err.message, 502);
+        }
+      }
+      if (segments[1] === 'medical-timeline' && method === 'POST') {
+        if (!session) return error('Unauthorized', 401);
+        const body = await request.json();
+        try {
+          const timeline = await ai.generateMedicalTimeline(body);
+          await db.insert('ai_medical_timelines', { ...timeline, input: body, created_at: new Date().toISOString() });
+          return json({ data: timeline });
+        } catch (err: any) {
+          return error(err.message, 502);
+        }
+      }
+      if (segments[1] === 'cultural-guidance' && method === 'POST') {
+        const body = await request.json();
+        try {
+          const guidance = await ai.generateCulturalGuidance(body);
+          await db.insert('ai_cultural_guidance', { ...guidance, input: body, created_at: new Date().toISOString() });
+          return json({ data: guidance });
+        } catch (err: any) {
+          return error(err.message, 502);
+        }
+      }
+    }
+
+    // --- NEWS AGGREGATION ---
+    if (segments[0] === 'news' && segments[1] === 'aggregate' && method === 'POST') {
+      // Protected by SEED_KEY (admin/cron only).
+      const provided = request.headers.get('x-seed-key') || url.searchParams.get('key');
+      if (provided !== SEED_KEY) return error('Unauthorized', 401);
+      const news = await import('../../services/news.ts');
+      const result = await news.aggregateNews(db);
+      return json({ data: result });
+    }
+
+    // --- CRON (scheduled jobs, protected by SEED_KEY) ---
+    if (segments[0] === 'cron' && method === 'POST') {
+      const provided = request.headers.get('x-seed-key') || url.searchParams.get('key');
+      if (provided !== SEED_KEY) return error('Unauthorized', 401);
+      const emailSvc = await import('../../services/email.ts');
+      const emailResult = await emailSvc.processDueEmails(db);
+      return json({ data: { emails: emailResult } });
+    }
+
     // --- SEED ENDPOINT (protected by SEED_KEY) ---
     if (segments[0] === 'seed' && method === 'POST') {
       const provided = request.headers.get('x-seed-key') || url.searchParams.get('key');
