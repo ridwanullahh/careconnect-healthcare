@@ -63,6 +63,9 @@ import AILabPage from './pages/ailab/AILabPage';
 import CarePathPage from './pages/ailab/CarePathPage';
 import LabExplainerPage from './pages/ailab/LabExplainerPage';
 import ProcedureNavigatorPage from './pages/ailab/ProcedureNavigatorPage';
+import EmergencyBridgePage from './pages/ailab/EmergencyBridgePage';
+import MedicalTimelinePage from './pages/ailab/MedicalTimelinePage';
+import CulturalAdvisorPage from './pages/ailab/CulturalAdvisorPage';
 import AILabToolsPage from './pages/ailab/AILabToolsPage';
 
 // Dashboard Components
@@ -254,6 +257,9 @@ function App() {
               <Route path="/ailab/care-path" element={<CarePathPage />} />
               <Route path="/ailab/lab-explainer" element={<LabExplainerPage />} />
               <Route path="/ailab/procedure-navigator" element={<ProcedureNavigatorPage />} />
+              <Route path="/ailab/emergency-bridge" element={<EmergencyBridgePage />} />
+              <Route path="/ailab/medical-timeline" element={<MedicalTimelinePage />} />
+              <Route path="/ailab/cultural-advisor" element={<CulturalAdvisorPage />} />
               <Route path="/ailab/tools" element={<AILabToolsPage />} />
               
               {/* Protected Routes */}

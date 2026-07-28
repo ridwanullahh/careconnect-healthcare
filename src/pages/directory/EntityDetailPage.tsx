@@ -8,6 +8,7 @@ import { Product, ECommerceService } from '../../lib/ecommerce';
 import { Cause, CrowdfundingService } from '../../lib/crowdfunding';
 import { JobService, JobPosting } from '../../lib/jobs';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { githubDB as dbHelpers, collections } from '../../lib/database';
 import {
   MapPin, Phone, Mail, Globe, Clock, Star, Shield, Users, Calendar,
   BookOpen, Newspaper, ShoppingBag, Heart, Stethoscope, Award,
@@ -26,6 +27,7 @@ const EntityDetailPage = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [causes, setCauses] = useState<Cause[]>([]);
   const [jobs, setJobs] = useState<JobPosting[]>([]);
+  const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -70,16 +72,49 @@ const EntityDetailPage = () => {
         setEntity(entityData);
 
         if (entityData) {
-          const [entityCourses, entityBlogPosts, entityProducts, entityCauses] = await Promise.all([
+          // Fetch services + the existing courses/blog/products/causes in
+          // parallel. services has its own collection (seeded by entity_id);
+          // we also fall back to entity_services and finally to the entity's
+          // own `services` array (a list of service name strings) so the tab
+          // is never empty when the entity lists services in its profile.
+          const [
+            entityCourses,
+            entityBlogPosts,
+            entityProducts,
+            entityCauses,
+            servicesRows,
+            entityServicesRows
+          ] = await Promise.all([
             LMSService.searchCourses({ entity_id: entityId }),
             BlogService.getPosts({ query: '', category: '', tag: '', sortBy: 'newest' }),
             ECommerceService.searchProducts({ entity_id: entityId }),
-            CrowdfundingService.searchCauses({ entity_id: entityId })
+            CrowdfundingService.searchCauses({ entity_id: entityId }),
+            dbHelpers.find<any>(collections.services, { entity_id: entityId }).catch(() => []),
+            dbHelpers.find<any>(collections.entity_services, { entity_id: entityId }).catch(() => [])
           ]);
           setCourses(entityCourses.filter(c => c.entity_id === entityId));
           setBlogPosts(entityBlogPosts.filter(p => p.entityId === entityId));
           setProducts(entityProducts);
           setCauses(entityCauses.filter(c => c.entity_id === entityId));
+
+          // Merge services + entity_services, de-dupe by id, fall back to the
+          // entity's own services string array if neither collection has rows.
+          const seen = new Set<string>();
+          const merged: any[] = [];
+          [...(servicesRows || []), ...(entityServicesRows || [])].forEach((s: any) => {
+            if (!s) return;
+            const id = String(s.id ?? s.uid ?? s.name ?? '');
+            if (id && !seen.has(id)) {
+              seen.add(id);
+              merged.push(s);
+            }
+          });
+          if (merged.length === 0 && Array.isArray((entityData as any).services)) {
+            (entityData as any).services.forEach((name: string, idx: number) => {
+              merged.push({ id: `entity-svc-${idx}`, name, description: '', category: '' });
+            });
+          }
+          setServices(merged);
           
           // Load jobs if entity is a health center
           if (entityData.entity_type === 'health_center') {
@@ -610,28 +645,55 @@ const EntityDetailPage = () => {
           <div className="space-y-6">
             <div className="bg-white dark:bg-gray-800 rounded-lg p-8">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Our Services</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Mock services - replace with real data */}
-                {[
-                  { name: 'General Consultation', description: 'Comprehensive health checkups and consultations', icon: Stethoscope },
-                  { name: 'Preventive Care', description: 'Vaccinations, screenings, and wellness programs', icon: Shield },
-                  { name: 'Emergency Care', description: '24/7 emergency medical services', icon: Zap },
-                  { name: 'Specialist Referrals', description: 'Access to specialized medical professionals', icon: Users },
-                  { name: 'Telehealth', description: 'Remote consultations and follow-ups', icon: Video },
-                  { name: 'Health Education', description: 'Educational resources and wellness programs', icon: BookOpen }
-                ].map((service, index) => {
-                  const Icon = service.icon;
-                  return (
-                    <div key={index} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 hover:shadow-md transition-shadow">
-                      <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-                        <Icon className="w-6 h-6 text-primary" />
+              {services.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {services.map((service, index) => {
+                    const Icon = Stethoscope;
+                    return (
+                      <div key={service.id || index} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 hover:shadow-md transition-shadow">
+                        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
+                          <Icon className="w-6 h-6 text-primary" />
+                        </div>
+                        <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+                          {service.name || service.service_name || 'Service'}
+                        </h3>
+                        <p className="text-gray-600 dark:text-gray-400 text-sm">
+                          {service.description || service.service_description || 'Contact the provider for more information about this service.'}
+                        </p>
+                        {(service.category || service.duration || service.price != null) && (
+                          <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
+                            {service.category && (
+                              <span className="bg-gray-100 dark:bg-gray-600 px-2 py-1 rounded capitalize">
+                                {service.category.replace(/_/g, ' ')}
+                              </span>
+                            )}
+                            {service.duration != null && (
+                              <span className="bg-gray-100 dark:bg-gray-600 px-2 py-1 rounded">
+                                {service.duration} min
+                              </span>
+                            )}
+                            {service.price != null && Number(service.price) > 0 && (
+                              <span className="bg-gray-100 dark:bg-gray-600 px-2 py-1 rounded">
+                                {service.price}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <h3 className="font-semibold text-gray-900 dark:text-white mb-2">{service.name}</h3>
-                      <p className="text-gray-600 dark:text-gray-400 text-sm">{service.description}</p>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Stethoscope className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    No Services Listed
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    This provider hasn't published any service listings yet. Contact them directly for available services.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}

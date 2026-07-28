@@ -3,67 +3,6 @@ import { useState, useEffect, useRef } from 'react';
 import { debounce } from '../lib/utils';
 import { githubDB, collections } from '../lib/database';
 
-// Mock data for news and podcasts until integrated with real content
-const MOCK_NEWS = [
-  {
-    id: 'news-1',
-    title: 'Latest COVID-19 Health Guidelines Updated',
-    description: 'New recommendations for prevention and treatment protocols from health authorities.',
-    category: 'public_health',
-    tags: ['covid-19', 'guidelines', 'prevention'],
-    published_at: '2024-01-15',
-    url: '/health-news-feed'
-  },
-  {
-    id: 'news-2', 
-    title: 'Mental Health Resources Expand in Local Communities',
-    description: 'New initiatives to provide accessible mental health support across the region.',
-    category: 'mental_health',
-    tags: ['mental health', 'community', 'resources'],
-    published_at: '2024-01-14',
-    url: '/health-news-feed'
-  },
-  {
-    id: 'news-3',
-    title: 'Breakthrough in Cancer Treatment Research',
-    description: 'Scientists announce promising results from innovative immunotherapy trials.',
-    category: 'research',
-    tags: ['cancer', 'research', 'treatment'],
-    published_at: '2024-01-13',
-    url: '/health-news-feed'
-  }
-];
-
-const MOCK_PODCASTS = [
-  {
-    id: 'podcast-1',
-    title: 'Understanding Heart Health with Dr. Sarah Johnson',
-    description: 'Expert insights on cardiovascular wellness and prevention strategies.',
-    category: 'cardiology',
-    tags: ['heart health', 'cardiology', 'prevention'],
-    duration: '45 min',
-    url: '/health-talk-podcast'
-  },
-  {
-    id: 'podcast-2',
-    title: 'Nutrition Myths Debunked',
-    description: 'Separating fact from fiction in modern nutrition advice.',
-    category: 'nutrition',
-    tags: ['nutrition', 'diet', 'wellness'],
-    duration: '38 min',
-    url: '/health-talk-podcast'
-  },
-  {
-    id: 'podcast-3',
-    title: 'Managing Stress in Healthcare Workers',
-    description: 'Strategies for healthcare professionals to maintain mental wellness.',
-    category: 'mental_health',
-    tags: ['stress management', 'healthcare workers', 'mental health'],
-    duration: '42 min',
-    url: '/health-talk-podcast'
-  }
-];
-
 export interface SearchResult {
   id: string;
   title: string;
@@ -216,13 +155,13 @@ export const useAjaxSearch = (initialQuery: string = '') => {
         }
         
         if (shouldSearchNews) {
-          searchPromises.push(Promise.resolve(MOCK_NEWS));
+          searchPromises.push(githubDB.find(collections.news_articles, {}).catch(() => []));
         } else {
           searchPromises.push(Promise.resolve([]));
         }
         
         if (shouldSearchPodcasts) {
-          searchPromises.push(Promise.resolve(MOCK_PODCASTS));
+          searchPromises.push(githubDB.find(collections.podcasts, {}).catch(() => []));
         } else {
           searchPromises.push(Promise.resolve([]));
         }
@@ -258,20 +197,37 @@ export const useAjaxSearch = (initialQuery: string = '') => {
             cause.tags?.some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
           ) : causes;
         
-        // Filter news and podcasts
-        const filteredNews = searchQuery ?
-          news.filter(article => 
-            article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            article.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            article.tags?.some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-          ) : news;
-        
-        const filteredPodcasts = searchQuery ?
-          podcasts.filter(podcast => 
-            podcast.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            podcast.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            podcast.tags?.some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-          ) : podcasts;
+        // Filter news and podcasts. Real records from news_articles / podcasts
+        // may use varied field names, so guard every access with optional
+        // chaining and a fallback to an empty string.
+        const lowerQuery = searchQuery.toLowerCase();
+        const filteredNews = searchQuery
+          ? news.filter((article: any) => {
+              const title = (article.title || '').toLowerCase();
+              const description =
+                (article.description || article.summary || article.excerpt || '').toLowerCase();
+              const tags = Array.isArray(article.tags) ? article.tags : [];
+              return (
+                title.includes(lowerQuery) ||
+                description.includes(lowerQuery) ||
+                tags.some((tag: string) => String(tag).toLowerCase().includes(lowerQuery))
+              );
+            })
+          : news;
+
+        const filteredPodcasts = searchQuery
+          ? podcasts.filter((podcast: any) => {
+              const title = (podcast.title || '').toLowerCase();
+              const description =
+                (podcast.description || podcast.summary || '').toLowerCase();
+              const tags = Array.isArray(podcast.tags) ? podcast.tags : [];
+              return (
+                title.includes(lowerQuery) ||
+                description.includes(lowerQuery) ||
+                tags.some((tag: string) => String(tag).toLowerCase().includes(lowerQuery))
+              );
+            })
+          : podcasts;
         
         // Format results
         const entityResults = filteredEntities.map(entity => ({
@@ -321,24 +277,24 @@ export const useAjaxSearch = (initialQuery: string = '') => {
           imageUrl: cause.image_url
         }));
         
-        const newsResults = filteredNews.map(article => ({
-          id: article.id,
-          title: article.title,
-          description: article.description,
+        const newsResults = filteredNews.map((article: any) => ({
+          id: String(article.id ?? article.uid ?? ''),
+          title: article.title || 'Untitled Article',
+          description: article.description || article.summary || article.excerpt || '',
           type: 'news' as const,
           category: article.category,
-          url: article.url,
-          tags: article.tags || []
+          url: article.url || article.source_url || `/health-news-feed`,
+          tags: Array.isArray(article.tags) ? article.tags : []
         }));
-        
-        const podcastResults = filteredPodcasts.map(podcast => ({
-          id: podcast.id,
-          title: podcast.title,
-          description: podcast.description,
+
+        const podcastResults = filteredPodcasts.map((podcast: any) => ({
+          id: String(podcast.id ?? podcast.uid ?? ''),
+          title: podcast.title || 'Untitled Episode',
+          description: podcast.description || podcast.summary || '',
           type: 'podcast' as const,
           category: podcast.category,
-          url: podcast.url,
-          tags: podcast.tags || []
+          url: `/health-talk-podcast`,
+          tags: Array.isArray(podcast.tags) ? podcast.tags : []
         }));
         
         // Combine and sort results by relevance (if query) or rating

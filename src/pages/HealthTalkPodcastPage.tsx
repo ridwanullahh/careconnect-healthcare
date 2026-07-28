@@ -17,7 +17,8 @@ import {
   Radio,
   Headphones,
   Mic,
-  TrendingUp
+  TrendingUp,
+  AlertCircle
 } from 'lucide-react';
 import { githubDB, collections } from '../lib/database';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -67,9 +68,10 @@ const HealthTalkPodcastPage: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolume] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [view, setView] = useState<'episodes' | 'live' | 'schedule'>('episodes');
-  
+
   const audioRef = useRef<HTMLAudioElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
 
@@ -83,7 +85,106 @@ const HealthTalkPodcastPage: React.FC = () => {
   ];
 
   useEffect(() => {
+    let cancelled = false;
+    const loadPodcastData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Fetch all podcasts once; we'll filter client-side by category. Live
+        // sessions are real podcast records flagged with isLive === true (or
+        // a scheduledFor date in the future). Each fetch is wrapped so a
+        // missing/failed collection returns an empty array, not a crash.
+        const [allPodcasts, livePodcasts] = await Promise.all([
+          githubDB.find<any>(collections.podcasts, {}).catch(() => []),
+          githubDB.find<any>(collections.podcasts, { isLive: true }).catch(() => [])
+        ]);
+        if (cancelled) return;
+
+        const adaptEpisode = (raw: any): PodcastEpisode => {
+          const duration = Number(raw.duration ?? 0) || 0;
+          const host = raw.host && typeof raw.host === 'object'
+            ? raw.host
+            : { name: raw.host_name || raw.author || 'CareConnect HealthTalk', credentials: raw.host_credentials || '', avatar: raw.host_avatar };
+          return {
+            id: String(raw.id ?? raw.uid ?? ''),
+            title: raw.title || 'Untitled Episode',
+            description: raw.description || raw.summary || '',
+            audioUrl: raw.audio_url || raw.audioUrl || raw.audio || '',
+            duration,
+            publishedAt: raw.published_at || raw.publishedAt || raw.created_at || new Date().toISOString(),
+            category: raw.category || 'general',
+            host,
+            transcript: raw.transcript,
+            tags: Array.isArray(raw.tags) ? raw.tags : [],
+            playCount: Number(raw.play_count ?? raw.playCount ?? 0) || 0,
+            likes: Number(raw.likes ?? 0) || 0,
+            isLive: !!raw.isLive,
+            scheduledFor: raw.scheduled_for || raw.scheduledFor
+          };
+        };
+
+        const adaptLiveSession = (raw: any): LiveSession => {
+          const host = raw.host && typeof raw.host === 'object'
+            ? raw.host
+            : { name: raw.host_name || raw.author || 'CareConnect HealthTalk', credentials: raw.host_credentials || '', avatar: raw.host_avatar };
+          const scheduledStart =
+            raw.scheduled_start || raw.scheduledStart || raw.scheduled_for || raw.published_at || new Date().toISOString();
+          return {
+            id: String(raw.id ?? raw.uid ?? ''),
+            title: raw.title || 'Live HealthTalk Session',
+            description: raw.description || raw.summary || '',
+            host,
+            scheduledStart,
+            duration: Number(raw.duration ?? 1800) || 1800,
+            attendeeCount: Number(raw.attendee_count ?? raw.attendeeCount ?? 0) || 0,
+            isActive: !!raw.isActive,
+            streamUrl: raw.stream_url || raw.streamUrl
+          };
+        };
+
+        // Live sessions: prefer the isLive=true query result; if that returns
+        // nothing, also scan the full podcast list for records whose
+        // scheduledFor is in the future.
+        const liveSet = new Map<string, any>();
+        (livePodcasts || []).forEach((p: any) => {
+          const id = String(p.id ?? p.uid ?? '');
+          if (id) liveSet.set(id, p);
+        });
+        const now = Date.now();
+        (allPodcasts || []).forEach((p: any) => {
+          const id = String(p.id ?? p.uid ?? '');
+          if (!id || liveSet.has(id)) return;
+          const future = p.scheduled_for || p.scheduledFor;
+          if (future && new Date(future).getTime() > now) {
+            liveSet.set(id, p);
+          }
+          if (p.isLive) liveSet.set(id, p);
+        });
+
+        let adapted = (allPodcasts || []).map(adaptEpisode);
+        if (selectedCategory) {
+          adapted = adapted.filter((ep) => ep.category === selectedCategory);
+        }
+
+        if (!cancelled) {
+          setEpisodes(adapted);
+          setLiveSessions(Array.from(liveSet.values()).map(adaptLiveSession));
+        }
+      } catch (err) {
+        console.error('Failed to load podcast data:', err);
+        if (!cancelled) {
+          setError('Failed to load podcast episodes. Please try again later.');
+          setEpisodes([]);
+          setLiveSessions([]);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
     loadPodcastData();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedCategory]);
 
   useEffect(() => {
@@ -104,41 +205,6 @@ const HealthTalkPodcastPage: React.FC = () => {
       audio.removeEventListener('ended', handleEnded);
     };
   }, [currentEpisode]);
-
-  const loadPodcastData = async () => {
-    setIsLoading(true);
-    try {
-      let fetchedEpisodes = await githubDB.find(collections.podcasts, {});
-
-      const mockLiveSessions: LiveSession[] = [
-        {
-          id: '1',
-          title: 'Live Q&A: Diabetes Management',
-          description: 'Join Dr. Amanda Foster for a live discussion about diabetes management, nutrition tips, and answering your questions.',
-          host: {
-            name: 'Dr. Amanda Foster',
-            credentials: 'MD, Endocrinologist',
-            avatar: '/images/hosts/dr-foster.jpg'
-          },
-          scheduledStart: '2024-01-21T15:00:00Z',
-          duration: 1800, // 30 minutes
-          attendeeCount: 0,
-          isActive: false
-        }
-      ];
-
-      if (selectedCategory) {
-        fetchedEpisodes = fetchedEpisodes.filter(ep => ep.category === selectedCategory);
-      }
-
-      setEpisodes(fetchedEpisodes);
-      setLiveSessions(mockLiveSessions);
-    } catch (error) {
-      console.error('Failed to load podcast data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const playEpisode = (episode: PodcastEpisode) => {
     if (currentEpisode?.id === episode.id) {
@@ -281,11 +347,25 @@ const HealthTalkPodcastPage: React.FC = () => {
           <div className="flex justify-center py-12">
             <LoadingSpinner size="lg" />
           </div>
+        ) : error ? (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center">
+            <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
+            <span className="text-sm">{error}</span>
+          </div>
         ) : (
           <div className="space-y-8">
             {/* Episodes View */}
             {view === 'episodes' && (
               <div className="grid grid-cols-1 gap-6">
+                {episodes.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Headphones className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold text-gray-600 mb-2">No Episodes Available</h3>
+                    <p className="text-gray-500">
+                      Check back soon for new health podcast episodes.
+                    </p>
+                  </div>
+                ) : null}
                 {episodes.map((episode) => {
                   const categoryInfo = categories.find(c => c.id === episode.category);
                   const isCurrentlyPlaying = currentEpisode?.id === episode.id;

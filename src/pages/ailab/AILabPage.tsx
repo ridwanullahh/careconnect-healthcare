@@ -13,7 +13,10 @@ import {
   Users,
   Sparkles,
   ArrowRight,
-  Activity
+  Activity,
+  Siren,
+  Globe2,
+  History
 } from 'lucide-react';
 
 interface AILabStats {
@@ -118,19 +121,67 @@ const AILabPage: React.FC = () => {
       ]
     },
     {
+      id: 'emergency-bridge',
+      title: 'Emergency Communication Bridge',
+      description: 'Generate an AI-assisted emergency response plan in seconds, with immediate steps, contacts, and resources for any crisis.',
+      icon: Siren,
+      href: '/ailab/emergency-bridge',
+      color: 'bg-red-600',
+      stats: 'Available now',
+      features: [
+        'Immediate action steps',
+        'Who to contact list',
+        'Nearest resources',
+        'What NOT to do',
+        'Follow-up actions'
+      ]
+    },
+    {
+      id: 'medical-timeline',
+      title: 'Medical Record Timeline Builder',
+      description: 'Turn your encounters, conditions, medications, labs, and imaging into a chronological care journey with AI-synthesized insights.',
+      icon: History,
+      href: '/ailab/medical-timeline',
+      color: 'bg-teal-600',
+      stats: 'Available now',
+      features: [
+        'Chronological events',
+        'Patterns identification',
+        'Care recommendations',
+        'Auto-loads your records',
+        'Summary of care journey'
+      ]
+    },
+    {
+      id: 'cultural-advisor',
+      title: 'Cultural & Religious Care Advisor',
+      description: 'Culturally and religiously sensitive care guidance for diverse patient populations, including dietary, communication, and end-of-life considerations.',
+      icon: Globe2,
+      href: '/ailab/cultural-advisor',
+      color: 'bg-emerald-600',
+      stats: 'Available now',
+      features: [
+        'Dietary considerations',
+        'Communication preferences',
+        'Religious practices',
+        'End-of-life guidance',
+        'Practical care tips'
+      ]
+    },
+    {
       id: 'ai-tools',
       title: 'Additional AI Tools',
-      description: 'Explore more AI-powered healthcare tools including emergency planning, medical timelines, and cultural care guidance.',
+      description: 'Explore more AI-powered healthcare tools including symptom photography and care coordination.',
       icon: Brain,
       href: '/ailab/tools',
-      color: 'bg-indigo-500',
+      color: 'bg-slate-600',
       stats: 'Coming soon',
       features: [
-        'Emergency communication',
-        'Medical record timeline',
-        'Cultural care advisor',
         'Symptom photography',
-        'Care coordination'
+        'Care coordination',
+        'Family genetics insights',
+        'Health goal tracking',
+        'AI chat support'
       ]
     }
   ];

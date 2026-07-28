@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth, Permission } from '@/lib/auth';
 import { BillingService } from '@/lib/billing';
-import { 
+import { githubDB as dbHelpers, collections } from '@/lib/database';
+import {
   DollarSign, 
   Plus, 
   Search, 
@@ -27,77 +28,54 @@ export default function BillingPage() {
   const [claims, setClaims] = useState([]);
   const [billingSummary, setBillingSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('invoices');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    if (user?.entity_id) {
-      loadBillingData();
-    }
-  }, [user?.entity_id]);
-
-  const loadBillingData = async () => {
+    let cancelled = false;
     if (!user?.entity_id) return;
-
-    try {
+    (async () => {
       setLoading(true);
-      
-      // Get date range for current month
-      const now = new Date();
-      const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
-      
-      const [summary] = await Promise.all([
-        BillingService.getBillingSummary(user.entity_id, startDate, endDate)
-      ]);
-      
-      setBillingSummary(summary);
-      
-      // Mock data for demo - in real implementation would come from BillingService
-      setInvoices([
-        {
-          id: '1',
-          invoice_number: 'INV-2024-001',
-          patient_id: 'PT001',
-          total_amount: 450.00,
-          amount_paid: 450.00,
-          balance_due: 0.00,
-          status: 'paid',
-          invoice_date: new Date().toISOString(),
-          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-        },
-        {
-          id: '2',
-          invoice_number: 'INV-2024-002',
-          patient_id: 'PT002',
-          total_amount: 750.00,
-          amount_paid: 0.00,
-          balance_due: 750.00,
-          status: 'sent',
-          invoice_date: new Date().toISOString(),
-          due_date: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000).toISOString()
+      setError(null);
+      try {
+        // Get date range for current month
+        const now = new Date();
+        const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
+
+        const [summary, realInvoices, realClaims] = await Promise.all([
+          BillingService.getBillingSummary(user.entity_id, startDate, endDate).catch(() => null),
+          dbHelpers.find(collections.billing_items, { entity_id: user.entity_id }).catch(() => []),
+          dbHelpers.find(collections.insurance_claims, { entity_id: user.entity_id }).catch(() => [])
+        ]);
+        if (cancelled) return;
+
+        // De-dupe any billing items that may share an id (e.g. when both
+        // entity_id- and patient_id-keyed queries return overlapping records).
+        const invoiceMap = new Map<string, any>();
+        (realInvoices || []).forEach((item: any) => {
+          if (!item) return;
+          const id = String(item.id ?? item.uid ?? '');
+          if (!invoiceMap.has(id)) invoiceMap.set(id, item);
+        });
+
+        setBillingSummary(summary);
+        setInvoices(Array.from(invoiceMap.values()));
+        setClaims(realClaims || []);
+      } catch (err) {
+        console.error('Failed to load billing data:', err);
+        if (!cancelled) {
+          setError('Failed to load billing data. Please try again.');
         }
-      ]);
-      
-      setClaims([
-        {
-          id: '1',
-          claim_number: 'CLM-2024-001',
-          patient_id: 'PT001',
-          claimed_amount: 450.00,
-          approved_amount: 450.00,
-          status: 'paid',
-          insurance_provider: 'Blue Cross Blue Shield',
-          submission_date: new Date().toISOString()
-        }
-      ]);
-      
-    } catch (error) {
-      console.error('Failed to load billing data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.entity_id]);
 
   const getInvoiceStatusBadge = (status: string) => {
     const variants = {
@@ -142,17 +120,35 @@ export default function BillingPage() {
     }).format(amount);
   };
 
-  const filteredInvoices = invoices.filter((invoice: any) => 
-    !searchQuery || 
-    invoice.invoice_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    invoice.patient_id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredInvoices = invoices.filter((invoice: any) => {
+    if (!searchQuery) return true;
+    const haystack = [
+      invoice.invoice_number,
+      invoice.patient_id,
+      invoice.id,
+      invoice.description,
+      invoice.service_name
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(searchQuery.toLowerCase());
+  });
 
-  const filteredClaims = claims.filter((claim: any) => 
-    !searchQuery || 
-    claim.claim_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    claim.patient_id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredClaims = claims.filter((claim: any) => {
+    if (!searchQuery) return true;
+    const haystack = [
+      claim.claim_number,
+      claim.patient_id,
+      claim.id,
+      claim.insurance_provider,
+      claim.status
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(searchQuery.toLowerCase());
+  });
 
   if (loading) {
     return (
@@ -171,6 +167,14 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-6">
+      {/* Error Banner */}
+      {error && (
+        <div className="flex items-center bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0" />
+          <span className="text-sm">{error}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -259,7 +263,14 @@ export default function BillingPage() {
         <TabsContent value="invoices" className="space-y-4">
           {filteredInvoices.length > 0 ? (
             <div className="space-y-4">
-              {filteredInvoices.map((invoice: any) => (
+              {filteredInvoices.map((invoice: any) => {
+                const invoiceNumber = invoice.invoice_number || `INV-${invoice.id}`;
+                const totalAmount = Number(invoice.total_amount ?? invoice.amount ?? 0);
+                const amountPaid = Number(invoice.amount_paid ?? 0);
+                const balanceDue = Number(invoice.balance_due ?? (totalAmount - amountPaid) ?? 0);
+                const invoiceDate = invoice.invoice_date || invoice.created_at || new Date().toISOString();
+                const dueDate = invoice.due_date || invoice.due_date;
+                return (
                 <Card key={invoice.id} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between">
@@ -268,25 +279,25 @@ export default function BillingPage() {
                           <FileText className="h-5 w-5 text-blue-600" />
                         </div>
                         <div>
-                          <h3 className="font-medium">{invoice.invoice_number}</h3>
+                          <h3 className="font-medium">{invoiceNumber}</h3>
                           <p className="text-sm text-muted-foreground">
-                            Patient: {invoice.patient_id}
+                            Patient: {invoice.patient_id || 'N/A'}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Date: {new Date(invoice.invoice_date).toLocaleDateString()} • 
-                            Due: {new Date(invoice.due_date).toLocaleDateString()}
+                            Date: {new Date(invoiceDate).toLocaleDateString()}
+                            {dueDate ? ` • Due: ${new Date(dueDate).toLocaleDateString()}` : ''}
                           </p>
                         </div>
                       </div>
                       
                       <div className="text-right">
                         <div className="mb-2">
-                          {getInvoiceStatusBadge(invoice.status)}
+                          {getInvoiceStatusBadge(invoice.status || 'draft')}
                         </div>
-                        <p className="text-lg font-bold">{formatCurrency(invoice.total_amount)}</p>
-                        {invoice.balance_due > 0 && (
+                        <p className="text-lg font-bold">{formatCurrency(totalAmount)}</p>
+                        {balanceDue > 0 && (
                           <p className="text-sm text-red-600">
-                            Balance: {formatCurrency(invoice.balance_due)}
+                            Balance: {formatCurrency(balanceDue)}
                           </p>
                         )}
                       </div>
@@ -294,13 +305,13 @@ export default function BillingPage() {
                     
                     <div className="mt-4 grid grid-cols-3 gap-4 text-sm">
                       <div>
-                        <span className="font-medium">Total:</span> {formatCurrency(invoice.total_amount)}
+                        <span className="font-medium">Total:</span> {formatCurrency(totalAmount)}
                       </div>
                       <div>
-                        <span className="font-medium">Paid:</span> {formatCurrency(invoice.amount_paid)}
+                        <span className="font-medium">Paid:</span> {formatCurrency(amountPaid)}
                       </div>
                       <div>
-                        <span className="font-medium">Balance:</span> {formatCurrency(invoice.balance_due)}
+                        <span className="font-medium">Balance:</span> {formatCurrency(balanceDue)}
                       </div>
                     </div>
                     
@@ -322,7 +333,7 @@ export default function BillingPage() {
                         </Button>
                       )}
                       
-                      {invoice.balance_due > 0 && (
+                      {balanceDue > 0 && (
                         <Button size="sm">
                           <CreditCard className="h-3 w-3 mr-1" />
                           Record Payment
@@ -331,7 +342,8 @@ export default function BillingPage() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-12">
@@ -354,7 +366,13 @@ export default function BillingPage() {
         <TabsContent value="claims" className="space-y-4">
           {filteredClaims.length > 0 ? (
             <div className="space-y-4">
-              {filteredClaims.map((claim: any) => (
+              {filteredClaims.map((claim: any) => {
+                const claimNumber = claim.claim_number || `CLM-${claim.id}`;
+                const claimedAmount = Number(claim.claimed_amount ?? claim.amount ?? 0);
+                const approvedAmount = claim.approved_amount != null ? Number(claim.approved_amount) : null;
+                const submissionDate = claim.submission_date || claim.created_at || new Date().toISOString();
+                const provider = claim.insurance_provider || claim.payer_name || 'Insurance Provider';
+                return (
                 <Card key={claim.id} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between">
@@ -363,27 +381,27 @@ export default function BillingPage() {
                           <FileText className="h-5 w-5 text-green-600" />
                         </div>
                         <div>
-                          <h3 className="font-medium">{claim.claim_number}</h3>
+                          <h3 className="font-medium">{claimNumber}</h3>
                           <p className="text-sm text-muted-foreground">
-                            Patient: {claim.patient_id}
+                            Patient: {claim.patient_id || 'N/A'}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            {claim.insurance_provider}
+                            {provider}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Submitted: {new Date(claim.submission_date).toLocaleDateString()}
+                            Submitted: {new Date(submissionDate).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
                       
                       <div className="text-right">
                         <div className="mb-2">
-                          {getClaimStatusBadge(claim.status)}
+                          {getClaimStatusBadge(claim.status || 'draft')}
                         </div>
-                        <p className="text-lg font-bold">{formatCurrency(claim.claimed_amount)}</p>
-                        {claim.approved_amount && (
+                        <p className="text-lg font-bold">{formatCurrency(claimedAmount)}</p>
+                        {approvedAmount != null && (
                           <p className="text-sm text-green-600">
-                            Approved: {formatCurrency(claim.approved_amount)}
+                            Approved: {formatCurrency(approvedAmount)}
                           </p>
                         )}
                       </div>
@@ -391,13 +409,13 @@ export default function BillingPage() {
                     
                     <div className="mt-4 grid grid-cols-3 gap-4 text-sm">
                       <div>
-                        <span className="font-medium">Claimed:</span> {formatCurrency(claim.claimed_amount)}
+                        <span className="font-medium">Claimed:</span> {formatCurrency(claimedAmount)}
                       </div>
                       <div>
-                        <span className="font-medium">Approved:</span> {formatCurrency(claim.approved_amount || 0)}
+                        <span className="font-medium">Approved:</span> {formatCurrency(approvedAmount || 0)}
                       </div>
                       <div>
-                        <span className="font-medium">Status:</span> {claim.status}
+                        <span className="font-medium">Status:</span> {claim.status || 'draft'}
                       </div>
                     </div>
                     
@@ -421,7 +439,8 @@ export default function BillingPage() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-12">

@@ -1,14 +1,24 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { HealthcareEntity } from '../../lib/entities';
 import { githubDB, collections } from '../../lib/database';
+import { useAuth } from '../../lib/auth';
+import { CompleteBookingService } from '../../lib/booking-complete';
+import { bookingToCalendarEvent, downloadICS } from '../../lib/ics-generator';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
 
 const BookingPage = () => {
   const { entityId } = useParams<{ entityId: string }>();
+  const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const [entity, setEntity] = useState<HealthcareEntity | null>(null);
+  const [services, setServices] = useState<any[]>([]);
+  const [slots, setSlots] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState<any>(null);
+  const [selectedService, setSelectedService] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [bookingData, setBookingData] = useState({
@@ -29,7 +39,30 @@ const BookingPage = () => {
 
       try {
         const entityData = await githubDB.findById(collections.entities, entityId);
-        setEntity(entityData);
+        if (!entityData) {
+          setError('Entity not found');
+        } else {
+          setEntity(entityData);
+          // Fetch real services for this entity.
+          const svc = await githubDB.find(collections.services, { entity_id: entityId }).catch(() => []);
+          setServices(svc);
+          // Fetch real available appointment slots.
+          const allSlots = await githubDB.find(collections.appointment_slots, { entity_id: entityId }).catch(() => []);
+          const today = new Date().toISOString().split('T')[0];
+          setSlots(allSlots.filter((s: any) => s.is_available && s.date >= today));
+          // Prefill user info if authenticated.
+          if (user) {
+            const profile = (await githubDB.find(collections.profiles, { user_id: user.id }).catch(() => []))[0];
+            if (profile) {
+              setBookingData(prev => ({
+                ...prev,
+                name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+                email: user.email || '',
+                phone: user.phone || prev.phone,
+              }));
+            }
+          }
+        }
       } catch (err) {
         setError('Failed to load entity details');
         console.error('Error loading entity:', err);
@@ -39,49 +72,58 @@ const BookingPage = () => {
     };
 
     loadEntity();
-  }, [entityId]);
+  }, [entityId, user]);
 
   const handleInputChange = (field: string, value: string) => {
     setBookingData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Available dates derived from real appointment slots (unique, sorted).
+  const availableDates = [...new Set(slots.map((s: any) => s.date))].sort();
+
+  // Available times for the selected date (from real slots).
+  const availableTimeSlots = slots
+    .filter((s: any) => s.date === selectedDate)
+    .map((s: any) => s.time)
+    .sort();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle booking submission
-    console.log('Booking submitted:', {
-      entityId,
-      date: selectedDate,
-      time: selectedTime,
-      ...bookingData
-    });
-  };
-
-  // Generate available dates (next 30 days, excluding weekends)
-  const getAvailableDates = () => {
-    const dates = [];
-    const today = new Date();
-    
-    for (let i = 1; i <= 30; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      
-      // Skip weekends (0 = Sunday, 6 = Saturday)
-      if (date.getDay() !== 0 && date.getDay() !== 6) {
-        dates.push(date.toISOString().split('T')[0]);
+    if (!isAuthenticated || !user) {
+      navigate('/login?redirect=' + encodeURIComponent(`/book/${entityId}`));
+      return;
+    }
+    if (!selectedService || !selectedDate || !selectedTime) {
+      setError('Please select a service, date, and time.');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      // Construct the ISO start time from date + time.
+      const startTime = new Date(`${selectedDate}T${selectedTime}:00`).toISOString();
+      const booking = await CompleteBookingService.createBooking({
+        user_id: user.id,
+        entity_id: entityId!,
+        service_id: selectedService,
+        start_time: startTime,
+        is_telehealth: false,
+        patient_notes: bookingData.notes || bookingData.reason,
+      });
+      // Generate and offer the ICS calendar file for the confirmed booking.
+      try {
+        const calEvent = bookingToCalendarEvent(booking);
+        downloadICS(calEvent, `appointment-${booking.booking_reference || booking.id}.ics`);
+      } catch (icsErr) {
+        console.warn('ICS generation failed:', icsErr);
       }
+      setSuccess(booking);
+    } catch (err: any) {
+      console.error('Booking failed:', err);
+      setError(err.message || 'Failed to create booking. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
-    
-    return dates;
-  };
-
-  // Generate available time slots
-  const getAvailableTimeSlots = () => {
-    const slots = [];
-    for (let hour = 9; hour < 17; hour++) {
-      slots.push(`${hour.toString().padStart(2, '0')}:00`);
-      slots.push(`${hour.toString().padStart(2, '0')}:30`);
-    }
-    return slots;
   };
 
   if (loading) {
@@ -114,8 +156,35 @@ const BookingPage = () => {
     );
   }
 
-  const availableDates = getAvailableDates();
-  const availableTimeSlots = getAvailableTimeSlots();
+  if (success) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-sm p-8 text-center">
+          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+          </div>
+          <h1 className="text-2xl font-bold text-dark mb-2">Booking Confirmed</h1>
+          <p className="text-gray-600 mb-4">Your appointment has been scheduled successfully.</p>
+          <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
+            <p className="text-sm text-gray-700"><strong>Reference:</strong> {success.booking_reference || success.id}</p>
+            <p className="text-sm text-gray-700"><strong>Provider:</strong> {entity?.name}</p>
+            <p className="text-sm text-gray-700"><strong>Date:</strong> {selectedDate}</p>
+            <p className="text-sm text-gray-700"><strong>Time:</strong> {selectedTime}</p>
+          </div>
+          <p className="text-sm text-gray-500 mb-6">A calendar (.ics) file has been downloaded. Add it to your calendar app for a reminder.</p>
+          <button
+            onClick={() => navigate('/directory')}
+            className="px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            Back to Directory
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const availableDatesList = availableDates;
+  const availableTimeSlotsList = availableTimeSlots;
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -143,10 +212,34 @@ const BookingPage = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Service Selection */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-dark mb-4">Select a Service</h3>
+            {services.length === 0 ? (
+              <p className="text-gray-500 text-sm">No services listed for this provider. You may still book a general appointment below.</p>
+            ) : (
+              <select
+                required
+                value={selectedService}
+                onChange={(e) => setSelectedService(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              >
+                <option value="">Select a service</option>
+                {services.map((s: any) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.duration || 30} min) — {s.price ? `${s.currency || 'NGN'} ${s.price}` : 'Free'}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
           {/* Date and Time Selection */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h3 className="text-lg font-semibold text-dark mb-4">Select Date & Time</h3>
-            
+            {availableDatesList.length === 0 ? (
+              <p className="text-gray-500 text-sm">No available appointment slots for this provider. Please check back later or contact the provider directly.</p>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Date Selection */}
               <div>
@@ -160,7 +253,7 @@ const BookingPage = () => {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 >
                   <option value="">Select a date</option>
-                  {availableDates.map(date => {
+                  {availableDatesList.map(date => {
                     const dateObj = new Date(date);
                     const formatted = dateObj.toLocaleDateString('en-US', {
                       weekday: 'long',
@@ -188,12 +281,13 @@ const BookingPage = () => {
                   disabled={!selectedDate}
                 >
                   <option value="">Select a time</option>
-                  {availableTimeSlots.map(time => (
+                  {availableTimeSlotsList.map(time => (
                     <option key={time} value={time}>{time}</option>
                   ))}
                 </select>
               </div>
             </div>
+            )}
           </div>
 
           {/* Personal Information */}
@@ -296,12 +390,26 @@ const BookingPage = () => {
               </label>
             </div>
 
+            {error && (
+              <div className="mb-6 bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 text-sm">
+                {error}
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-4">
               <button
                 type="submit"
-                className="flex-1 bg-primary text-white py-3 px-6 rounded-lg hover:bg-primary/90 transition-colors font-medium"
+                disabled={submitting}
+                className="flex-1 bg-primary text-white py-3 px-6 rounded-lg hover:bg-primary/90 transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Book Appointment
+                {submitting ? (
+                  <>
+                    <LoadingSpinner size="sm" />
+                    <span>Booking...</span>
+                  </>
+                ) : (
+                  'Book Appointment'
+                )}
               </button>
               <button
                 type="button"
