@@ -84,17 +84,10 @@ export interface NotificationData {
 
 class EmailNotificationService {
   private static instance: EmailNotificationService;
-  private smtpConfig: any;
-  
+
   private constructor() {
-    // SMTP configuration with Gmail credentials
-    this.smtpConfig = {
-      host: 'smtp.gmail.com',
-      username: 'marzuqcares@gmail.com',
-      password: 'wwba yyer glpm cher',
-      port: 587,
-      secure: false // Use TLS
-    };
+    // SMTP credentials live server-side only (apps/backend/.env SMTP_*).
+    // The client routes all email through the backend /api/email/send endpoint.
   }
 
   public static getInstance(): EmailNotificationService {
@@ -110,57 +103,45 @@ class EmailNotificationService {
       const template = this.getEmailTemplate(notification.type, notification.data);
       const processedTemplate = this.processTemplate(template, notification.data);
 
-      // Use SMTPjs (loaded via CDN) to send email
-      const emailParams = {
-        Host: this.smtpConfig.host,
-        Username: this.smtpConfig.username,
-        Password: this.smtpConfig.password,
-        To: notification.recipient,
-        From: `CareConnect Healthcare <${this.smtpConfig.username}>`,
-        Subject: processedTemplate.subject,
-        Body: processedTemplate.htmlContent
-      };
+      // Route through the backend email service (SMTP creds stay server-side).
+      const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+      const token = localStorage.getItem('careconnect_api_token');
+      const res = await fetch(`${apiBase}/email/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          to: notification.recipient,
+          subject: processedTemplate.subject,
+          html: processedTemplate.htmlContent,
+        }),
+      });
+      const ok = res.ok;
 
-      // Check if Email is available (loaded via CDN)
-      if (typeof (window as any).Email !== 'undefined') {
-        const result = await (window as any).Email.send(emailParams);
-        
-        // Log the email send event
-        this.logEmailEvent({
-          type: notification.type,
-          recipient: notification.recipient,
-          status: result === 'OK' ? 'sent' : 'failed',
-          timestamp: new Date(),
-          messageId: result
-        });
+      // Log the email send event
+      this.logEmailEvent({
+        type: notification.type,
+        recipient: notification.recipient,
+        status: ok ? 'sent' : 'failed',
+        timestamp: new Date(),
+        subject: processedTemplate.subject,
+      });
 
-        return result === 'OK';
-      } else {
-        console.warn('SMTPjs not loaded. Email sending disabled.');
-        
-        // In development, just log the email details
-        this.logEmailEvent({
-          type: notification.type,
-          recipient: notification.recipient,
-          status: 'simulated',
-          timestamp: new Date(),
-          subject: processedTemplate.subject
-        });
-        
-        return true;
-      }
-    } catch (error) {
+      return ok;
+    } catch (error: any) {
       console.error('Email sending failed:', error);
-      
+
       // Log the email failure event
       this.logEmailEvent({
         type: notification.type,
         recipient: notification.recipient,
         status: 'failed',
         error: error.message,
-        timestamp: new Date()
+        timestamp: new Date(),
       });
-      
+
       return false;
     }
   }

@@ -143,7 +143,7 @@ export class LMSService {
       updatedAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.courses, course);
+    await githubDB.insert(collections.courses, course);
     return course;
   }
 
@@ -172,11 +172,11 @@ export class LMSService {
     if (!course) throw new Error('Course not found');
 
     // Check if already enrolled
-    const existingEnrollment = await githubDB.findOne(collections.course_enrollments, {
+    const existingEnrollment = (await githubDB.find(collections.course_enrollments, {
       courseId,
       userId,
       status: { $in: ['active', 'pending_payment', 'pending_review'] }
-    });
+    }))[0];
 
     if (existingEnrollment) {
       throw new Error('Already enrolled in this course');
@@ -226,7 +226,7 @@ export class LMSService {
       }
     };
 
-    await githubDB.create(collections.course_enrollments, enrollment);
+    await githubDB.insert(collections.course_enrollments, enrollment);
 
     // Update enrollment count
     await this.updateCourseEnrollmentCount(courseId);
@@ -422,7 +422,7 @@ export class LMSService {
       }
     };
 
-    await githubDB.create(collections.certificates, certificate);
+    await githubDB.insert(collections.certificates, certificate);
     return certificate;
   }
 
@@ -513,17 +513,17 @@ export class LMSService {
 
   // Get user enrollments
   static async getUserEnrollments(userId: string): Promise<Enrollment[]> {
-    return await githubDB.findMany(collections.course_enrollments, { userId });
+    return await githubDB.find(collections.course_enrollments, { userId });
   }
 
   // Get course enrollment
   static async getCourseEnrollment(courseId: string, userId: string): Promise<Enrollment | null> {
-    return await githubDB.findOne(collections.course_enrollments, { courseId, userId });
+    return (await githubDB.find(collections.course_enrollments, { courseId, userId }))[0];
   }
 
   // Update course enrollment count
   private static async updateCourseEnrollmentCount(courseId: string): Promise<void> {
-    const enrollments = await githubDB.findMany(collections.course_enrollments, {
+    const enrollments = await githubDB.find(collections.course_enrollments, {
       courseId,
       status: { $in: ['active', 'completed'] }
     });
@@ -536,7 +536,7 @@ export class LMSService {
 
   // Get popular courses
   static async getPopularCourses(limit: number = 10): Promise<Course[]> {
-    const courses = await githubDB.findMany(collections.courses, { isPublished: true });
+    const courses = await githubDB.find(collections.courses, { isPublished: true });
     return courses
       .sort((a, b) => b.enrollmentCount - a.enrollmentCount)
       .slice(0, limit);
@@ -548,7 +548,7 @@ export class LMSService {
     level?: string;
     maxPrice?: number;
   }): Promise<Course[]> {
-    let courses = await githubDB.findMany(collections.courses, { isPublished: true });
+    let courses = await githubDB.find(collections.courses, { isPublished: true });
 
     // Text search
     if (query) {

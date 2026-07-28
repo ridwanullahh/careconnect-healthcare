@@ -38,7 +38,7 @@ export class OrderExplainerService {
       }
 
       // Check database cache
-      const existing = await githubDB.query('ai_lab_explanations', {
+      const existing = await githubDB.find('ai_lab_explanations', {
         test_name: testName.toLowerCase(),
         modality: modality.toLowerCase()
       });
@@ -152,7 +152,7 @@ Modality: ${modality}
 
   private async storeExplanation(explanation: LabImagingExplanation): Promise<void> {
     try {
-      await githubDB.create('ai_lab_explanations', {
+      await githubDB.insert('ai_lab_explanations', {
         id: explanation.id,
         test_name: explanation.testName.toLowerCase(),
         modality: explanation.modality.toLowerCase(),
@@ -190,7 +190,7 @@ Modality: ${modality}
 
   async trackMetric(explanationId: string, action: ExplainerMetrics['action'], userId?: string): Promise<void> {
     try {
-      await githubDB.create('analytics_events', {
+      await githubDB.insert('analytics_events', {
         id: `explainer_metric_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         event_type: 'lab_explainer_action',
         explanation_id: explanationId,

@@ -257,7 +257,7 @@ export class BookingService {
     
     // Save slots to database
     for (const slot of slots) {
-      await dbHelpers.create(collections.appointment_slots, slot);
+      await dbHelpers.insert(collections.appointment_slots, slot);
     }
     
     return slots;
@@ -352,7 +352,7 @@ export class BookingService {
     const bookingNumber = `BK-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
     
     // Create booking
-    const booking = await dbHelpers.create(collections.bookings, {
+    const booking = await dbHelpers.insert(collections.bookings, {
       ...bookingData,
       booking_number: bookingNumber,
       status: BookingStatus.PENDING,
@@ -720,7 +720,7 @@ export class BookingService {
     }
     
     // Also create in-app notification
-    await dbHelpers.create(collections.notifications, {
+    await dbHelpers.insert(collections.notifications, {
       user_id: booking.patient_id,
       type: 'booking_confirmed',
       title: 'Appointment Confirmed',
@@ -755,7 +755,7 @@ export class BookingService {
     }
     
     // Also create in-app notification
-    await dbHelpers.create(collections.notifications, {
+    await dbHelpers.insert(collections.notifications, {
       user_id: booking.patient_id,
       type: 'booking_cancelled',
       title: 'Appointment Cancelled',
@@ -768,7 +768,7 @@ export class BookingService {
   private static async sendRescheduleNotification(bookingId: string) {
     const booking = await dbHelpers.findById(collections.bookings, bookingId);
     
-    await dbHelpers.create(collections.notifications, {
+    await dbHelpers.insert(collections.notifications, {
       user_id: booking.patient_id,
       type: 'booking_rescheduled',
       title: 'Appointment Rescheduled',
@@ -793,7 +793,7 @@ export class BookingService {
     ];
     
     // Store reminder schedule (in production, integrate with cron jobs)
-    await dbHelpers.create('booking_reminders', {
+    await dbHelpers.insert('booking_reminders', {
       booking_id: bookingId,
       reminders: reminders.map(r => ({
         type: r.type,

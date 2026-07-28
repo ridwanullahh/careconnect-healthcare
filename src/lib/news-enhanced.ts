@@ -82,7 +82,7 @@ export class NewsService {
       updatedAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.news_sources, source);
+    await githubDB.insert(collections.news_sources, source);
     return source;
   }
 
@@ -254,7 +254,7 @@ export class NewsService {
 
   // Fetch all news from active sources
   static async fetchAllNews(): Promise<void> {
-    const sources = await githubDB.findMany(collections.news_sources, { isActive: true });
+    const sources = await githubDB.find(collections.news_sources, { isActive: true });
     
     for (const source of sources) {
       try {
@@ -268,13 +268,13 @@ export class NewsService {
 
         // Check for duplicates and save new articles
         for (const article of articles) {
-          const existing = await githubDB.findOne(collections.news_articles, {
+          const existing = (await githubDB.find(collections.news_articles, {
             url: article.url,
             title: article.title
-          });
+          }))[0];
 
           if (!existing) {
-            await githubDB.create(collections.news_articles, article);
+            await githubDB.insert(collections.news_articles, article);
           }
         }
 
@@ -298,7 +298,7 @@ export class NewsService {
     categories: string[]
   ): Promise<NewsletterSubscription> {
     // Check if already subscribed
-    const existing = await githubDB.findOne(collections.newsletter_subscriptions, { email });
+    const existing = (await githubDB.find(collections.newsletter_subscriptions, { email }))[0];
     if (existing && existing.isActive) {
       throw new Error('Already subscribed to newsletter');
     }
@@ -322,17 +322,17 @@ export class NewsService {
       });
       return { ...subscription, id: existing.id };
     } else {
-      await githubDB.create(collections.newsletter_subscriptions, subscription);
+      await githubDB.insert(collections.newsletter_subscriptions, subscription);
       return subscription;
     }
   }
 
   // Unsubscribe from newsletter
   static async unsubscribeFromNewsletter(token: string): Promise<void> {
-    const subscription = await githubDB.findOne(collections.newsletter_subscriptions, {
+    const subscription = (await githubDB.find(collections.newsletter_subscriptions, {
       unsubscribeToken: token,
       isActive: true
-    });
+    }))[0];
 
     if (!subscription) {
       throw new Error('Invalid unsubscribe token');
@@ -344,7 +344,7 @@ export class NewsService {
     });
 
     // Add to unsubscribe records
-    await githubDB.create(collections.unsubscribe_records, {
+    await githubDB.insert(collections.unsubscribe_records, {
       id: `unsub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       email: subscription.email,
       type: 'newsletter',
@@ -374,7 +374,7 @@ export class NewsService {
     }
 
     // Get approved articles from the time period
-    let articles = await githubDB.findMany(collections.news_articles, {
+    let articles = await githubDB.find(collections.news_articles, {
       moderationStatus: 'approved',
       publishedAt: { $gte: startDate.toISOString() }
     });
@@ -406,7 +406,7 @@ export class NewsService {
       htmlContent: this.generateDigestHTML(type, topArticles)
     };
 
-    await githubDB.create(collections.analytics_events, {
+    await githubDB.insert(collections.analytics_events, {
       id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       action: 'newsletter_digest_generated',
       entityType: 'digest',
@@ -506,14 +506,14 @@ export class NewsService {
 
   // Send newsletter digest
   static async sendNewsletterDigest(digest: NewsDigest, frequency: string): Promise<void> {
-    const subscriptions = await githubDB.findMany(collections.newsletter_subscriptions, {
+    const subscriptions = await githubDB.find(collections.newsletter_subscriptions, {
       frequency,
       isActive: true
     });
 
     for (const subscription of subscriptions) {
       // Create in-app notification
-      await githubDB.create(collections.notifications, {
+      await githubDB.insert(collections.notifications, {
         id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: subscription.userId,
         type: 'newsletter_digest',
@@ -549,7 +549,7 @@ export class NewsService {
     },
     sortBy: 'newest' | 'oldest' | 'mostViewed' | 'credibility' = 'newest'
   ): Promise<{ articles: NewsArticle[]; total: number; hasMore: boolean }> {
-    let articles = await githubDB.findMany(collections.news_articles, {
+    let articles = await githubDB.find(collections.news_articles, {
       moderationStatus: filters?.moderationStatus || 'approved'
     });
 
@@ -605,7 +605,7 @@ export class NewsService {
 
   // Search articles
   static async searchArticles(query: string, category?: string): Promise<NewsArticle[]> {
-    let articles = await githubDB.findMany(collections.news_articles, {
+    let articles = await githubDB.find(collections.news_articles, {
       moderationStatus: 'approved'
     });
 

@@ -81,7 +81,7 @@ export class NotificationService {
 
     // Create in-app notification if enabled
     if (!preference || preference.inApp) {
-      await githubDB.create(collections.notifications, {
+      await githubDB.insert(collections.notifications, {
         id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId,
         type,
@@ -110,7 +110,7 @@ export class NotificationService {
     priority: 'low' | 'normal' | 'high' | 'urgent' = 'normal',
     scheduledFor: string = new Date().toISOString()
   ): Promise<void> {
-    await githubDB.create(collections.scheduled_emails, {
+    await githubDB.insert(collections.scheduled_emails, {
       id: `sched_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       userId,
       type,
@@ -137,10 +137,10 @@ export class NotificationService {
       if (!user?.email) return;
 
       // Check unsubscribe status
-      const unsubscribed = await githubDB.findOne(collections.unsubscribe_records, {
+      const unsubscribed = (await githubDB.find(collections.unsubscribe_records, {
         email: user.email,
         type: 'notifications'
-      });
+      }))[0];
 
       if (unsubscribed) return;
 
@@ -165,7 +165,7 @@ export class NotificationService {
         createdAt: new Date().toISOString()
       };
 
-      await githubDB.create(collections.analytics_events, {
+      await githubDB.insert(collections.analytics_events, {
         id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         action: 'email_notification_created',
         entityType: 'email',
@@ -333,10 +333,10 @@ export class NotificationService {
 
   // Get user notification preference
   static async getUserNotificationPreference(userId: string, type: string): Promise<NotificationPreference | null> {
-    return await githubDB.findOne(collections.user_preferences, {
+    return (await githubDB.find(collections.user_preferences, {
       userId,
       type
-    });
+    }))[0];
   }
 
   // Update user notification preference
@@ -366,7 +366,7 @@ export class NotificationService {
     if (existing) {
       await githubDB.update(collections.user_preferences, existing.id, preferenceData);
     } else {
-      await githubDB.create(collections.user_preferences, preferenceData);
+      await githubDB.insert(collections.user_preferences, preferenceData);
     }
 
     return preferenceData;
@@ -378,35 +378,35 @@ export class NotificationService {
     if (!user?.email) return false;
 
     // Check global unsubscribe
-    const globalUnsubscribe = await githubDB.findOne(collections.unsubscribe_records, {
+    const globalUnsubscribe = (await githubDB.find(collections.unsubscribe_records, {
       email: user.email,
       type: 'all'
-    });
+    }))[0];
 
     if (globalUnsubscribe) return false;
 
     // Check type-specific unsubscribe
-    const typeUnsubscribe = await githubDB.findOne(collections.unsubscribe_records, {
+    const typeUnsubscribe = (await githubDB.find(collections.unsubscribe_records, {
       email: user.email,
       type
-    });
+    }))[0];
 
     return !typeUnsubscribe;
   }
 
   // Get notification template
   static async getNotificationTemplate(type: string): Promise<NotificationTemplate | null> {
-    return await githubDB.findOne(collections.analytics_events, {
+    return (await githubDB.find(collections.analytics_events, {
       action: 'notification_template',
       entityType: 'template',
       'data.type': type
-    });
+    }))[0];
   }
 
   // Process scheduled notifications
   static async processScheduledNotifications(): Promise<void> {
     const now = new Date().toISOString();
-    const scheduled = await githubDB.findMany(collections.scheduled_emails, {
+    const scheduled = await githubDB.find(collections.scheduled_emails, {
       status: 'pending',
       scheduledFor: { $lte: now }
     });
@@ -454,7 +454,7 @@ export class NotificationService {
 
   // Mark all notifications as read
   static async markAllAsRead(userId: string): Promise<void> {
-    const notifications = await githubDB.findMany(collections.notifications, {
+    const notifications = await githubDB.find(collections.notifications, {
       userId,
       read: false
     });
@@ -477,7 +477,7 @@ export class NotificationService {
     const filter: any = { userId };
     if (unreadOnly) filter.read = false;
 
-    let notifications = await githubDB.findMany(collections.notifications, filter);
+    let notifications = await githubDB.find(collections.notifications, filter);
     
     // Sort by creation date (newest first)
     notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -513,9 +513,9 @@ export class NotificationService {
   ): Promise<void> {
     // Verify token if provided
     if (token) {
-      const subscription = await githubDB.findOne(collections.newsletter_subscriptions, {
+      const subscription = (await githubDB.find(collections.newsletter_subscriptions, {
         unsubscribeToken: token
-      });
+      }))[0];
       
       if (!subscription || subscription.email !== email) {
         throw new Error('Invalid unsubscribe token');
@@ -523,7 +523,7 @@ export class NotificationService {
     }
 
     // Add unsubscribe record
-    await githubDB.create(collections.unsubscribe_records, {
+    await githubDB.insert(collections.unsubscribe_records, {
       id: `unsub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       email,
       type,
@@ -539,7 +539,7 @@ export class NotificationService {
     byType: Record<string, number>;
     byPriority: Record<string, number>;
   }> {
-    const notifications = await githubDB.findMany(collections.notifications, { userId });
+    const notifications = await githubDB.find(collections.notifications, { userId });
     
     const stats = {
       total: notifications.length,

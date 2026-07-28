@@ -130,7 +130,7 @@ export class VerificationService {
     status: EntityVerification['status'],
     verificationRequestId?: string
   ): Promise<void> {
-    const existing = await githubDB.findOne(collections.entity_verification, { entityId });
+    const existing = (await githubDB.find(collections.entity_verification, { entityId }))[0];
     
     const verification: EntityVerification = {
       entityId,
@@ -156,17 +156,17 @@ export class VerificationService {
   // Get verification requests for admin review
   static async getVerificationQueue(status?: string): Promise<VerificationRequest[]> {
     const filter = status ? { status } : {};
-    return await githubDB.findMany(collections.verification_requests, filter);
+    return await githubDB.find(collections.verification_requests, filter);
   }
 
   // Get entity verification status
   static async getEntityVerification(entityId: string): Promise<EntityVerification | null> {
-    return await githubDB.findOne(collections.entity_verification, { entityId });
+    return (await githubDB.find(collections.entity_verification, { entityId }))[0];
   }
 
   // Schedule re-verification reminders
   static async scheduleReVerificationReminders(): Promise<void> {
-    const verifications = await githubDB.findMany(collections.entity_verification, {
+    const verifications = await githubDB.find(collections.entity_verification, {
       status: 'verified'
     });
 
@@ -215,7 +215,7 @@ export class VerificationService {
 
   // Get verification documents for a request
   static async getVerificationDocuments(verificationRequestId: string): Promise<VerificationDocument[]> {
-    return await githubDB.findMany(collections.verification_documents, { verificationRequestId });
+    return await githubDB.find(collections.verification_documents, { verificationRequestId });
   }
 
   // Upload verification document

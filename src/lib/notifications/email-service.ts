@@ -200,7 +200,7 @@ export class EmailService {
         createdAt: new Date()
       };
 
-      await dbHelpers.create(collections.notifications, {
+      await dbHelpers.insert(collections.notifications, {
         type: 'email',
         ...queueItem
       });

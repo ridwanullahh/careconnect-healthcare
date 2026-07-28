@@ -113,7 +113,7 @@ export class PodcastService {
       updatedAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.podcast_series, series);
+    await githubDB.insert(collections.podcast_series, series);
     return series;
   }
 
@@ -123,7 +123,7 @@ export class PodcastService {
     const series = await githubDB.findById(collections.podcast_series, episodeData.seriesId);
     if (!series) throw new Error('Podcast series not found');
 
-    const existingEpisodes = await githubDB.findMany(collections.podcast_episodes, {
+    const existingEpisodes = await githubDB.find(collections.podcast_episodes, {
       seriesId: episodeData.seriesId
     });
 
@@ -143,7 +143,7 @@ export class PodcastService {
       updatedAt: new Date().toISOString()
     };
 
-    await githubDB.create(collections.podcast_episodes, episode);
+    await githubDB.insert(collections.podcast_episodes, episode);
 
     // Update series stats
     await this.updateSeriesStats(episodeData.seriesId);
@@ -190,7 +190,7 @@ export class PodcastService {
     const series = await githubDB.findById(collections.podcast_series, seriesId);
     if (!series) throw new Error('Podcast series not found');
 
-    const episodes = await githubDB.findMany(collections.podcast_episodes, {
+    const episodes = await githubDB.find(collections.podcast_episodes, {
       seriesId,
       status: 'published'
     });
@@ -200,7 +200,7 @@ export class PodcastService {
 
     const rssXml = this.generateRSSXML(series, episodes);
     
-    const existingFeed = await githubDB.findOne(collections.podcast_rss_feeds, { seriesId });
+    const existingFeed = (await githubDB.find(collections.podcast_rss_feeds, { seriesId }))[0];
     
     const feedData = {
       seriesId,
@@ -218,7 +218,7 @@ export class PodcastService {
         id: `rss_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         ...feedData
       };
-      await githubDB.create(collections.podcast_rss_feeds, feed);
+      await githubDB.insert(collections.podcast_rss_feeds, feed);
       return feed;
     }
   }
@@ -314,11 +314,11 @@ export class PodcastService {
   // Subscribe to podcast series
   static async subscribeToPodcast(userId: string, seriesId: string): Promise<PodcastSubscription> {
     // Check if already subscribed
-    const existing = await githubDB.findOne(collections.analytics_events, {
+    const existing = (await githubDB.find(collections.analytics_events, {
       userId,
       entityId: seriesId,
       action: 'podcast_subscribe'
-    });
+    }))[0];
 
     if (existing) {
       throw new Error('Already subscribed to this podcast');
@@ -335,7 +335,7 @@ export class PodcastService {
     };
 
     // Store subscription in analytics events for tracking
-    await githubDB.create(collections.analytics_events, {
+    await githubDB.insert(collections.analytics_events, {
       id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       userId,
       action: 'podcast_subscribe',
@@ -365,14 +365,14 @@ export class PodcastService {
     if (!series || !episode) return;
 
     // Get subscribers
-    const subscriptions = await githubDB.findMany(collections.analytics_events, {
+    const subscriptions = await githubDB.find(collections.analytics_events, {
       action: 'podcast_subscribe',
       entityId: seriesId
     });
 
     for (const subscription of subscriptions) {
       if (subscription.data?.notificationsEnabled !== false) {
-        await githubDB.create(collections.notifications, {
+        await githubDB.insert(collections.notifications, {
           id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           userId: subscription.userId,
           type: 'new_podcast_episode',
@@ -389,7 +389,7 @@ export class PodcastService {
 
   // Update series statistics
   private static async updateSeriesStats(seriesId: string): Promise<void> {
-    const episodes = await githubDB.findMany(collections.podcast_episodes, { seriesId });
+    const episodes = await githubDB.find(collections.podcast_episodes, { seriesId });
     const publishedEpisodes = episodes.filter(e => e.status === 'published');
     
     const totalDuration = publishedEpisodes.reduce((sum, e) => sum + e.duration, 0);
@@ -417,7 +417,7 @@ export class PodcastService {
     const series = await githubDB.findById(collections.podcast_series, seriesId);
     if (!series) throw new Error('Podcast series not found');
 
-    const episodes = await githubDB.findMany(collections.podcast_episodes, {
+    const episodes = await githubDB.find(collections.podcast_episodes, {
       seriesId,
       status: 'published'
     });
@@ -429,7 +429,7 @@ export class PodcastService {
 
   // Get RSS feed content
   static async getRSSFeedContent(seriesId: string): Promise<string> {
-    const feed = await githubDB.findOne(collections.podcast_rss_feeds, { seriesId });
+    const feed = (await githubDB.find(collections.podcast_rss_feeds, { seriesId }))[0];
     
     if (!feed) {
       // Generate RSS feed if it doesn't exist
@@ -442,7 +442,7 @@ export class PodcastService {
 
   // Search podcast episodes
   static async searchEpisodes(query: string, seriesId?: string): Promise<PodcastEpisode[]> {
-    let episodes = await githubDB.findMany(collections.podcast_episodes, {
+    let episodes = await githubDB.find(collections.podcast_episodes, {
       status: 'published',
       ...(seriesId && { seriesId })
     });
@@ -462,7 +462,7 @@ export class PodcastService {
 
   // Get popular episodes
   static async getPopularEpisodes(limit: number = 10): Promise<PodcastEpisode[]> {
-    const episodes = await githubDB.findMany(collections.podcast_episodes, {
+    const episodes = await githubDB.find(collections.podcast_episodes, {
       status: 'published'
     });
 
@@ -473,7 +473,7 @@ export class PodcastService {
 
   // Get recent episodes
   static async getRecentEpisodes(limit: number = 20): Promise<PodcastEpisode[]> {
-    const episodes = await githubDB.findMany(collections.podcast_episodes, {
+    const episodes = await githubDB.find(collections.podcast_episodes, {
       status: 'published'
     });
 

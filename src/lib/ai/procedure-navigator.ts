@@ -46,7 +46,7 @@ export class ProcedureNavigatorService {
       }
 
       // Check database cache
-      const existing = await githubDB.query('ai_procedure_navigators', {
+      const existing = await githubDB.find('ai_procedure_navigators', {
         procedure_name: procedureName.toLowerCase()
       });
 
@@ -220,7 +220,7 @@ Procedure: ${procedureName}
 
   private async storeNavigator(navigator: ProcedureNavigator): Promise<void> {
     try {
-      await githubDB.create('ai_procedure_navigators', {
+      await githubDB.insert('ai_procedure_navigators', {
         id: navigator.id,
         procedure_name: navigator.procedureName.toLowerCase(),
         prep_phase: JSON.stringify(navigator.prepPhase),
@@ -252,7 +252,7 @@ Procedure: ${procedureName}
 
   async trackMetric(navigatorId: string, action: NavigatorMetrics['action'], phase?: NavigatorMetrics['phase'], userId?: string): Promise<void> {
     try {
-      await githubDB.create('analytics_events', {
+      await githubDB.insert('analytics_events', {
         id: `navigator_metric_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         event_type: 'procedure_navigator_action',
         navigator_id: navigatorId,

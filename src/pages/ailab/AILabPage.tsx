@@ -44,7 +44,7 @@ const AILabPage: React.FC = () => {
       setIsLoading(true);
       
       // Load analytics data
-      const analyticsEvents = await githubDB.query('analytics_events', {
+      const analyticsEvents = await githubDB.find('analytics_events', {
         event_type: ['care_path_action', 'lab_explainer_action', 'procedure_navigator_action']
       });
 

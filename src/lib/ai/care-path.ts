@@ -43,7 +43,7 @@ export class CarePathService {
       }
 
       // Check database cache
-      const existingCards = await githubDB.query('ai_care_paths', {
+      const existingCards = await githubDB.find('ai_care_paths', {
         concern_hash: this.hashConcern(concern)
       });
 
@@ -174,7 +174,7 @@ User concern: ${cleanConcern}
 
   private async storeCarePathCard(card: CarePathCard): Promise<void> {
     try {
-      await githubDB.create('ai_care_paths', {
+      await githubDB.insert('ai_care_paths', {
         id: card.id,
         concern: card.concern,
         concern_hash: this.hashConcern(card.concern),
@@ -213,7 +213,7 @@ User concern: ${cleanConcern}
 
   async trackMetric(cardId: string, action: CarePathMetrics['action'], userId?: string): Promise<void> {
     try {
-      await githubDB.create('analytics_events', {
+      await githubDB.insert('analytics_events', {
         id: `care_path_metric_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         event_type: 'care_path_action',
         card_id: cardId,
