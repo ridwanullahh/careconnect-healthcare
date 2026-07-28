@@ -45,12 +45,15 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: false,
+      chunkSizeWarningLimit: 1600,
       rollupOptions: {
         output: {
           manualChunks: {
             vendor: ['react', 'react-dom'],
             router: ['react-router-dom'],
             icons: ['lucide-react'],
+            markdown: ['react-markdown', 'remark-gfm'],
+            maps: ['@react-google-maps/api'],
           },
         },
       },

@@ -26,15 +26,24 @@
   "dependencies": {
     "@esbuild/linux-arm64": "^0.21.5",
     "@react-google-maps/api": "^2.20.7",
+    "@vitejs/plugin-basic-ssl": "^1.2.0",
+    "@vitejs/plugin-react": "^4.0.3",
+    "autoprefixer": "^10.4.14",
     "better-sqlite3": "^11.7.0",
     "clsx": "^2.1.1",
+    "esbuild-wasm": "^0.28.1",
     "lucide-react": "^0.263.0",
+    "postcss": "^8.4.27",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.8.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.3.1",
+    "tailwindcss": "^3.3.3",
+    "terser": "^5.43.1",
+    "typescript": "^5.0.2",
+    "vite": "^5.4.21",
     "zustand": "^4.4.0"
   },
   "devDependencies": {
@@ -44,17 +53,8 @@
     "@types/react-dom": "^18.2.7",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "@vitejs/plugin-basic-ssl": "^1.2.0",
-    "@vitejs/plugin-react": "^4.0.3",
-    "autoprefixer": "^10.4.14",
-    "esbuild-wasm": "^0.28.1",
     "eslint": "^8.45.0",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.3",
-    "postcss": "^8.4.27",
-    "tailwindcss": "^3.3.3",
-    "terser": "^5.43.1",
-    "typescript": "^5.0.2",
-    "vite": "^5.4.21"
+    "eslint-plugin-react-refresh": "^0.4.3"
   }
 }
