@@ -304,3 +304,59 @@ Work Log:
   9. src/pages/directory/EntityDetailPage.tsx (real services/entity_services queries with entity.services fallback)
 - All 9 UIs now display real backend data with loading skeletons/spinners, red error banners, and "No data found" empty states. NO emojis. NO new dependencies added. NO indigo/blue on new code (the bookmark highlight was switched to emerald). Existing layouts, card grids, shadow styles, and tab structures were preserved.
 - Did NOT commit to git (per task instructions — the main agent will verify and commit).
+
+---
+Task ID: E-SHADCN-PRIMITIVES
+Agent: Shadcn Primitives Engineer
+Task: Create 5 missing shadcn-style primitives (label, select, scroll-area, dialog, checkbox), a use-toast hook, fix 3 dead admin components, and wire them into PatientPortal + SuperAdminDashboard.
+
+Work Log:
+- Read worklog.md to absorb prior context (Vite + React 18 + TS monorepo; existing primitives use `cn()` from `src/lib/utils`, forwardRef, Tailwind, project tokens; existing `Toast.tsx` exports a `useToast` context hook returning {success,error,warning,info,addToast,removeToast,toasts}).
+- Read existing primitives (button.tsx, input.tsx, card.tsx, badge.tsx, tabs.tsx, LoadingSpinner.tsx, Toast.tsx) and consumer files (toast-service.ts, key-management.ts, data-deletion.ts, observability.ts, auth.tsx, PatientPortal.tsx, SuperAdminDashboard.tsx) to match style and understand call sites.
+
+Step 1 — Created 5 shadcn-style primitives:
+- `src/components/ui/label.tsx`: forwardRef label, `text-sm font-medium text-gray-700`, exports named + default.
+- `src/components/ui/select.tsx`: lightweight compound Select built on a NATIVE `<select>` (no Radix). Implements Select (context provider with value/defaultValue/onValueChange/disabled + internal items[] state), SelectTrigger (renders the styled `<select>` with ChevronDown icon + placeholder option when value is empty), SelectValue (renderless; registers placeholder via context), SelectContent (renderless wrapper), SelectItem (renderless; registers its value+label with context via useEffect), SelectGroup, SelectLabel. Fixed an infinite-loop footgun: SelectItem/SelectValue effects depend only on the stable `registerItem`/`setPlaceholder` callbacks, not the entire context value. `registerItem` updates labels in-place instead of remove+re-add to avoid flicker.
+- `src/components/ui/scroll-area.tsx`: forwardRef div with `overflow-auto` + custom webkit/firefox scrollbar styling via Tailwind arbitrary variants. Accepts `orientation` prop.
+- `src/components/ui/dialog.tsx`: compound Dialog built with internal React state (no Radix). Implements Dialog (controlled/uncontrolled state, Escape-to-close, body scroll lock), DialogTrigger (with `asChild` support via cloneElement), DialogContent (fixed overlay + centered panel with X close button), DialogHeader, DialogFooter (with top border separator), DialogTitle, DialogDescription, DialogClose (with `asChild`).
+- `src/components/ui/checkbox.tsx`: forwardRef button with role="checkbox" + hidden native input for form integration. Uses project's green-600 primary color. Accepts `checked`/`defaultChecked`/`onCheckedChange`/`name`/`value`.
+
+Step 2 — Created `src/hooks/use-toast.ts`:
+- Wraps the existing `useToast` from `../components/ui/Toast` and exposes BOTH API shapes so legacy call sites work:
+  - `const { toast } = useToast(); toast({ title, description, variant })` (used by DataExportDialog, KeyManagementModule)
+  - `const toast = useToast(); toast.success(title, message)` (used by toast-service.ts pattern)
+- The `toast()` function maps `variant: 'destructive'` -> `error()`, `'success'` -> `success()`, etc., and respects a custom `duration` via `addToast`.
+
+Step 3 — Verified `useToastService` (in `src/lib/toast-service.ts`) is unchanged and still works (it imports directly from `../components/ui/Toast`, not the new hook). The dead components' `../../hooks/use-toast` path now resolves.
+
+Step 4 — Fixed the 3 dead admin components:
+- `src/components/ui/DataExportDialog.tsx`: refactored to actually USE the Dialog primitive (was importing it but rendering only a Card). Now renders a `<Dialog>` with `<DialogTrigger asChild><Button>Export My Data</Button></DialogTrigger>` and a `<DialogContent>` containing the export/deletion/privacy-rights UI. Removed unused `Checkbox` import. Added a `useEffect` that pre-checks the user's deletion status via `DataDeletionService.getDeletionStatus` so the "Pending" state shows immediately. Persists deletion requests to `collections.data_deletion_requests` for admin review. Properly typed all catch variables (`err instanceof Error ? err.message : String(err)`). Replaced the blue "Privacy Information" box with green (project brand) to comply with the no-blue/indigo rule.
+- `src/components/admin/KeyManagementModule.tsx`: added explicit `submitting` and `error` state, restructured `loadKeys` as a `useCallback` (moved `useEffect` after the callback to fix temporal-dead-zone ordering), converted all `catch (error) { error.message }` to safe `errorMessage(err)` helper. Cast `value as KeyType` in the Select `onValueChange` callback (TS-safe). Converted the blue Security Notice box to green. Added loading text + retry button in the error fallback. The component already used real data via `KeyManagementService.listKeys/storeKey/deleteKey/refreshQuota` — kept that intact.
+- `src/components/admin/SystemMonitoringModule.tsx`: hoisted `calculateErrorRate`/`calculateAverageResponseTime` to module scope (avoids TDZ issue with `useCallback` referencing them before declaration). Wrapped `loadSystemMetrics`/`loadRecentLogs` in `useCallback`. Made all 6 collection reads resilient with `.catch(() => [])`. Now ACTUALLY computes `most_popular` health tool from `tool_results` data (was hardcoded `'AI Symptom Checker'`) and computes `uptime` from `collections.uptime_checks` when available (falls back to 99.8% default). Added an `error` state + retry button. Removed unused `Database` icon import. Replaced `text-blue-500`/`text-purple-500`/`text-blue-600` icon/text colors with green/orange to comply with the no-blue/indigo rule.
+
+Step 5 — Wired the fixed components into the app:
+- `src/pages/patient/PatientPortal.tsx`: replaced the no-op `<Button variant="outline">Export Records</Button>` in the patient header with `<DataExportDialog />`. The DataExportDialog itself renders the "Export My Data" trigger button via its DialogTrigger.
+- `src/pages/dashboard/SuperAdminDashboard.tsx`: imported `KeyManagementModule` and `SystemMonitoringModule`, added two new nav entries ("Key Management" -> `/super-admin/keys`, "System Monitoring" -> `/super-admin/monitoring`), and added two new `<Route>` elements rendering the respective modules.
+
+Validation:
+- `npx tsc --noEmit` -> exit 0 (no type errors across the project).
+- `bun run lint` cannot run because the eslint config imports the missing `typescript-eslint` unified package (pre-existing repo issue documented by previous agent — `node_modules/typescript-eslint` is absent).
+- Vite dev server HMR-accepted every changed file (visible in /tmp/devstack.log: `page reload src/components/ui/DataExportDialog.tsx`, `page reload src/components/admin/KeyManagementModule.tsx`, `page reload src/components/admin/SystemMonitoringModule.tsx`, `hmr update /src/pages/patient/PatientPortal.tsx`, `hmr update /src/pages/dashboard/SuperAdminDashboard.tsx`). No HMR errors related to my changes. (The pre-existing `email.ts:627 Multiple exports with the same name "EmailType"` error is unrelated and was present before this task.)
+- Verified no `blue`/`indigo`/`purple` Tailwind classes remain in any of the 5 new primitives or the 3 fixed admin components.
+
+Stage Summary:
+- Files created (7):
+  - src/components/ui/label.tsx
+  - src/components/ui/select.tsx
+  - src/components/ui/scroll-area.tsx
+  - src/components/ui/dialog.tsx
+  - src/components/ui/checkbox.tsx
+  - src/hooks/use-toast.ts
+- Files modified (5):
+  - src/components/ui/DataExportDialog.tsx (refactored to use Dialog; real deletion-status precheck; safe error handling)
+  - src/components/admin/KeyManagementModule.tsx (loading/error/submitting states; useCallback; safe errors; green brand recolor)
+  - src/components/admin/SystemMonitoringModule.tsx (real most-popular tool + uptime computation; error state; green/orange recolor; module-scope helpers)
+  - src/pages/patient/PatientPortal.tsx (replaced Export Records button with <DataExportDialog />)
+  - src/pages/dashboard/SuperAdminDashboard.tsx (added Key Management + System Monitoring routes & nav items)
+- No new npm dependencies installed (used only react, lucide-react, clsx, tailwind-merge already in the project).
+- Did NOT commit — main agent will verify and commit.

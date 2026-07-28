@@ -10,12 +10,12 @@ import { EncounterService } from '@/lib/encounters';
 import { LabService } from '@/lib/labs';
 import { MedicationService } from '@/lib/medications';
 import { githubDB as dbHelpers, collections } from '@/lib/database';
-import { 
-  User, 
-  Calendar, 
-  Pill, 
-  TestTube, 
-  FileText, 
+import {
+  User,
+  Calendar,
+  Pill,
+  TestTube,
+  FileText,
   Clock,
   Heart,
   AlertCircle,
@@ -26,6 +26,7 @@ import {
   Phone,
   Mail
 } from 'lucide-react';
+import DataExportDialog from '@/components/ui/DataExportDialog';
 
 interface PatientDashboardData {
   patient: any;
@@ -229,10 +230,7 @@ export default function PatientPortal() {
             Patient ID: {patient.patient_code} • Here's your health summary
           </p>
         </div>
-        <Button variant="outline">
-          <Download className="mr-2 h-4 w-4" />
-          Export Records
-        </Button>
+        <DataExportDialog />
       </div>
 
       {/* Quick Stats */}
