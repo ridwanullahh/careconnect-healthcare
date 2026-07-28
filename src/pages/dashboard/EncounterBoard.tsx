@@ -1,13 +1,28 @@
 // Encounter Board - HMS Encounter Management
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useToastService } from '../../lib/toast-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
 import { useAuth, Permission } from '@/lib/auth';
 import { EncounterService } from '@/lib/encounters';
 import { PatientService } from '@/lib/patients';
+import { getEntity } from '@/lib/entities';
+import { githubDB as dbHelpers, collections } from '@/lib/database';
+import { generateEncounterSummary } from '@/lib/hms-print-templates';
+import { validateICD10 } from '@/lib/hms-code-validators';
+import PrintButton from '@/components/hms/PrintButton';
 import { 
   Calendar, 
   Clock, 
@@ -20,8 +35,11 @@ import {
   Plus,
   Edit,
   CheckCircle,
+  CheckCircle2,
   XCircle,
-  Activity
+  Activity,
+  Printer,
+  Loader2
 } from 'lucide-react';
 
 interface EncounterWithPatient {
@@ -45,16 +63,43 @@ interface EncounterWithPatient {
 
 export default function EncounterBoard() {
   const { user, hasPermission } = useAuth();
+  const toast = useToastService();
   const [encounters, setEncounters] = useState<EncounterWithPatient[]>([]);
+  const [entityInfo, setEntityInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [activeTab, setActiveTab] = useState('all');
+  const [conditionDialogOpen, setConditionDialogOpen] = useState(false);
+  const [conditionEncounter, setConditionEncounter] = useState<EncounterWithPatient | null>(null);
+  const [conditionForm, setConditionForm] = useState({
+    condition_name: '',
+    code: '',
+    code_system: 'ICD-10',
+    category: 'diagnosis',
+    clinical_status: 'active',
+    verification_status: 'provisional',
+    severity: '',
+    notes: ''
+  });
+  const [icd10Validation, setIcd10Validation] = useState<{ valid: boolean; formatted?: string; description?: string } | null>(null);
+  const [conditionSubmitting, setConditionSubmitting] = useState(false);
 
   useEffect(() => {
     if (user?.entity_id) {
       loadEncounters();
+      loadEntityInfo();
     }
   }, [user?.entity_id, selectedDate]);
+
+  const loadEntityInfo = async () => {
+    if (!user?.entity_id) return;
+    try {
+      const ent = await getEntity(user.entity_id);
+      setEntityInfo(ent);
+    } catch (e) {
+      setEntityInfo(null);
+    }
+  };
 
   const loadEncounters = async () => {
     if (!user?.entity_id) return;
@@ -231,6 +276,148 @@ export default function EncounterBoard() {
     }
   };
 
+  // ---- Encounter Print Button (lazy fetch + PrintButton) ----
+  const EncounterPrintButton: React.FC<{ encounter: EncounterWithPatient }> = ({ encounter }) => {
+    const [html, setHtml] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handlePrepare = useCallback(async () => {
+      if (loading || html) return;
+      setLoading(true);
+      try {
+        const details = await EncounterService.getEncounterDetails(encounter.id);
+        const generated = generateEncounterSummary(
+          details?.encounter || encounter,
+          {
+            name: encounter.patient_name || 'Patient',
+            patient_code: encounter.patient_id
+          },
+          details?.vitals || [],
+          details?.conditions || [],
+          {
+            name: entityInfo?.name,
+            type: entityInfo?.entity_type ? String(entityInfo.entity_type).replace(/_/g, ' ') : undefined,
+            address: entityInfo?.address,
+            phone: entityInfo?.phone,
+            email: entityInfo?.email,
+            website: entityInfo?.website
+          }
+        );
+        setHtml(generated);
+      } catch (err) {
+        console.error('Failed to generate encounter summary:', err);
+        toast.showError('Failed to generate encounter summary.');
+      } finally {
+        setLoading(false);
+      }
+    }, [encounter, entityInfo, loading, html]);
+
+    if (html) {
+      return (
+        <PrintButton
+          html={html}
+          filename={`encounter-summary-${encounter.encounter_code || encounter.id}.html`}
+          label="Print Summary"
+          autoPrint
+        />
+      );
+    }
+
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={handlePrepare}
+        disabled={loading}
+        aria-label={`Print summary for encounter ${encounter.encounter_code}`}
+      >
+        {loading ? (
+          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+        ) : (
+          <Printer className="h-3 w-3 mr-1" />
+        )}
+        {loading ? 'Preparing...' : 'Print Summary'}
+      </Button>
+    );
+  };
+
+  // ---- Condition entry dialog handlers (ICD-10 validation on blur) ----
+  const handleOpenConditionDialog = (encounter: EncounterWithPatient) => {
+    if (!hasPermission(Permission.MANAGE_CONDITIONS)) {
+      toast.showWarning('You do not have permission to add conditions.');
+      return;
+    }
+    setConditionEncounter(encounter);
+    setConditionForm({
+      condition_name: '',
+      code: '',
+      code_system: 'ICD-10',
+      category: 'diagnosis',
+      clinical_status: 'active',
+      verification_status: 'provisional',
+      severity: '',
+      notes: ''
+    });
+    setIcd10Validation(null);
+    setConditionDialogOpen(true);
+  };
+
+  const handleIcd10Blur = (code: string) => {
+    if (!code || !code.trim()) {
+      setIcd10Validation(null);
+      return;
+    }
+    const result = validateICD10(code);
+    setIcd10Validation(result);
+    if (result.valid && result.formatted && result.formatted !== code) {
+      setConditionForm((prev) => ({ ...prev, code: result.formatted! }));
+    }
+  };
+
+  const handleConditionSubmit = async () => {
+    if (!conditionEncounter || !user?.entity_id) return;
+
+    if (!conditionForm.condition_name.trim()) {
+      toast.showError('Condition name is required.');
+      return;
+    }
+
+    if (conditionForm.code.trim() && !icd10Validation?.valid) {
+      toast.showError('ICD-10 code is invalid. Please correct it before saving.');
+      return;
+    }
+
+    setConditionSubmitting(true);
+    try {
+      await dbHelpers.insert(collections.conditions, {
+        patient_id: conditionEncounter.patient_id,
+        encounter_id: conditionEncounter.id,
+        entity_id: user.entity_id,
+        condition_name: conditionForm.condition_name.trim(),
+        code: icd10Validation?.formatted || conditionForm.code.trim() || undefined,
+        code_system: conditionForm.code.trim() ? conditionForm.code_system : undefined,
+        code_display: icd10Validation?.description || undefined,
+        category: conditionForm.category,
+        clinical_status: conditionForm.clinical_status,
+        verification_status: conditionForm.verification_status,
+        severity: conditionForm.severity || undefined,
+        notes: conditionForm.notes.trim() || undefined,
+        recorded_by: user.id,
+        recorded_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      toast.showSuccess('Condition recorded successfully.');
+      setConditionDialogOpen(false);
+      setConditionEncounter(null);
+    } catch (err) {
+      console.error('Failed to save condition:', err);
+      toast.showError('Failed to save condition.');
+    } finally {
+      setConditionSubmitting(false);
+    }
+  };
+
   const EncounterCard = ({ encounter }: { encounter: EncounterWithPatient }) => (
     <Card className="hover:shadow-md transition-shadow">
       <CardContent className="p-4">
@@ -283,8 +470,19 @@ export default function EncounterBoard() {
           )}
           
           {/* Actions */}
-          <div className="flex space-x-2 pt-2">
+          <div className="flex flex-wrap gap-2 pt-2">
             {getStatusActions(encounter)}
+            <EncounterPrintButton encounter={encounter} />
+            {hasPermission(Permission.MANAGE_CONDITIONS) && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleOpenConditionDialog(encounter)}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Add Condition
+              </Button>
+            )}
           </div>
         </div>
       </CardContent>
@@ -486,6 +684,169 @@ export default function EncounterBoard() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Add Condition Dialog (ICD-10 validated) */}
+      <Dialog open={conditionDialogOpen} onOpenChange={setConditionDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Condition / Diagnosis</DialogTitle>
+            <DialogDescription>
+              {conditionEncounter
+                ? `Recording a condition for encounter ${conditionEncounter.encounter_code} — patient ${conditionEncounter.patient_name}.`
+                : 'Recording a new condition.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="cond-name">Condition Name <span className="text-red-600">*</span></Label>
+              <Input
+                id="cond-name"
+                value={conditionForm.condition_name}
+                onChange={(e) => setConditionForm((p) => ({ ...p, condition_name: e.target.value }))}
+                placeholder="e.g. Essential Hypertension"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="cond-code">ICD-10 Code</Label>
+                <div className="relative">
+                  <Input
+                    id="cond-code"
+                    value={conditionForm.code}
+                    onChange={(e) => {
+                      setConditionForm((p) => ({ ...p, code: e.target.value }));
+                      if (icd10Validation) setIcd10Validation(null);
+                    }}
+                    onBlur={(e) => handleIcd10Blur(e.target.value)}
+                    placeholder="e.g. I10 or E11.9"
+                    className={icd10Validation ? (icd10Validation.valid ? 'border-emerald-500 pr-9' : 'border-red-500 pr-9') : 'pr-9'}
+                    aria-invalid={icd10Validation ? !icd10Validation.valid : undefined}
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                    {icd10Validation?.valid ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-label="Valid ICD-10 code" />
+                    ) : icd10Validation ? (
+                      <XCircle className="h-4 w-4 text-red-600" aria-label="Invalid ICD-10 code" />
+                    ) : null}
+                  </span>
+                </div>
+                {icd10Validation?.valid && icd10Validation.description && (
+                  <p className="text-xs text-emerald-700">{icd10Validation.description}</p>
+                )}
+                {icd10Validation?.valid && icd10Validation.formatted && (
+                  <p className="text-xs text-muted-foreground">Formatted: {icd10Validation.formatted}</p>
+                )}
+                {icd10Validation && !icd10Validation.valid && (
+                  <p className="text-xs text-red-600">
+                    Invalid ICD-10 format. Expected pattern: letter + 2 digits + optional dot + 1-4 alphanumeric (e.g. I10, E11.9).
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="cond-category">Category</Label>
+                <select
+                  id="cond-category"
+                  value={conditionForm.category}
+                  onChange={(e) => setConditionForm((p) => ({ ...p, category: e.target.value }))}
+                  className="w-full h-10 px-3 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                >
+                  <option value="diagnosis">Diagnosis</option>
+                  <option value="problem_list">Problem List</option>
+                  <option value="symptom">Symptom</option>
+                  <option value="complaint">Complaint</option>
+                  <option value="finding">Finding</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="cond-clinical">Clinical Status</Label>
+                <select
+                  id="cond-clinical"
+                  value={conditionForm.clinical_status}
+                  onChange={(e) => setConditionForm((p) => ({ ...p, clinical_status: e.target.value }))}
+                  className="w-full h-10 px-3 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="remission">Remission</option>
+                  <option value="relapse">Relapse</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="cond-verification">Verification</Label>
+                <select
+                  id="cond-verification"
+                  value={conditionForm.verification_status}
+                  onChange={(e) => setConditionForm((p) => ({ ...p, verification_status: e.target.value }))}
+                  className="w-full h-10 px-3 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                >
+                  <option value="provisional">Provisional</option>
+                  <option value="differential">Differential</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="refuted">Refuted</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="cond-severity">Severity</Label>
+                <select
+                  id="cond-severity"
+                  value={conditionForm.severity}
+                  onChange={(e) => setConditionForm((p) => ({ ...p, severity: e.target.value }))}
+                  className="w-full h-10 px-3 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                >
+                  <option value="">—</option>
+                  <option value="mild">Mild</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="severe">Severe</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="cond-notes">Notes</Label>
+              <textarea
+                id="cond-notes"
+                value={conditionForm.notes}
+                onChange={(e) => setConditionForm((p) => ({ ...p, notes: e.target.value }))}
+                placeholder="Additional clinical notes..."
+                rows={3}
+                className="w-full px-3 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConditionDialogOpen(false);
+                setConditionEncounter(null);
+              }}
+              disabled={conditionSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleConditionSubmit} disabled={conditionSubmitting}>
+              {conditionSubmitting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+              )}
+              Save Condition
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

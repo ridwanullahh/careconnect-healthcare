@@ -342,6 +342,55 @@ export const ALL: APIRoute = async ({ request }) => {
       }
     }
 
+    // --- MFA / TOTP ---
+    if (segments[0] === 'mfa') {
+      const mfa = await import('../../services/mfa.ts');
+      if (segments[1] === 'status' && method === 'GET') {
+        if (!session) return error('Unauthorized', 401);
+        const enabled = await mfa.isMFAEnabled(db, session.userId);
+        return json({ data: { enabled } });
+      }
+      if (segments[1] === 'setup' && method === 'POST') {
+        if (!session) return error('Unauthorized', 401);
+        const user = (await db.findById('users', session.userId)) as any;
+        if (!user) return error('User not found', 404);
+        const { secret, uri } = await mfa.enableMFA(db, session.userId, user.email || session.userId);
+        return json({ data: { secret, uri } });
+      }
+      if (segments[1] === 'confirm' && method === 'POST') {
+        if (!session) return error('Unauthorized', 401);
+        const body = await request.json();
+        if (!body.token) return error('token required', 422);
+        const ok = await mfa.confirmMFA(db, session.userId, body.token);
+        if (!ok) return error('Invalid TOTP code. Please try again.', 400);
+        return json({ data: { enabled: true } });
+      }
+      if (segments[1] === 'disable' && method === 'POST') {
+        if (!session) return error('Unauthorized', 401);
+        const body = await request.json();
+        if (!body.token) return error('token required', 422);
+        const ok = await mfa.disableMFA(db, session.userId, body.token);
+        if (!ok) return error('Invalid TOTP code.', 400);
+        return json({ data: { enabled: false } });
+      }
+      if (segments[1] === 'verify' && method === 'POST') {
+        // Verify a TOTP during login step 2. Body: { userId, token }
+        const body = await request.json();
+        if (!body.userId || !body.token) return error('userId and token required', 422);
+        const ok = await mfa.verifyUserTOTP(db, body.userId, body.token);
+        if (!ok) return error('Invalid TOTP code.', 401);
+        const user = (await db.findById('users', body.userId)) as any;
+        const profiles = await db.find('profiles', { user_id: body.userId });
+        const token = createToken({
+          userId: user.id,
+          email: user.email,
+          roles: [user.user_type],
+          exp: Date.now() + SESSION_EXPIRY,
+        });
+        return json({ user: sanitizeRecord(user), profile: profiles[0] || null, token });
+      }
+    }
+
     // --- PROTECTED / PUBLIC DATA ROUTES ---
     if (segments[0] === 'data') {
       const collection = segments[1];
@@ -602,12 +651,71 @@ export const ALL: APIRoute = async ({ request }) => {
     }
 
     // --- CRON (scheduled jobs, protected by SEED_KEY) ---
+    // Consolidated entry point for all scheduled work:
+    //   1. Booking reminders (24h before appointment)
+    //   2. Re-verification reminders (30/7/1 day marks)
+    //   3. Newsletter processing (count of due newsletter emails)
+    //   4. Send all due scheduled_emails (the original cron behavior)
+    // Returns a summary: { emails: {sent,failed}, reminders: {booking,verification,newsletter} }
     if (segments[0] === 'cron' && method === 'POST') {
       const provided = request.headers.get('x-seed-key') || url.searchParams.get('key');
       if (provided !== SEED_KEY) return error('Unauthorized', 401);
+
       const emailSvc = await import('../../services/email.ts');
-      const emailResult = await emailSvc.processDueEmails(db);
-      return json({ data: { emails: emailResult } });
+      const cronJobs = await import('../../services/cron-jobs.ts');
+
+      const errors: string[] = [];
+
+      // 1. Booking reminders — creates scheduled_emails + marks reminder_24h_sent.
+      let bookingScheduled = 0;
+      try {
+        const r = await cronJobs.processBookingReminders(db);
+        bookingScheduled = r.scheduled;
+        errors.push(...r.errors);
+      } catch (err: any) {
+        errors.push(`booking_reminders: ${err.message}`);
+      }
+
+      // 2. Re-verification reminders — creates scheduled_emails at 30/7/1 day marks.
+      let verificationScheduled = 0;
+      try {
+        const r = await cronJobs.processVerificationReminders(db);
+        verificationScheduled = r.scheduled;
+        errors.push(...r.errors);
+      } catch (err: any) {
+        errors.push(`verification_reminders: ${err.message}`);
+      }
+
+      // 3. Newsletter processing — count due newsletter emails (no-op beyond counting).
+      let newsletterDue = 0;
+      try {
+        const r = await cronJobs.processNewsletterReminders(db);
+        newsletterDue = r.scheduled;
+        errors.push(...r.errors);
+      } catch (err: any) {
+        errors.push(`newsletter: ${err.message}`);
+      }
+
+      // 4. Send all due scheduled_emails (including those created above).
+      let emailResult = { sent: 0, failed: 0 };
+      try {
+        emailResult = await emailSvc.processDueEmails(db);
+      } catch (err: any) {
+        errors.push(`process_due_emails: ${err.message}`);
+      }
+
+      return json({
+        data: {
+          emails: emailResult,
+          reminders: {
+            booking: bookingScheduled,
+            verification: verificationScheduled,
+            newsletter: newsletterDue,
+          },
+          errors,
+          ran_at: new Date().toISOString(),
+        },
+      });
     }
 
     // --- SEED ENDPOINT (protected by SEED_KEY) ---

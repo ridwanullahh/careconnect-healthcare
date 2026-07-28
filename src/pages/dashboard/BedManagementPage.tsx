@@ -1,13 +1,18 @@
 // Bed Management Page - HMS Bed and Ward Operations
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useToastService } from '../../lib/toast-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth, Permission } from '@/lib/auth';
 import { BedService } from '@/lib/bed-management';
+import { getEntity } from '@/lib/entities';
+import { githubDB as dbHelpers, collections } from '@/lib/database';
+import { generateBedOccupancyReport } from '@/lib/hms-print-templates';
+import PrintButton from '@/components/hms/PrintButton';
 import { 
   Bed, 
   Plus, 
@@ -18,23 +23,68 @@ import {
   XCircle,
   ArrowRightLeft,
   Settings,
-  BarChart3
+  BarChart3,
+  Printer,
+  Loader2,
+  Calendar
 } from 'lucide-react';
 
 export default function BedManagementPage() {
   const { user, hasPermission } = useAuth();
+  const toast = useToastService();
   const [beds, setBeds] = useState([]);
   const [occupancyStats, setOccupancyStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedWard, setSelectedWard] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [entityInfo, setEntityInfo] = useState<any>(null);
+  // Reports state
+  const [reportBeds, setReportBeds] = useState<any[]>([]);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string>('');
+  const [reportDateFrom, setReportDateFrom] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [reportDateTo, setReportDateTo] = useState<string>(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     if (user?.entity_id) {
       loadBedData();
+      loadEntityInfo();
     }
   }, [user?.entity_id, selectedWard]);
+
+  // Load bed data when the Reports tab is opened.
+  useEffect(() => {
+    if (activeTab === 'reports' && user?.entity_id) {
+      loadReportBeds();
+    }
+  }, [activeTab, user?.entity_id]);
+
+  const loadEntityInfo = async () => {
+    if (!user?.entity_id) return;
+    try {
+      const ent = await getEntity(user.entity_id);
+      setEntityInfo(ent);
+    } catch (e) {
+      setEntityInfo(null);
+    }
+  };
+
+  const loadReportBeds = async () => {
+    if (!user?.entity_id) return;
+    setReportLoading(true);
+    setReportError('');
+    try {
+      const allBeds = await dbHelpers.find(collections.bed_management, { entity_id: user.entity_id });
+      setReportBeds(Array.isArray(allBeds) ? allBeds : []);
+    } catch (err) {
+      console.error('Failed to load bed report data:', err);
+      setReportError('Failed to load bed occupancy data. Please try again.');
+      setReportBeds([]);
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
   const loadBedData = async () => {
     if (!user?.entity_id) return;
@@ -61,7 +111,7 @@ export default function BedManagementPage() {
   const getBedsByEntity = async (entityId: string) => {
     // Fallback method to get all beds for entity
     try {
-      return await githubDB.find('bed_management', { entity_id: entityId });
+      return await dbHelpers.find(collections.bed_management, { entity_id: entityId });
     } catch (error) {
       return [];
     }
@@ -128,8 +178,7 @@ export default function BedManagementPage() {
   };
 
   const getUniqueWards = () => {
-  const toast = useToastService();
-    const wards = [...new Set(beds.map((bed: any) => bed.ward))];
+    const wards = [...new Set(beds.map((bed: any) => bed.ward).filter(Boolean))];
     return wards.sort();
   };
 
@@ -452,28 +501,331 @@ export default function BedManagementPage() {
 
         {/* Reports */}
         <TabsContent value="reports" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <BarChart3 className="h-5 w-5" />
-                <span>Bed Management Reports</span>
-              </CardTitle>
-              <CardDescription>
-                Occupancy trends and operational metrics
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12">
-                <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-medium mb-2">Reports Coming Soon</h3>
-                <p className="text-muted-foreground">
-                  Bed occupancy analytics and trending reports will be available here
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <BedOccupancyReport
+            beds={reportBeds}
+            loading={reportLoading}
+            error={reportError}
+            entityInfo={entityInfo}
+            dateFrom={reportDateFrom}
+            dateTo={reportDateTo}
+            onDateFromChange={setReportDateFrom}
+            onDateToChange={setReportDateTo}
+            onRefresh={loadReportBeds}
+            hasManagePermission={!!hasPermission(Permission.MANAGE_BEDS)}
+          />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Bed Occupancy Report (Reports tab)
+// ---------------------------------------------------------------------------
+
+interface BedOccupancyReportProps {
+  beds: any[];
+  loading: boolean;
+  error: string;
+  entityInfo: any;
+  dateFrom: string;
+  dateTo: string;
+  onDateFromChange: (v: string) => void;
+  onDateToChange: (v: string) => void;
+  onRefresh: () => void;
+  hasManagePermission: boolean;
+}
+
+const BedOccupancyReport: React.FC<BedOccupancyReportProps> = ({
+  beds,
+  loading,
+  error,
+  entityInfo,
+  dateFrom,
+  dateTo,
+  onDateFromChange,
+  onDateToChange,
+  onRefresh,
+  hasManagePermission
+}) => {
+  // Compute aggregate stats and breakdowns from the beds array.
+  const stats = useMemo(() => {
+    const total = beds.length;
+    const occupied = beds.filter((b) => b.status === 'occupied').length;
+    const available = beds.filter((b) => b.status === 'available').length;
+    const cleaning = beds.filter((b) => b.status === 'cleaning').length;
+    const maintenance = beds.filter(
+      (b) => b.status === 'maintenance' || b.status === 'out_of_service'
+    ).length;
+    const reserved = beds.filter((b) => b.status === 'reserved').length;
+    const occupancyRate = total > 0 ? Math.round((occupied / total) * 100) : 0;
+
+    // Breakdown by ward
+    const wardMap = new Map<string, { total: number; occupied: number; available: number; maintenance: number }>();
+    for (const b of beds) {
+      const ward = b.ward || 'Unassigned';
+      const cur = wardMap.get(ward) || { total: 0, occupied: 0, available: 0, maintenance: 0 };
+      cur.total += 1;
+      if (b.status === 'occupied') cur.occupied += 1;
+      else if (b.status === 'available') cur.available += 1;
+      else if (b.status === 'maintenance' || b.status === 'out_of_service') cur.maintenance += 1;
+      wardMap.set(ward, cur);
+    }
+    const byWard = Array.from(wardMap.entries())
+      .map(([ward, s]) => ({
+        ward,
+        total: s.total,
+        occupied: s.occupied,
+        available: s.available,
+        maintenance: s.maintenance,
+        occupancyRate: s.total > 0 ? Math.round((s.occupied / s.total) * 100) : 0
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    // Breakdown by bed type
+    const typeMap = new Map<string, { total: number; occupied: number; available: number }>();
+    for (const b of beds) {
+      const t = b.bed_type || 'regular';
+      const cur = typeMap.get(t) || { total: 0, occupied: 0, available: 0 };
+      cur.total += 1;
+      if (b.status === 'occupied') cur.occupied += 1;
+      else if (b.status === 'available') cur.available += 1;
+      typeMap.set(t, cur);
+    }
+    const byBedType = Array.from(typeMap.entries())
+      .map(([bedType, s]) => ({
+        bedType,
+        total: s.total,
+        occupied: s.occupied,
+        available: s.available
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    return { total, occupied, available, cleaning, maintenance, reserved, occupancyRate, byWard, byBedType };
+  }, [beds]);
+
+  const facilityName = entityInfo?.name || 'CareConnect Health Facility';
+
+  // Build the printable HTML for the report (memoized so PrintButton doesn't re-render unnecessarily).
+  const reportHtml = useMemo(() => {
+    if (stats.total === 0) return '';
+    return generateBedOccupancyReport(
+      {
+        facilityName,
+        generatedAt: new Date().toISOString(),
+        dateRangeStart: dateFrom,
+        dateRangeEnd: dateTo,
+        totalBeds: stats.total,
+        occupied: stats.occupied,
+        available: stats.available,
+        maintenance: stats.maintenance,
+        cleaning: stats.cleaning,
+        reserved: stats.reserved,
+        occupancyRate: stats.occupancyRate,
+        byWard: stats.byWard,
+        byBedType: stats.byBedType
+      },
+      {
+        name: facilityName,
+        type: entityInfo?.entity_type ? String(entityInfo.entity_type).replace(/_/g, ' ') : undefined,
+        address: entityInfo?.address,
+        phone: entityInfo?.phone,
+        email: entityInfo?.email,
+        website: entityInfo?.website
+      }
+    );
+  }, [stats, facilityName, entityInfo, dateFrom, dateTo]);
+
+  const occupancyColor = (rate: number) => {
+    if (rate >= 90) return 'text-red-600';
+    if (rate >= 70) return 'text-amber-600';
+    return 'text-emerald-600';
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between gap-3 flex-wrap">
+            <span className="flex items-center space-x-2">
+              <BarChart3 className="h-5 w-5" />
+              <span>Bed Occupancy Report</span>
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <Label htmlFor="report-from" className="sr-only">From date</Label>
+                <Input
+                  id="report-from"
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => onDateFromChange(e.target.value)}
+                  className="h-8 w-auto text-xs"
+                />
+                <span className="text-xs text-muted-foreground px-1">to</span>
+                <Label htmlFor="report-to" className="sr-only">To date</Label>
+                <Input
+                  id="report-to"
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => onDateToChange(e.target.value)}
+                  className="h-8 w-auto text-xs"
+                />
+              </div>
+              <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
+                {loading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <BarChart3 className="h-3 w-3 mr-1" />}
+                Refresh
+              </Button>
+              {reportHtml && (
+                <PrintButton
+                  html={reportHtml}
+                  filename={`bed-occupancy-report-${dateFrom}-to-${dateTo}.html`}
+                  label="Print Report"
+                />
+              )}
+            </div>
+          </CardTitle>
+          <CardDescription>
+            Snapshot of bed status across all wards. Reporting period: {dateFrom} to {dateTo}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {error ? (
+            <div className="rounded-md border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-800">{error}</p>
+                <Button variant="outline" size="sm" className="mt-2" onClick={onRefresh} disabled={loading}>
+                  Retry
+                </Button>
+              </div>
+            </div>
+          ) : loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-sm text-muted-foreground">Loading bed data...</span>
+            </div>
+          ) : stats.total === 0 ? (
+            <div className="text-center py-12">
+              <Bed className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium mb-2">No beds recorded</h3>
+              <p className="text-muted-foreground">
+                Add beds to the system to see occupancy analytics here.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Summary Stat Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                <div className="rounded-md border border-gray-200 bg-white p-3 text-center">
+                  <div className="text-2xl font-bold text-slate-900">{stats.total}</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mt-1">Total Beds</div>
+                </div>
+                <div className="rounded-md border border-gray-200 bg-white p-3 text-center">
+                  <div className="text-2xl font-bold text-amber-700">{stats.occupied}</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mt-1">Occupied</div>
+                </div>
+                <div className="rounded-md border border-gray-200 bg-white p-3 text-center">
+                  <div className="text-2xl font-bold text-emerald-700">{stats.available}</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mt-1">Available</div>
+                </div>
+                <div className="rounded-md border border-gray-200 bg-white p-3 text-center">
+                  <div className="text-2xl font-bold text-yellow-700">{stats.cleaning}</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mt-1">Cleaning</div>
+                </div>
+                <div className="rounded-md border border-gray-200 bg-white p-3 text-center">
+                  <div className="text-2xl font-bold text-red-700">{stats.maintenance}</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mt-1">Maintenance</div>
+                </div>
+                <div className="rounded-md border border-gray-200 bg-white p-3 text-center">
+                  <div className={`text-2xl font-bold ${occupancyColor(stats.occupancyRate)}`}>{stats.occupancyRate}%</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mt-1">Occupancy</div>
+                </div>
+              </div>
+
+              {/* Occupancy bar */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-sm font-medium">Overall Occupancy</span>
+                  <span className={`text-sm font-bold ${occupancyColor(stats.occupancyRate)}`}>{stats.occupancyRate}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden" role="progressbar" aria-valuenow={stats.occupancyRate} aria-valuemin={0} aria-valuemax={100}>
+                  <div
+                    className={`h-3 rounded-full transition-all ${
+                      stats.occupancyRate >= 90 ? 'bg-red-500' : stats.occupancyRate >= 70 ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${stats.occupancyRate}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Breakdown by Ward */}
+              <div>
+                <h4 className="text-sm font-semibold mb-2 text-slate-800">Breakdown by Ward</h4>
+                <div className="overflow-x-auto rounded-md border border-gray-200">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-xs uppercase tracking-wide text-slate-600">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-semibold">Ward</th>
+                        <th className="text-center px-3 py-2 font-semibold">Total</th>
+                        <th className="text-center px-3 py-2 font-semibold">Occupied</th>
+                        <th className="text-center px-3 py-2 font-semibold">Available</th>
+                        <th className="text-center px-3 py-2 font-semibold">Maintenance</th>
+                        <th className="text-center px-3 py-2 font-semibold">Occupancy</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {stats.byWard.map((w) => (
+                        <tr key={w.ward} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-medium text-slate-800">{w.ward}</td>
+                          <td className="px-3 py-2 text-center">{w.total}</td>
+                          <td className="px-3 py-2 text-center text-amber-700">{w.occupied}</td>
+                          <td className="px-3 py-2 text-center text-emerald-700">{w.available}</td>
+                          <td className="px-3 py-2 text-center text-red-700">{w.maintenance}</td>
+                          <td className={`px-3 py-2 text-center font-bold ${occupancyColor(w.occupancyRate)}`}>{w.occupancyRate}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Breakdown by Bed Type */}
+              <div>
+                <h4 className="text-sm font-semibold mb-2 text-slate-800">Breakdown by Bed Type</h4>
+                <div className="overflow-x-auto rounded-md border border-gray-200">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-xs uppercase tracking-wide text-slate-600">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-semibold">Bed Type</th>
+                        <th className="text-center px-3 py-2 font-semibold">Total</th>
+                        <th className="text-center px-3 py-2 font-semibold">Occupied</th>
+                        <th className="text-center px-3 py-2 font-semibold">Available</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {stats.byBedType.map((t) => (
+                        <tr key={t.bedType} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-medium text-slate-800 capitalize">{t.bedType.replace(/_/g, ' ')}</td>
+                          <td className="px-3 py-2 text-center">{t.total}</td>
+                          <td className="px-3 py-2 text-center text-amber-700">{t.occupied}</td>
+                          <td className="px-3 py-2 text-center text-emerald-700">{t.available}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {!hasManagePermission && (
+                <p className="text-xs text-muted-foreground italic">
+                  You have view-only access to bed reports. Contact an administrator to manage beds.
+                </p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};

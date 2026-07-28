@@ -21,7 +21,8 @@
     "preview": "vite preview",
     "db:push": "node scripts/db-push.mjs",
     "db:seed": "node scripts/seed.mjs",
-    "db:backup": "cp data/careconnect.db data/careconnect.backup.$(date +%Y%m%d%H%M%S).db"
+    "db:backup": "cp data/careconnect.db data/careconnect.backup.$(date +%Y%m%d%H%M%S).db",
+    "cron:run": "curl -X POST -H \"x-seed-key: ${SEED_KEY:-cc_seed_dev_key_change_in_production}\" ${CRON_URL:-http://localhost:4321/api/cron}"
   },
   "dependencies": {
     "@esbuild/linux-arm64": "^0.21.5",

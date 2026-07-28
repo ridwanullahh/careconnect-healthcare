@@ -10,6 +10,15 @@ import {
 } from './email-events';
 import { apiClient } from './api-client';
 
+// --- Consent versioning config ---
+// The current platform consent version. Can be overridden at runtime via the
+// `current_consent_version` key in the `system_settings` collection. Fallback
+// to the VITE_CURRENT_CONSENT_VERSION env var, then to '1.0.0'.
+const ENV_CONSENT_VERSION =
+  (typeof import.meta !== 'undefined' &&
+    (import.meta as any).env?.VITE_CURRENT_CONSENT_VERSION) ||
+  '1.0.0';
+
 // When the SPA routes through the backend (VITE_DB_MODE = api|sqlite|lightbase),
 // authentication is handled server-side via PBKDF2-hashed passwords and signed
 // session tokens. In 'github' mode, auth stays client-side (SHA-256) for the
@@ -139,12 +148,19 @@ interface AuthState {
   profile: UserProfile | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  // Consent versioning state
+  requiresConsent: boolean;
+  currentConsentVersion: string | null;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
   register: (userData: any) => Promise<boolean>;
   logout: () => void;
   updateProfile: (updates: Partial<UserProfile>) => Promise<boolean>;
   hasPermission: (permission: Permission) => boolean;
   refreshUser: () => Promise<void>;
+  // Consent versioning actions
+  fetchCurrentConsentVersion: () => Promise<void>;
+  checkConsent: (userId?: string) => Promise<void>;
+  acceptConsent: (version: string) => Promise<boolean>;
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
@@ -152,6 +168,8 @@ export const useAuth = create<AuthState>((set, get) => ({
   profile: null,
   isLoading: false, // Start with false, will be set to true during operations
   isAuthenticated: false,
+  requiresConsent: false,
+  currentConsentVersion: null,
 
   login: async (email: string, password: string, rememberMe: boolean = false) => {
     set({ isLoading: true });
@@ -222,6 +240,18 @@ export const useAuth = create<AuthState>((set, get) => ({
         });
       } catch (emailError) {
         console.warn('Failed to send login notification:', emailError);
+      }
+
+      // Consent versioning: check whether the user has accepted the current
+      // platform consent version. Sets `requiresConsent` accordingly. Runs
+      // after `set()` so the user is already authenticated; the modal is
+      // rendered by App.tsx as a gate on top of the main app. Errors here
+      // must NOT block login — fall back to requiring consent.
+      try {
+        await get().checkConsent(cleanUser.id);
+      } catch (consentErr) {
+        console.warn('Login: consent check failed, defaulting to required:', consentErr);
+        set({ requiresConsent: true });
       }
 
       return true;
@@ -361,6 +391,7 @@ export const useAuth = create<AuthState>((set, get) => ({
       profile: null,
       isAuthenticated: false,
       isLoading: false,
+      requiresConsent: false,
     });
   },
 
@@ -416,6 +447,12 @@ export const useAuth = create<AuthState>((set, get) => ({
             isAuthenticated: true,
             isLoading: false,
           });
+          // Consent versioning: re-check after session restore.
+          try {
+            await get().checkConsent(cleanUser.id);
+          } catch (consentErr) {
+            console.warn('refreshUser: consent check failed:', consentErr);
+          }
         } catch {
           // Token invalid or expired.
           clearSession();
@@ -461,6 +498,12 @@ export const useAuth = create<AuthState>((set, get) => ({
           isAuthenticated: true,
           isLoading: false,
         });
+        // Consent versioning: re-check after session restore.
+        try {
+          await get().checkConsent(cleanUser.id);
+        } catch (consentErr) {
+          console.warn('refreshUser: consent check failed:', consentErr);
+        }
       } else {
         clearSession();
       }
@@ -468,7 +511,86 @@ export const useAuth = create<AuthState>((set, get) => ({
       console.error('RefreshUser: Error during token refresh:', error);
       clearSession();
     }
-  }
+  },
+
+  // --- Consent versioning ---
+
+  // Fetch the current platform consent version from system_settings.
+  // Falls back to the VITE_CURRENT_CONSENT_VERSION env var, then to '1.0.0'.
+  // Public collection (no auth required) — safe to call before login.
+  fetchCurrentConsentVersion: async () => {
+    try {
+      const rows = await dbHelpers.find(collections.system_settings, {
+        key: 'current_consent_version',
+      });
+      const row = rows[0] as any;
+      const version = (row?.value || row?.val || '').toString().trim();
+      set({ currentConsentVersion: version || ENV_CONSENT_VERSION });
+    } catch (err) {
+      console.warn('fetchCurrentConsentVersion: falling back to env var:', err);
+      set({ currentConsentVersion: ENV_CONSENT_VERSION });
+    }
+  },
+
+  // Check whether the given user (or the currently-authenticated user) has
+  // accepted the current consent version. Sets `requiresConsent` accordingly.
+  checkConsent: async (userId?: string) => {
+    const uid = userId || get().user?.id;
+    if (!uid) {
+      set({ requiresConsent: false });
+      return;
+    }
+    // Make sure we have the latest consent version loaded.
+    let version = get().currentConsentVersion;
+    if (!version) {
+      await get().fetchCurrentConsentVersion();
+      version = get().currentConsentVersion;
+    }
+    if (!version) {
+      // No version configured → no enforcement.
+      set({ requiresConsent: false });
+      return;
+    }
+    try {
+      const records = (await dbHelpers.find(collections.consent_records, {
+        user_id: uid,
+      })) as Array<{ user_id: string; version?: string; accepted_at?: string }>;
+      // Latest record by accepted_at (or created_at fallback).
+      const latest = records
+        .filter((r) => r && r.user_id === uid)
+        .sort((a, b) => {
+          const at = (x: any) => new Date(x.accepted_at || x.created_at || 0).getTime();
+          return at(b) - at(a);
+        })[0];
+      const needsConsent = !latest || latest.version !== version;
+      set({ requiresConsent: needsConsent });
+    } catch (err) {
+      console.warn('checkConsent: lookup failed, defaulting to required:', err);
+      set({ requiresConsent: true });
+    }
+  },
+
+  // Record the user's acceptance of the given consent version. Inserts a
+  // consent_records row and clears `requiresConsent`. Returns false on error.
+  acceptConsent: async (version: string) => {
+    const { user } = get();
+    if (!user) return false;
+    try {
+      await dbHelpers.insert(collections.consent_records, {
+        user_id: user.id,
+        version,
+        accepted_at: new Date().toISOString(),
+        ip_address: 'client',
+        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+        created_at: new Date().toISOString(),
+      });
+      set({ requiresConsent: false });
+      return true;
+    } catch (err) {
+      console.error('acceptConsent: failed to record acceptance:', err);
+      return false;
+    }
+  },
 }));
 
 // Helper Functions

@@ -562,20 +562,22 @@ export class LMSService {
     
     const certificateNumber = `CC-${course.id.slice(-6)}-${userId.slice(-6)}-${Date.now()}`;
     const verificationCode = this.generateVerificationCode();
-    
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://careconnect.app';
+    const certificateUrl = `${origin}/certificate/${certificateNumber}`;
+
     const certificate = await githubDB.insert(collections.certificates, {
       course_id: courseId,
       user_id: userId,
       certificate_number: certificateNumber,
       issued_date: new Date().toISOString(),
       expiry_date: course.ceu_credits ? this.calculateExpiryDate() : undefined,
-      recipient_name: `${userProfile.first_name} ${userProfile.last_name}`,
+      recipient_name: userProfile ? `${userProfile.first_name} ${userProfile.last_name}`.trim() : 'Student',
       course_title: course.title,
       instructor_name: 'Healthcare Professional', // Get from instructor profile
       organization_name: 'CareConnect Healthcare Platform',
       verification_code: verificationCode,
       is_verified: true,
-      certificate_url: `https://certificates.careconnect.com/${certificateNumber}.pdf`
+      certificate_url: certificateUrl
     });
     
     // Send certificate notification
