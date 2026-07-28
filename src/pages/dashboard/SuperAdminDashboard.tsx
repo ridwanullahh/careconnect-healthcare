@@ -471,6 +471,210 @@ const EntitiesSection = () => {
   );
 };
 
+// Verifications section — shows pending entity verifications with approve/reject actions.
+const VerificationsSection = () => {
+  const [pending, setPending] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actioning, setActioning] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await dbHelpers.find(collections.entities, { verification_status: 'pending' });
+        if (!cancelled) setPending(items);
+      } catch (e: any) {
+        if (!cancelled) setError(e.message || 'Failed to load verifications.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleAction = async (entityId: string, status: 'verified' | 'rejected') => {
+    setActioning(entityId);
+    try {
+      await apiClient.verifyEntity(entityId, status, status === 'verified' ? 'Approved by admin' : 'Rejected by admin');
+      setPending(prev => prev.filter(e => e.id !== entityId));
+    } catch (e: any) {
+      setError(e.message || 'Action failed.');
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  if (loading) return <div className="p-8"><LoadingSpinner size="lg" /></div>;
+  return (
+    <div className="p-8">
+      <h2 className="text-2xl font-bold text-dark mb-6">Entity Verifications</h2>
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{error}</div>}
+      {pending.length === 0 ? (
+        <p className="text-gray-500">No pending verifications.</p>
+      ) : (
+        <div className="space-y-4">
+          {pending.map(e => (
+            <div key={e.id} className="bg-white rounded-lg shadow-sm p-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-dark">{e.name}</h3>
+                <p className="text-sm text-gray-500">{e.entity_type} - {e.email} - {e.address?.city || 'No city'}</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => handleAction(e.id, 'verified')} disabled={actioning === e.id} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-50">Approve</button>
+                <button onClick={() => handleAction(e.id, 'rejected')} disabled={actioning === e.id} className="px-4 py-2 bg-rose-600 text-white rounded-lg text-sm hover:bg-rose-700 disabled:opacity-50">Reject</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Content moderation section — shows flagged/reported forum posts for review.
+const ContentModerationSection = () => {
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const flagged = await dbHelpers.find(collections.forum_questions, { status: 'pending_approval' });
+        const reported = await dbHelpers.find(collections.forum_interactions, { interaction_type: 'report' }).catch(() => []);
+        if (!cancelled) setReports([...flagged, ...reported.map((r: any) => ({ ...r, _type: 'report' }))]);
+      } catch (e: any) {
+        if (!cancelled) setError(e.message || 'Failed to load content queue.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) return <div className="p-8"><LoadingSpinner size="lg" /></div>;
+  return (
+    <div className="p-8">
+      <h2 className="text-2xl font-bold text-dark mb-6">Content Moderation</h2>
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{error}</div>}
+      {reports.length === 0 ? (
+        <p className="text-gray-500">No content awaiting moderation.</p>
+      ) : (
+        <div className="space-y-4">
+          {reports.map((r: any) => (
+            <div key={r.id} className="bg-white rounded-lg shadow-sm p-4">
+              <h3 className="font-semibold text-dark">{r.title || r.target_type || 'Reported content'}</h3>
+              <p className="text-sm text-gray-600 mt-1">{r.content?.substring(0, 200) || r.reason || 'No content preview'}</p>
+              <div className="flex gap-2 mt-3">
+                <button onClick={async () => { await dbHelpers.update(collections.forum_questions, r.id, { status: 'approved' }); setReports(prev => prev.filter(x => x.id !== r.id)); }} className="px-3 py-1.5 bg-emerald-600 text-white rounded text-sm">Approve</button>
+                <button onClick={async () => { await dbHelpers.update(collections.forum_questions, r.id, { status: 'rejected' }); setReports(prev => prev.filter(x => x.id !== r.id)); }} className="px-3 py-1.5 bg-rose-600 text-white rounded text-sm">Reject</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Reports section — platform-wide analytics report.
+const ReportsSection = () => {
+  const [stats, setStats] = useState<Record<string, number> | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await apiClient.getStats().catch(async () => {
+          const cols = ['users', 'entities', 'patients', 'bookings', 'orders', 'causes', 'courses', 'health_tools', 'forum_questions', 'news_articles'];
+          const out: Record<string, number> = {};
+          for (const c of cols) out[c] = (await dbHelpers.get(c)).length;
+          return out;
+        });
+        if (!cancelled) setStats(s);
+      } catch {} finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) return <div className="p-8"><LoadingSpinner size="lg" /></div>;
+  return (
+    <div className="p-8">
+      <h2 className="text-2xl font-bold text-dark mb-6">Platform Reports</h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {stats && Object.entries(stats).map(([key, val]) => (
+          <div key={key} className="bg-white rounded-lg shadow-sm p-4">
+            <p className="text-sm text-gray-500 capitalize">{key.replace(/_/g, ' ')}</p>
+            <p className="text-2xl font-bold text-dark">{val}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Settings section — platform settings + feature flags.
+const SettingsSection = () => {
+  const [settings, setSettings] = useState<any[]>([]);
+  const [flags, setFlags] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [s, f] = await Promise.all([
+          dbHelpers.get(collections.system_settings).catch(() => []),
+          dbHelpers.get(collections.feature_flags).catch(() => []),
+        ]);
+        if (!cancelled) { setSettings(s); setFlags(f); }
+      } catch {} finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) return <div className="p-8"><LoadingSpinner size="lg" /></div>;
+  return (
+    <div className="p-8">
+      <h2 className="text-2xl font-bold text-dark mb-6">Platform Settings</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <h3 className="font-semibold text-dark mb-3">System Settings</h3>
+          <div className="bg-white rounded-lg shadow-sm divide-y">
+            {settings.length === 0 ? <p className="p-4 text-gray-500 text-sm">No settings configured.</p> : settings.map(s => (
+              <div key={s.id} className="p-3 flex justify-between text-sm">
+                <span className="text-gray-600">{s.key}</span>
+                <span className="font-medium text-dark">{String(s.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <h3 className="font-semibold text-dark mb-3">Feature Flags</h3>
+          <div className="bg-white rounded-lg shadow-sm divide-y">
+            {flags.length === 0 ? <p className="p-4 text-gray-500 text-sm">No feature flags.</p> : flags.map(f => (
+              <div key={f.id} className="p-3 flex justify-between items-center text-sm">
+                <div>
+                  <span className="font-medium text-dark">{f.key}</span>
+                  <p className="text-xs text-gray-500">{f.description}</p>
+                </div>
+                <span className={`px-2 py-0.5 rounded text-xs ${f.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{f.enabled ? 'Enabled' : 'Disabled'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SuperAdminDashboard = () => {
   const location = useLocation();
   const currentPath = location.pathname.split('/').pop() || 'overview';
@@ -519,12 +723,12 @@ const SuperAdminDashboard = () => {
             <Route path="overview" element={<OverviewSection />} />
             <Route path="users" element={<UsersSection />} />
             <Route path="entities" element={<EntitiesSection />} />
-            <Route path="verifications" element={<div>Verifications section coming soon...</div>} />
-            <Route path="content" element={<div>Content moderation section coming soon...</div>} />
+            <Route path="verifications" element={<VerificationsSection />} />
+            <Route path="content" element={<ContentModerationSection />} />
             <Route path="keys" element={<KeyManagementModule />} />
             <Route path="monitoring" element={<SystemMonitoringModule />} />
-            <Route path="reports" element={<div>Reports section coming soon...</div>} />
-            <Route path="settings" element={<div>Platform settings section coming soon...</div>} />
+            <Route path="reports" element={<ReportsSection />} />
+            <Route path="settings" element={<SettingsSection />} />
             <Route path="" element={<OverviewSection />} />
           </Routes>
         </div>
