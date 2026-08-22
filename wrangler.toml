@@ -1,0 +1,33 @@
+# Bismillah Ar-Rahman Ar-Raheem.
+# Cloudflare Pages configuration for CareConnect.
+# This file is auto-detected by Cloudflare Pages when the GitHub repo is connected.
+# It configures the build, environment variables, and cron triggers.
+
+name = "careconnect"
+compatibility_date = "2024-09-25"
+compatibility_flags = ["nodejs_compat"]
+
+# Build settings for Cloudflare Pages
+[build]
+  command = "bun run build"
+  output_dir = "dist"
+
+# Environment variables (secrets are set via the Cloudflare dashboard or CLI)
+# Non-secret values can be set here; secrets should use `wrangler secret put`.
+[vars]
+  STORAGE_PROVIDER = "lightbase"
+  LIGHTBASE_BASE_URL = "https://lightbase.pages.dev"
+  LIGHTBASE_PROJECT_ID = "careconnect-beta"
+  CORS_ORIGIN = "*"
+  VITE_DB_MODE = "api"
+  VITE_API_BASE_URL = "/api"
+
+# Cron triggers — these call /api/cron on a schedule.
+# Cloudflare Pages Functions don't support cron triggers directly; instead,
+# we document the cron schedule here and the frontend's consolidated-scheduler
+# calls /api/cron periodically for admin users.
+# For production, set up a Cloudflare Worker with a cron trigger that calls
+# the /api/cron endpoint (see cron-worker/README.md).
+
+# SPA routing: all non-file requests fall back to index.html
+# This is handled by the _redirects file in the public/ directory.

@@ -1,16 +1,15 @@
 // Bismillah Ar-Rahman Ar-Raheem.
-// Backend email service — sends transactional emails server-side.
-// Supports SMTP (via nodemailer if installed) or a console log fallback for dev.
-// The client never sees SMTP credentials.
+// Backend email service — sends transactional emails via Gmail REST API
+// using an OAuth2 refresh token (no nodemailer, works on Cloudflare Pages/Workers).
+// The client never sees credentials.
 import crypto from 'node:crypto';
 import type { StorageAdapter } from '@careconnect/db';
 
-const SMTP_HOST = process.env.SMTP_HOST || '';
-const SMTP_PORT = process.env.SMTP_PORT || '587';
-const SMTP_USER = process.env.SMTP_USER || '';
-const SMTP_PASS = process.env.SMTP_PASS || '';
-const SMTP_FROM = process.env.SMTP_FROM || 'CareConnect <no-reply@careconnect.health>';
-const EMAIL_ENABLED = process.env.EMAIL_ENABLED === 'true' || (!!SMTP_HOST && !!SMTP_USER);
+const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID || '';
+const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET || '';
+const GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN || '';
+const GMAIL_FROM_EMAIL = process.env.GMAIL_FROM_EMAIL || 'careconnect@careconnect.health';
+const EMAIL_ENABLED = !!(GMAIL_CLIENT_ID && GMAIL_CLIENT_SECRET && GMAIL_REFRESH_TOKEN);
 
 export interface EmailMessage {
   to: string;
@@ -32,32 +31,76 @@ export interface ScheduledEmailRecord {
   created_at: string;
 }
 
-/** Send an email immediately. Returns true on success. */
+// Cache the access token (expires in ~1h).
+let cachedAccessToken: string | null = null;
+let tokenExpiry = 0;
+
+/** Exchange the refresh token for a fresh access token via Google OAuth2. */
+async function getAccessToken(): Promise<string> {
+  const now = Date.now();
+  if (cachedAccessToken && now < tokenExpiry - 60000) {
+    return cachedAccessToken;
+  }
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: GMAIL_CLIENT_ID,
+      client_secret: GMAIL_CLIENT_SECRET,
+      refresh_token: GMAIL_REFRESH_TOKEN,
+      grant_type: 'refresh_token',
+    }),
+  });
+  const data = await res.json() as any;
+  if (!res.ok) {
+    throw new Error(`Gmail token refresh failed: ${data.error || data.error_description || res.status}`);
+  }
+  cachedAccessToken = data.access_token;
+  tokenExpiry = now + (data.expires_in || 3600) * 1000;
+  return cachedAccessToken!;
+}
+
+/** Encode a raw RFC 2822 email message to base64url for the Gmail API. */
+function encodeEmail(to: string, subject: string, html: string, text?: string): string {
+  const lines = [
+    `To: ${to}`,
+    `From: CareConnect <${GMAIL_FROM_EMAIL}>`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset=UTF-8',
+    '',
+    html,
+  ];
+  if (text) {
+    // Fallback: include plain text version in multipart (simplified — just use html).
+  }
+  const raw = lines.join('\r\n');
+  // base64url encode
+  return Buffer.from(raw, 'utf-8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** Send an email immediately via Gmail REST API. Returns true on success. */
 export async function sendEmail(msg: EmailMessage): Promise<boolean> {
   if (!EMAIL_ENABLED) {
     console.log('[email] (dev) would send:', msg.to, '|', msg.subject);
     return true;
   }
   try {
-    // Use nodemailer if available; otherwise log.
-    const { default: nodemailer } = await import('nodemailer').catch(() => ({ default: null as any }));
-    if (!nodemailer) {
-      console.log('[email] nodemailer not installed; logging instead:', msg.to, '|', msg.subject);
-      return true;
+    const accessToken = await getAccessToken();
+    const raw = encodeEmail(msg.to, msg.subject, msg.html, msg.text);
+    const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ raw }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error('[email] Gmail send failed:', err.error?.message || res.status);
+      return false;
     }
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: Number(SMTP_PORT),
-      secure: Number(SMTP_PORT) === 465,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-    });
-    await transporter.sendMail({
-      from: SMTP_FROM,
-      to: msg.to,
-      subject: msg.subject,
-      html: msg.html,
-      text: msg.text,
-    });
     return true;
   } catch (err: any) {
     console.error('[email] send failed:', err.message);
@@ -94,7 +137,6 @@ export async function processDueEmails(db: StorageAdapter): Promise<{ sent: numb
   let failed = 0;
   let offset = 0;
   const limit = 50;
-  // Fetch pending due emails in pages.
   for (;;) {
     const due = (await db.find('scheduled_emails', { status: 'pending' })) as ScheduledEmailRecord[];
     const toProcess = due.filter((e) => e.scheduled_for <= now).slice(offset, offset + limit);
@@ -115,7 +157,7 @@ export async function processDueEmails(db: StorageAdapter): Promise<{ sent: numb
   return { sent, failed };
 }
 
-/** Whether email sending is enabled (SMTP configured). */
+/** Whether email sending is enabled (Gmail credentials configured). */
 export function isEmailEnabled(): boolean {
   return EMAIL_ENABLED;
 }
