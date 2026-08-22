@@ -674,3 +674,37 @@ Stage Summary:
 - Schedulers consolidated to single backend-cron-driven system
 - Consent versioning enforced on login
 - 3 commits pushed and hash-verified: 0f04112 (build fix) -> 2476eb9 (phase 3 features)
+
+---
+Task ID: CLOUDFLARE-PAGES-DEPLOYMENT
+Agent: Main (Z.ai Code)
+Task: Migrate to new Lightbase host (lightbase.pages.dev), seed DB, deploy to Cloudflare Pages, configure auto-deploy, adapt for Cloudflare-compatible features
+
+Work Log:
+- Restored git credentials, pulled latest from remote (resolved divergence via rebase)
+- Tested new Lightbase host (https://lightbase.pages.dev) with new credentials (project: careconnect-beta) — connectivity confirmed, project active
+- Explored new Lightbase API features: cron endpoint (/api/v1/projects/{p}/cron) and Edge Functions confirmed working
+- Updated apps/backend/.env with new Lightbase credentials (careconnect-beta, lightbase.pages.dev)
+- Seeded the new careconnect-beta Lightbase project synchronously: 49 collections, 19 users, 4 entities, 5 patients, 5 encounters, all clinical/operational/content data — verified via direct Lightbase API queries
+- Rewrote email service to use Gmail REST API with OAuth2 refresh token (no nodemailer, works on Cloudflare Pages/Workers — fetch-based)
+- Created shared API handler (apps/backend/src/handler.ts) — platform-agnostic, works on both Astro and Cloudflare Pages Functions; includes inline LightbaseStorageAdapter (envelope model), auth (PBKDF2 + HMAC session tokens), data CRUD, admin, payments config, email status, seed, cron, health, MFA status
+- Created standalone modules: email-handler.ts (Gmail REST API), seed-handler.ts, types.ts (StorageAdapter interface)
+- Created Cloudflare Pages Function: functions/api/_middleware.ts — intercepts all /api/* requests, delegates to shared handler
+- Created wrangler.toml with nodejs_compat flag, build command (bun run build), output dir (dist), [vars] for non-secret env vars
+- Created public/_redirects for SPA routing (/* -> /index.html 200)
+- Created public/_headers for security headers (X-Frame-Options, X-Content-Type-Options, etc.)
+- Created .env.production with VITE_DB_MODE=api, VITE_API_BASE_URL=/api for build-time env vars
+- Programmatically created Cloudflare Pages project (careconnect) and deployed via wrangler
+- Set 7 production secrets via wrangler: LIGHTBASE_API_KEY, LIGHTBASE_PROJECT_ID, LIGHTBASE_BASE_URL, STORAGE_PROVIDER, SESSION_SECRET, SEED_KEY, CORS_ORIGIN
+- Updated Cloudflare Pages build config via API: build_command=bun run build, destination_dir=dist
+- Fixed production build: .env.production ensures /api is baked into the bundle (not localhost:4321)
+- Verified live deployment: careconnect-6ny.pages.dev — homepage, directory, login, super-admin dashboard, AILab, shop, community all render with real Lightbase data; all API endpoints return 200 (login, admin/stats, entities, encounters, orders, audit-logs)
+
+Stage Summary:
+- Platform is LIVE on Cloudflare Pages: https://careconnect-6ny.pages.dev
+- Lightbase (careconnect-beta) is the primary DB, seeded with all collections + data
+- Gmail REST API (OAuth2 refresh token) replaces nodemailer — works on Cloudflare Workers
+- Cloudflare Pages Functions handle all /api/* routes (shared handler talks to Lightbase)
+- wrangler.toml + _redirects + _headers + .env.production configure auto-deploy
+- Commit 495574a pushed and hash-verified
+- GitHub auto-deploy: build_command=bun run build, output_dir=dist, secrets set — when GitHub repo is connected, every push to main triggers automatic build + deploy
