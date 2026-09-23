@@ -9,7 +9,7 @@ export interface PaymentIntent {
   customerId?: string;
   metadata: Record<string, any>;
   status: 'pending' | 'pending_review' | 'completed' | 'failed' | 'refunded' | 'cancelled';
-  gateway: 'paystack' | 'flutterwave' | 'stripe_checkout';
+  gateway: 'paystack' | 'flutterwave' | 'stripe_checkout' | 'birrpay';
   gatewayReference?: string;
   gatewayResponse?: any;
   createdAt: string;
@@ -56,6 +56,89 @@ export class PaymentService {
 
     await githubDB.insert(collections.payments, paymentIntent);
     return paymentIntent;
+  }
+
+  // BismiLLAH (2026-09-23): BirrPay INLINE checkout — the payment happens in
+  // BirrPay's iframe widget loaded from sdkUrl (embed/birrpay.js). The user
+  // NEVER leaves CareConnect and is NEVER redirected to BirrPay's hosted
+  // checkout page. The backend holds the secret key; the browser only ever
+  // sees the one-time client_token + publishable key.
+  static async initializeBirrPayCheckout(
+    paymentIntent: PaymentIntent,
+    customerEmail: string,
+    onSuccess: (reference: string) => void,
+    onCancel: () => void
+  ): Promise<void> {
+    const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+    const token = localStorage.getItem('careconnect_api_token');
+    try {
+      const res = await fetch(`${apiBase}/payments/initiate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          amount: paymentIntent.amount,
+          currency: paymentIntent.currency,
+          description: paymentIntent.description,
+          customerEmail,
+          metadata: paymentIntent.metadata,
+          gateway: 'birrpay',
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'BirrPay init failed');
+      }
+      const { data } = await res.json();
+      if (!data.clientToken || !data.publicKey) {
+        throw new Error('BirrPay inline checkout is not configured');
+      }
+      // Load the inline SDK once.
+      const w = window as any;
+      if (!w.BirrPay?.open) {
+        await new Promise<void>((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = data.sdkUrl;
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error('Failed to load BirrPay SDK'));
+          document.head.appendChild(script);
+        });
+      }
+      let settled = false;
+      const confirm = async () => {
+        if (settled) return;
+        settled = true;
+        try {
+          const v = await fetch(`${apiBase}/payments/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reference: data.reference, gateway: 'birrpay' }),
+          });
+          const vd = await v.json();
+          if (vd?.data?.status === 'completed' || vd?.data?.status === 'already_completed') {
+            onSuccess(data.reference);
+          } else {
+            onCancel();
+          }
+        } catch {
+          onCancel();
+        }
+      };
+      w.BirrPay.open({
+        publicKey: data.publicKey,
+        clientToken: data.clientToken,
+        theme: 'auto',
+        onSuccess: confirm,
+        onError: () => { settled = true; onCancel(); },
+        onClose: () => setTimeout(confirm, 1500),
+      });
+    } catch (err) {
+      console.error('BirrPay checkout failed:', err);
+      onCancel();
+    }
   }
 
   // Initialize Paystack checkout via the backend (which holds the SECRET key

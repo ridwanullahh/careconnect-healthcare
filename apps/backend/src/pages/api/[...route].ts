@@ -515,6 +515,13 @@ export const ALL: APIRoute = async ({ request }) => {
           metadata: body.metadata || {},
           gateway: body.gateway || 'paystack',
         });
+        // BismiLLAH (2026-09-23): BirrPay branch — returns INLINE widget
+        // parameters (clientToken/publicKey/sdkUrl); the browser opens the
+        // BirrPay iframe widget, never a hosted redirect.
+        if (intent.gateway === 'birrpay') {
+          const result = await payments.initiateBirrPay(db, intent, body.customerName);
+          return json({ data: { intent, ...result, inline: true } });
+        }
         if (intent.gateway === 'flutterwave') {
           const result = await payments.initiateFlutterwave(db, intent, body.customerName);
           return json({ data: { intent, ...result } });
@@ -527,9 +534,11 @@ export const ALL: APIRoute = async ({ request }) => {
         if (!body.reference) return error('reference required', 422);
         const gateway = body.gateway || 'paystack';
         const result =
-          gateway === 'flutterwave'
-            ? await payments.verifyFlutterwave(db, body.reference)
-            : await payments.verifyPaystack(db, body.reference);
+          gateway === 'birrpay'
+            ? await payments.verifyBirrPay(db, body.reference)
+            : gateway === 'flutterwave'
+              ? await payments.verifyFlutterwave(db, body.reference)
+              : await payments.verifyPaystack(db, body.reference);
         return json({ data: result });
       }
       if (segments[1] === 'webhook' && method === 'POST') {
@@ -537,6 +546,19 @@ export const ALL: APIRoute = async ({ request }) => {
         const raw = await request.text();
         const sig = request.headers.get('x-paystack-signature') || '';
         const flwSig = request.headers.get('verif-hash') || '';
+        const bpSig = request.headers.get('x-birrpay-signature') || '';
+        // BismiLLAH (2026-09-23): BirrPay webhook — constant-time HMAC-SHA256
+        // over "<t>.<rawBody>" with a 600s replay tolerance, verified BEFORE
+        // any processing; fulfillment re-verifies with BirrPay's API.
+        if (bpSig) {
+          if (!payments.verifyBirrPayWebhook(bpSig, raw)) return error('Invalid signature', 401);
+          const evt = JSON.parse(raw);
+          if (evt.event === 'payment.succeeded' || evt.event === 'payment.failed') {
+            const ref = evt.data?.merchant_reference || evt.data?.reference;
+            if (ref) await payments.verifyBirrPay(db, ref).catch(() => null);
+          }
+          return json({ status: 'ok' });
+        }
         if (sig) {
           if (!payments.verifyPaystackWebhook(sig, raw)) return error('Invalid signature', 401);
           const evt = JSON.parse(raw);

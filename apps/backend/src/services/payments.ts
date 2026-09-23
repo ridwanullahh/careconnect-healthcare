@@ -12,6 +12,16 @@ const FLUTTERWAVE_ENCRYPTION = process.env.FLUTTERWAVE_ENCRYPTION_KEY || '';
 const PAYSTACK_BASE = 'https://api.paystack.co';
 const FLW_BASE = 'https://api.flutterwave.com/v3';
 
+// BismiLLAH (2026-09-23): BirrPay — INLINE checkout gateway (added alongside
+// Paystack/Flutterwave, not replacing them). The merchant API is driven with
+// the app secret key; the browser receives only the one-time client_token +
+// publishable key and opens BirrPay's INLINE iframe widget (embed/birrpay.js).
+// CareConnect NEVER redirects users to BirrPay's hosted checkout page.
+const BIRRPAY_BASE = (process.env.BIRRPAY_BASE_URL || 'https://birrpay-10133349281.development.catalystappsail.com').replace(/\/$/, '');
+const BIRRPAY_SECRET = process.env.BIRRPAY_SECRET_KEY || '';
+const BIRRPAY_PUBLIC = process.env.BIRRPAY_PUBLIC_KEY || '';
+const BIRRPAY_WEBHOOK_SECRET = process.env.BIRRPAY_WEBHOOK_SECRET || '';
+
 export interface PaymentIntentRecord {
   id: string;
   amount: number;
@@ -21,7 +31,7 @@ export interface PaymentIntentRecord {
   customerEmail?: string;
   metadata: Record<string, any>;
   status: 'pending' | 'pending_review' | 'completed' | 'failed' | 'refunded' | 'cancelled';
-  gateway: 'paystack' | 'flutterwave';
+  gateway: 'paystack' | 'flutterwave' | 'birrpay';
   gatewayReference?: string;
   gatewayResponse?: any;
   createdAt: string;
@@ -44,7 +54,7 @@ export async function createPaymentIntent(
     customerId?: string;
     customerEmail: string;
     metadata?: Record<string, any>;
-    gateway?: 'paystack' | 'flutterwave';
+    gateway?: 'paystack' | 'flutterwave' | 'birrpay';
   },
 ): Promise<PaymentIntentRecord> {
   const intent: PaymentIntentRecord = {
@@ -263,7 +273,99 @@ export async function refundPaystack(
 }
 
 /** Whether any payment gateway is configured. */
-export function isPaymentConfigured(): { paystack: boolean; flutterwave: boolean } {
+// ---------------------------------------------------------------------------
+// BirrPay (inline checkout)
+// ---------------------------------------------------------------------------
+
+async function birrpayFetch(path: string, init?: { method?: string; body?: unknown }): Promise<any> {
+  if (!BIRRPAY_SECRET) throw new Error('BirrPay is not configured (BIRRPAY_SECRET_KEY missing).');
+  const res = await fetch(`${BIRRPAY_BASE}${path}`, {
+    method: init?.method || 'GET',
+    headers: {
+      Authorization: `Bearer ${BIRRPAY_SECRET}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || (json && json.ok === false)) {
+    throw new Error(`BirrPay error ${res.status}: ${json?.error?.message || 'request failed'}`);
+  }
+  return json?.data !== undefined ? json.data : json;
+}
+
+/**
+ * Create a BirrPay checkout session for the intent and return the INLINE
+ * widget parameters (client_token + public_key + sdk_url). No hosted redirect.
+ */
+export async function initiateBirrPay(
+  db: StorageAdapter,
+  intent: PaymentIntentRecord,
+  customerName?: string,
+): Promise<{ clientToken: string; publicKey: string; sdkUrl: string; reference: string }> {
+  const amountMinor = Math.round(Number(intent.amount) * 100);
+  const session = await birrpayFetch('/api/v1/checkout/sessions', {
+    method: 'POST',
+    body: {
+      amount: amountMinor,
+      currency: intent.currency,
+      customer: { email: intent.customerEmail, name: customerName || undefined },
+      reference: intent.id,
+      metadata: { ...(intent.metadata || {}), payment_intent_id: intent.id, description: intent.description },
+      callback_url: `${process.env.PAYMENT_CALLBACK_URL || ''}/payment/callback`,
+    },
+  });
+  await db.update('payments', intent.id, {
+    gatewayReference: session.reference,
+    updatedAt: new Date().toISOString(),
+  });
+  return {
+    clientToken: session.client_token,
+    publicKey: BIRRPAY_PUBLIC,
+    sdkUrl: `${BIRRPAY_BASE}/embed/birrpay.js`,
+    reference: session.reference,
+  };
+}
+
+/** Authoritative BirrPay verification by BirrPay reference (bp_…) or merchant reference. */
+export async function verifyBirrPay(db: StorageAdapter, reference: string): Promise<PaymentIntentRecord> {
+  const tx = await birrpayFetch(`/api/v1/transactions/${encodeURIComponent(reference)}`);
+  const t = tx?.transaction || tx;
+  // The intent id travels as the merchant reference (BirrPay echoes it).
+  const intentId = t.merchant_reference || reference;
+  const intent = await db.findById('payments', intentId) as PaymentIntentRecord | null;
+  if (!intent) throw new Error(`Payment intent ${intentId} not found`);
+  const updates: Partial<PaymentIntentRecord> = {
+    gatewayResponse: t,
+    updatedAt: new Date().toISOString(),
+  };
+  if (String(t.status).toLowerCase() === 'succeeded') {
+    updates.status = 'completed';
+    updates.completedAt = t.paid_at || new Date().toISOString();
+  } else if (['failed', 'cancelled', 'expired'].includes(String(t.status).toLowerCase())) {
+    updates.status = 'failed';
+    updates.failedAt = new Date().toISOString();
+  }
+  const updated = await db.update('payments', intentId, updates) as PaymentIntentRecord;
+  return updated;
+}
+
+/** Verify BirrPay webhook HMAC signature: t=…,v1=… over "<t>.<rawBody>". */
+export function verifyBirrPayWebhook(signature: string | null, payload: string): boolean {
+  if (!signature || !BIRRPAY_WEBHOOK_SECRET) return false;
+  const parts = signature.split(',').map((p) => p.trim().split('='));
+  const t = parts.find((p) => p[0] === 't')?.[1];
+  const v1 = parts.find((p) => p[0] === 'v1')?.[1];
+  if (!t || !v1) return false;
+  if (Math.abs(Date.now() / 1000 - Number(t)) > 600) return false; // replay guard
+  const expected = crypto.createHmac('sha256', BIRRPAY_WEBHOOK_SECRET).update(`${t}.${payload}`).digest('hex');
+  const a = Buffer.from(expected);
+  const b = Buffer.from(v1);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+export function isPaymentConfigured(): { paystack: boolean; flutterwave: boolean; birrpay: boolean } {
   return {
     paystack: !!PAYSTACK_SECRET,
     flutterwave: !!FLUTTERWAVE_SECRET,

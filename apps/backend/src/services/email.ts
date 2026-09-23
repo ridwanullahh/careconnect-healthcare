@@ -80,8 +80,50 @@ function encodeEmail(to: string, subject: string, html: string, text?: string): 
 }
 
 /** Send an email immediately via Gmail REST API. Returns true on success. */
+// BismiLLAH (2026-09-23): Gmail SMTP (App Password) transport — the
+// lightweight production path on AppSail (full Node, no OAuth app review).
+// Preference order: Gmail API (OAuth2, if all three env vars set) → SMTP
+// App Password (GMAIL_USER + GMAIL_APP_PASSWORD) → dev no-op log.
+let smtpTransport: any = null;
+let smtpTried = false;
+async function sendViaSmtp(msg: EmailMessage): Promise<boolean | null> {
+  const user = process.env.GMAIL_USER || '';
+  const pass = process.env.GMAIL_APP_PASSWORD || '';
+  if (!user || !pass) return null;
+  if (!smtpTried) {
+    smtpTried = true;
+    try {
+      const nodemailer = await import('nodemailer');
+      smtpTransport = nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user, pass },
+      });
+    } catch (e: any) {
+      console.warn('[email] nodemailer unavailable:', e?.message);
+      return null;
+    }
+  }
+  if (!smtpTransport) return false;
+  try {
+    await smtpTransport.sendMail({
+      from: `CareConnect <${process.env.GMAIL_FROM_EMAIL || user}>`,
+      to: Array.isArray(msg.to) ? msg.to.join(', ') : msg.to,
+      subject: msg.subject,
+      html: msg.html,
+      text: msg.text,
+    });
+    return true;
+  } catch (err: any) {
+    console.error('[email] SMTP send failed:', err?.message);
+    return false;
+  }
+}
+
 export async function sendEmail(msg: EmailMessage): Promise<boolean> {
   if (!EMAIL_ENABLED) {
+    // BismiLLAH: try the SMTP App Password path before giving up.
+    const smtpResult = await sendViaSmtp(msg);
+    if (smtpResult !== null) return smtpResult;
     console.log('[email] (dev) would send:', msg.to, '|', msg.subject);
     return true;
   }
@@ -99,7 +141,8 @@ export async function sendEmail(msg: EmailMessage): Promise<boolean> {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error('[email] Gmail send failed:', err.error?.message || res.status);
-      return false;
+      const smtpResult = await sendViaSmtp(msg);
+      return smtpResult === null ? false : smtpResult;
     }
     return true;
   } catch (err: any) {

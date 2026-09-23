@@ -11,10 +11,12 @@
   "dependencies": {
     "astro": "^5.9.3",
     "@astrojs/node": "^9.2.1",
-    "@careconnect/db": "*"
+    "@careconnect/db": "*",
+    "nodemailer": "^7.0.9"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
-    "typescript": "^5.0.2"
+    "typescript": "^5.0.2",
+    "@types/nodemailer": "^6.4.17"
   }
 }
