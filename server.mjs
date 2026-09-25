@@ -14,7 +14,7 @@
 // No edge functions anywhere — everything is plain Node HTTP.
 import http from 'node:http'
 import { spawn } from 'node:child_process'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
@@ -82,13 +82,23 @@ function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`)
   let filePath = path.join(DIST, decodeURIComponent(url.pathname))
   if (!filePath.startsWith(DIST)) { res.writeHead(403); return res.end('Forbidden') }
-  if (!existsSync(filePath) || !filePath.startsWith(DIST)) {
-    // SPA fallback
+  // EISDIR guard (2026-09-26): a path that EXISTS but is a DIRECTORY (the boot
+  // probe's `GET /` resolves to dist/ itself — or any "clean URL" like /docs/)
+  // must fall back to index.html, NOT be read as a file. readFileSync on a
+  // directory throws EISDIR and an uncaught throw here killed the whole
+  // supervisor mid-boot-probe ("Process exited during boot probe (code 1)").
+  let st = null
+  try { st = statSync(filePath) } catch { st = null }
+  if (!st || !st.isFile() || !filePath.startsWith(DIST)) {
+    // SPA fallback — missing OR directory
     filePath = path.join(DIST, 'index.html')
   }
-  if (!existsSync(filePath)) {
-    res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8' })
-    return res.end(splashHtml('Frontend build not found — run `npm run build` first.'))
+  let body
+  try {
+    body = readFileSync(filePath)
+  } catch (err) {
+    res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' })
+    return res.end(splashHtml(`Static serve error: ${err.code || err.message}`))
   }
   const ext = path.extname(filePath).toLowerCase()
   const isAsset = url.pathname.startsWith('/assets/')
@@ -96,7 +106,7 @@ function serveStatic(req, res) {
     'Content-Type': MIME[ext] || 'application/octet-stream',
     ...(isAsset ? { 'Cache-Control': 'public, max-age=31536000, immutable' } : { 'Cache-Control': 'no-cache' }),
   })
-  res.end(readFileSync(filePath))
+  res.end(body)
 }
 
 function splashHtml(message) {
@@ -108,7 +118,31 @@ function splashHtml(message) {
 <body><div class="c"><div class="logo">${BRAND}</div><div class="pulse"></div><div class="m">${message || 'Preparing your secure healthcare platform…'} (${Math.round((Date.now() - BOOT_START) / 1000)}s)</div><pre>${bootLines.join('\n').replace(/</g, '&lt;')}</pre></div></body></html>`
 }
 
+// Supervisor resilience (2026-09-26): a single uncaught throw in a request
+// handler used to kill the whole supervisor (EISDIR during the platform's
+// boot probe = deploy failed). Handlers below are try/caught, and these
+// last-resort guards keep the process alive no matter what — a supervisor
+// must outlive its own bugs.
+process.on('uncaughtException', (err) => {
+  bootLines.push(`uncaughtException: ${err && err.stack ? err.stack.split('\n')[0] : err}`)
+  console.error('[CareConnect] uncaughtException (supervisor kept alive):', err && err.message)
+})
+process.on('unhandledRejection', (err) => {
+  bootLines.push(`unhandledRejection: ${err && err.message ? err.message : err}`)
+  console.error('[CareConnect] unhandledRejection (supervisor kept alive):', err && err.message)
+})
+
 const server = http.createServer((req, res) => {
+  try {
+    handleRequest(req, res)
+  } catch (err) {
+    // Defensive net: handler bugs must serve an error page, never crash.
+    if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' })
+    try { res.end(splashHtml(`Request error: ${err && err.code ? err.code : err && err.message}`)) } catch { /* socket gone */ }
+  }
+})
+
+function handleRequest(req, res) {
   if (req.url === '/__boot') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     return res.end(JSON.stringify({ app: BRAND, bootMs: Date.now() - BOOT_START, backendReady, lines: bootLines.slice(-8) }))
@@ -138,7 +172,7 @@ const server = http.createServer((req, res) => {
     return proxyToBackend(req, res)
   }
   return serveStatic(req, res)
-})
+}
 
 server.listen(PORT, HOST, () => {
   console.log(`[CareConnect] supervisor listening on ${HOST}:${PORT} (backend 127.0.0.1:${BACKEND_PORT}) — BismiLLAH`)
