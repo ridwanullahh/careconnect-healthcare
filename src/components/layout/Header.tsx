@@ -184,7 +184,7 @@ const Header: React.FC = () => {
 
   return (
     <>
-      <header className="bg-gradient-to-r from-white via-white to-gray-50/50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800/50 shadow-lg border-b border-gray-200/60 dark:border-gray-700/60 backdrop-blur-sm sticky top-0 z-40">
+      <header className="bg-gradient-to-r from-white via-white to-gray-50/50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800/50 shadow-lg border-b border-[var(--hairline)]/60 dark:border-gray-700/60 backdrop-blur-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-2">
             {/* Logo */}
@@ -207,11 +207,11 @@ const Header: React.FC = () => {
                 return (
                   <div key={item.name} className="relative">
                     <button
-                      className={`group flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${showMegaMenu === item.megaMenu ? 'text-primary bg-gradient-to-r from-primary/10 to-primary/5 shadow-md dark:bg-gray-800' : 'text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 hover:shadow-sm'}`}
+                      className={`group flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 transform hover:scale-105 ${showMegaMenu === item.megaMenu ? 'text-primary bg-gradient-to-r from-primary/10 to-primary/5 shadow-md dark:bg-gray-800' : 'text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 hover:shadow-sm'}`}
                       onClick={() => handleMegaMenuToggle(item.megaMenu)}
                       aria-expanded={showMegaMenu === item.megaMenu}
                     >
-                      <Icon className={`w-4 h-4 transition-transform duration-200 group-hover:scale-110 ${showMegaMenu === item.megaMenu ? 'text-primary' : 'text-gray-500 group-hover:text-primary'}`} />
+                      <Icon className={`w-4 h-4 transition-transform duration-200 group-hover:scale-110 ${showMegaMenu === item.megaMenu ? 'text-primary' : 'text-[var(--color-text-secondary)] group-hover:text-primary'}`} />
                       <span className="relative">
                         {item.name}
                         {showMegaMenu === item.megaMenu && (
@@ -223,14 +223,14 @@ const Header: React.FC = () => {
                     {/* Mega Menu */}
                     {showMegaMenu === item.megaMenu && item.items && (
                       <div
-                        className="absolute left-0 mt-3 w-72 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200/80 dark:border-gray-700/80 backdrop-blur-sm z-50 transform transition-all duration-300 ease-out"
+                        className="absolute left-0 mt-3 w-72 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-[var(--hairline)]/80 dark:border-gray-700/80 backdrop-blur-sm z-50 transform transition-all duration-300 ease-out"
                         onMouseLeave={() => handleMegaMenuToggle(null)}
                         style={{
                           animation: 'fadeInScale 0.2s ease-out forwards'
                         }}
                       >
                         <div className="p-6">
-                          <div className="flex items-center space-x-2 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+                          <div className="flex items-center space-x-2 mb-4 pb-3 border-b border-[var(--hairline)] dark:border-gray-700">
                             <Icon className="w-5 h-5 text-primary" />
                             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{item.name}</h3>
                           </div>
@@ -239,7 +239,7 @@ const Header: React.FC = () => {
                               <Link
                                 key={subItem.name}
                                 to={subItem.href}
-                                className="group flex items-center space-x-3 px-4 py-3 hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 rounded-xl text-gray-700 dark:text-gray-300 hover:text-primary transition-all duration-200 transform hover:translate-x-1 hover:shadow-sm"
+                                className="group flex items-center space-x-3 px-4 py-3 hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 rounded-xl text-[var(--color-text)] dark:text-gray-300 hover:text-primary transition-all duration-200 transform hover:translate-x-1 hover:shadow-sm"
                                 onClick={() => setShowMegaMenu(null)}
                                 style={{
                                   animationDelay: `${index * 50}ms`,
@@ -269,7 +269,7 @@ const Header: React.FC = () => {
               {/* Desktop Search */}
               <button
                 onClick={() => setIsSearchModalOpen(true)}
-                className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800 hidden lg:block"
+                className="p-2 rounded-md text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-[var(--surface-sunken)] dark:hover:bg-gray-800 hidden lg:block"
                 aria-label="Search"
               >
                 <Search className="w-5 h-5" />
@@ -279,7 +279,7 @@ const Header: React.FC = () => {
               <div className="relative hidden lg:block">
                 <button
                   onClick={() => setShowThemeMenu(!showThemeMenu)}
-                  className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800"
+                  className="p-2 rounded-md text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-[var(--surface-sunken)] dark:hover:bg-gray-800"
                   aria-label="Theme Settings"
                 >
                   {theme === 'dark' ? (
@@ -292,13 +292,13 @@ const Header: React.FC = () => {
                 {/* Theme Mega Menu */}
                 {showThemeMenu && (
                   <div
-                    className="absolute right-0 mt-3 w-72 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200/80 dark:border-gray-700/80 backdrop-blur-sm z-50 transform transition-all duration-300 ease-out"
+                    className="absolute right-0 mt-3 w-72 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-[var(--hairline)]/80 dark:border-gray-700/80 backdrop-blur-sm z-50 transform transition-all duration-300 ease-out"
                     style={{
                       animation: 'fadeInScale 0.2s ease-out forwards'
                     }}
                   >
                     <div className="p-6">
-                      <div className="flex items-center space-x-2 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+                      <div className="flex items-center space-x-2 mb-4 pb-3 border-b border-[var(--hairline)] dark:border-gray-700">
                         <Settings className="w-5 h-5 text-primary" />
                         <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Display Settings</h3>
                       </div>
@@ -309,7 +309,7 @@ const Header: React.FC = () => {
                             toggleTheme();
                             setShowThemeMenu(false);
                           }}
-                          className={`group flex flex-col items-center space-y-2 px-4 py-4 rounded-xl text-gray-700 dark:text-gray-300 transition-all duration-200 transform hover:scale-105 hover:shadow-sm ${theme === 'light' ? 'bg-yellow-100 text-yellow-700 shadow-md' : 'hover:bg-gradient-to-r hover:from-yellow-50 hover:to-yellow-100 dark:hover:bg-gray-700/50 hover:text-yellow-600'}`}
+                          className={`group flex flex-col items-center space-y-2 px-4 py-4 rounded-xl text-[var(--color-text)] dark:text-gray-300 transition-all duration-200 transform hover:scale-105 hover:shadow-sm ${theme === 'light' ? 'bg-yellow-100 text-yellow-700 shadow-md' : 'hover:bg-gradient-to-r hover:from-yellow-50 hover:to-yellow-100 dark:hover:bg-gray-700/50 hover:text-yellow-600'}`}
                         >
                           <Sun className={`w-6 h-6 transition-transform duration-200 group-hover:scale-110 ${theme === 'light' ? 'text-yellow-600' : 'text-yellow-500'}`} />
                           <span className="text-xs font-medium">Light</span>
@@ -320,9 +320,9 @@ const Header: React.FC = () => {
                             toggleTheme();
                             setShowThemeMenu(false);
                           }}
-                          className={`group flex flex-col items-center space-y-2 px-4 py-4 rounded-xl text-gray-700 dark:text-gray-300 transition-all duration-200 transform hover:scale-105 hover:shadow-sm ${theme === 'dark' ? 'bg-gray-800 text-white shadow-md' : 'hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 dark:hover:bg-gray-700/50 hover:text-gray-600'}`}
+                          className={`group flex flex-col items-center space-y-2 px-4 py-4 rounded-xl text-[var(--color-text)] dark:text-gray-300 transition-all duration-200 transform hover:scale-105 hover:shadow-sm ${theme === 'dark' ? 'bg-gray-800 text-white shadow-md' : 'hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 dark:hover:bg-gray-700/50 hover:text-[var(--color-text-secondary)]'}`}
                         >
-                          <Moon className={`w-6 h-6 transition-transform duration-200 group-hover:scale-110 ${theme === 'dark' ? 'text-white' : 'text-gray-600'}`} />
+                          <Moon className={`w-6 h-6 transition-transform duration-200 group-hover:scale-110 ${theme === 'dark' ? 'text-white' : 'text-[var(--color-text-secondary)]'}`} />
                           <span className="text-xs font-medium">Dark</span>
                         </button>
                         <button
@@ -331,7 +331,7 @@ const Header: React.FC = () => {
                             toggleTheme();
                             setShowThemeMenu(false);
                           }}
-                          className={`group flex flex-col items-center space-y-2 px-4 py-4 rounded-xl text-gray-700 dark:text-gray-300 transition-all duration-200 transform hover:scale-105 hover:shadow-sm ${theme === 'system' ? 'bg-blue-100 text-blue-700 shadow-md' : 'hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 dark:hover:bg-gray-700/50 hover:text-blue-600'}`}
+                          className={`group flex flex-col items-center space-y-2 px-4 py-4 rounded-xl text-[var(--color-text)] dark:text-gray-300 transition-all duration-200 transform hover:scale-105 hover:shadow-sm ${theme === 'system' ? 'bg-blue-100 text-blue-700 shadow-md' : 'hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 dark:hover:bg-gray-700/50 hover:text-blue-600'}`}
                         >
                           <Settings className={`w-6 h-6 transition-transform duration-200 group-hover:scale-110 ${theme === 'system' ? 'text-blue-600' : 'text-blue-500'}`} />
                           <span className="text-xs font-medium">Auto</span>
@@ -341,7 +341,7 @@ const Header: React.FC = () => {
                             // High contrast theme functionality would go here
                             setShowThemeMenu(false);
                           }}
-                          className="group flex flex-col items-center space-y-2 px-4 py-4 hover:bg-gradient-to-r hover:from-purple-50 hover:to-purple-100 dark:hover:bg-gray-700/50 rounded-xl text-gray-700 dark:text-gray-300 hover:text-purple-600 transition-all duration-200 transform hover:scale-105 hover:shadow-sm"
+                          className="group flex flex-col items-center space-y-2 px-4 py-4 hover:bg-gradient-to-r hover:from-purple-50 hover:to-purple-100 dark:hover:bg-gray-700/50 rounded-xl text-[var(--color-text)] dark:text-gray-300 hover:text-purple-600 transition-all duration-200 transform hover:scale-105 hover:shadow-sm"
                         >
                           <Shield className="w-6 h-6 transition-transform duration-200 group-hover:scale-110 text-purple-500" />
                           <span className="text-xs font-medium">High Contrast</span>
@@ -356,7 +356,7 @@ const Header: React.FC = () => {
                 <>
                   {/* Notifications */}
                   <button 
-                    className="relative p-2 text-gray-400 hover:text-gray-500 dark:text-gray-300 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+                    className="relative p-2 text-[var(--color-text-secondary)] opacity-70 hover:text-[var(--color-text-secondary)] dark:text-gray-300 dark:hover:text-gray-200 rounded-full hover:bg-[var(--surface-sunken)] dark:hover:bg-gray-800"
                     aria-label="Notifications"
                   >
                     <Bell className="w-5 h-5" />
@@ -367,7 +367,7 @@ const Header: React.FC = () => {
                   {user.user_type === UserType.PUBLIC_USER && (
                     <Link
                       to="/cart"
-                      className="relative p-2 text-gray-400 hover:text-gray-500 dark:text-gray-300 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+                      className="relative p-2 text-[var(--color-text-secondary)] opacity-70 hover:text-[var(--color-text-secondary)] dark:text-gray-300 dark:hover:text-gray-200 rounded-full hover:bg-[var(--surface-sunken)] dark:hover:bg-gray-800"
                       aria-label="Shopping cart"
                     >
                       <ShoppingCart className="w-5 h-5" />
@@ -381,14 +381,14 @@ const Header: React.FC = () => {
                   <div className="relative">
                     <button
                       onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                      className="flex items-center space-x-2 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
+                      className="flex items-center space-x-2 p-1 rounded-full hover:bg-[var(--surface-sunken)] dark:hover:bg-gray-800"
                       aria-expanded={isProfileMenuOpen}
                       aria-haspopup="true"
                     >
                       <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
                         <User className="w-5 h-5 text-white" />
                       </div>
-                      <span className="hidden md:block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <span className="hidden md:block text-sm font-medium text-[var(--color-text)] dark:text-gray-300">
                         {getUserDisplayName(user)}
                       </span>
                     </button>
@@ -401,7 +401,7 @@ const Header: React.FC = () => {
                       >
                         <Link
                           to={getDashboardPath(user.user_type)}
-                          className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          className="flex items-center px-4 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:bg-[var(--surface-sunken)] dark:hover:bg-gray-700"
                           onClick={() => setIsProfileMenuOpen(false)}
                           role="menuitem"
                         >
@@ -410,17 +410,17 @@ const Header: React.FC = () => {
                         </Link>
                         <Link
                           to="/profile"
-                          className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          className="flex items-center px-4 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:bg-[var(--surface-sunken)] dark:hover:bg-gray-700"
                           onClick={() => setIsProfileMenuOpen(false)}
                           role="menuitem"
                         >
                           <User className="w-4 h-4 mr-3" />
                           Profile Settings
                         </Link>
-                        <div className="border-t border-gray-100 dark:border-gray-700">
+                        <div className="border-t border-[var(--hairline)] dark:border-gray-700">
                           <button
                             onClick={handleLogout}
-                            className="w-full text-left flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            className="w-full text-left flex items-center px-4 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:bg-[var(--surface-sunken)] dark:hover:bg-gray-700"
                             role="menuitem"
                           >
                             <LogOut className="w-4 h-4 mr-3" />
@@ -448,20 +448,20 @@ const Header: React.FC = () => {
                   {/* Get Started Mega Menu */}
                   {showGetStartedMenu && (
                     <div
-                      className="absolute right-0 mt-3 w-72 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200/80 dark:border-gray-700/80 backdrop-blur-sm z-50 transform transition-all duration-300 ease-out"
+                      className="absolute right-0 mt-3 w-72 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-[var(--hairline)]/80 dark:border-gray-700/80 backdrop-blur-sm z-50 transform transition-all duration-300 ease-out"
                       style={{
                         animation: 'fadeInScale 0.2s ease-out forwards'
                       }}
                     >
                       <div className="p-6">
-                        <div className="flex items-center space-x-2 mb-4 pb-3 border-b border-gray-100 dark:border-gray-700">
+                        <div className="flex items-center space-x-2 mb-4 pb-3 border-b border-[var(--hairline)] dark:border-gray-700">
                           <User className="w-5 h-5 text-primary" />
                           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Account Access</h3>
                         </div>
                         <div className="grid grid-cols-1 gap-3">
                           <Link
                             to="/login"
-                            className="group flex items-center space-x-3 px-4 py-3 hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 rounded-xl text-gray-700 dark:text-gray-300 hover:text-primary transition-all duration-200 transform hover:translate-x-1 hover:shadow-sm"
+                            className="group flex items-center space-x-3 px-4 py-3 hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 rounded-xl text-[var(--color-text)] dark:text-gray-300 hover:text-primary transition-all duration-200 transform hover:translate-x-1 hover:shadow-sm"
                             onClick={() => setShowGetStartedMenu(false)}
                           >
                             <div className="w-2 h-2 rounded-full bg-primary/20 group-hover:bg-primary/40 transition-colors duration-200"></div>
@@ -474,7 +474,7 @@ const Header: React.FC = () => {
                           </Link>
                           <Link
                             to="/register"
-                            className="group flex items-center space-x-3 px-4 py-3 hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 rounded-xl text-gray-700 dark:text-gray-300 hover:text-primary transition-all duration-200 transform hover:translate-x-1 hover:shadow-sm"
+                            className="group flex items-center space-x-3 px-4 py-3 hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 rounded-xl text-[var(--color-text)] dark:text-gray-300 hover:text-primary transition-all duration-200 transform hover:translate-x-1 hover:shadow-sm"
                             onClick={() => setShowGetStartedMenu(false)}
                           >
                             <div className="w-2 h-2 rounded-full bg-primary/20 group-hover:bg-primary/40 transition-colors duration-200"></div>
@@ -497,7 +497,7 @@ const Header: React.FC = () => {
                 {/* Mobile Search */}
                 <button
                   onClick={() => setIsSearchModalOpen(true)}
-                  className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800"
+                  className="p-2 rounded-md text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-[var(--surface-sunken)] dark:hover:bg-gray-800"
                   aria-label="Search"
                 >
                   <Search className="w-5 h-5" />
@@ -507,7 +507,7 @@ const Header: React.FC = () => {
                 {/* Mobile Theme Toggle */}
                 <button
                   onClick={toggleTheme}
-                  className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800"
+                  className="p-2 rounded-md text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-[var(--surface-sunken)] dark:hover:bg-gray-800"
                   aria-label="Toggle theme"
                 >
                   {theme === 'dark' ? (
@@ -521,7 +521,7 @@ const Header: React.FC = () => {
                 {/* Mobile Menu Button */}
                 <button
                   onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                  className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800"
+                  className="p-2 rounded-md text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-[var(--surface-sunken)] dark:hover:bg-gray-800"
                   aria-expanded={isMobileMenuOpen}
                   aria-controls="mobile-menu"
                 >
@@ -550,7 +550,7 @@ const Header: React.FC = () => {
                     </div>
                     <span className="text-lg font-bold text-gray-900 dark:text-white">CareConnect</span>
                   </div>
-                  <button type="button" className="-m-2 p-2 rounded-md inline-flex items-center justify-center text-gray-400 hover:text-gray-500" onClick={() => setIsMobileMenuOpen(false)}>
+                  <button type="button" className="-m-2 p-2 rounded-md inline-flex items-center justify-center text-[var(--color-text-secondary)] opacity-70 hover:text-[var(--color-text-secondary)]" onClick={() => setIsMobileMenuOpen(false)}>
                       <span className="sr-only">Close menu</span>
                       <X className="h-6 w-6" aria-hidden="true" />
                   </button>
@@ -561,7 +561,7 @@ const Header: React.FC = () => {
               return (
                 <div key={item.name} className="space-y-1">
                   <button
-                    className="w-full flex items-center justify-between space-x-3 px-3 py-2 rounded-md text-base font-medium text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800"
+                    className="w-full flex items-center justify-between space-x-3 px-3 py-2 rounded-md text-base font-medium text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800"
                     onClick={() => handleMegaMenuToggle(item.megaMenu)}
                     aria-expanded={showMegaMenu === item.megaMenu}
                   >
@@ -569,7 +569,7 @@ const Header: React.FC = () => {
                       <Icon className="w-5 h-5" />
                       <span>{item.name}</span>
                     </div>
-                    <span className="text-gray-400">
+                    <span className="text-[var(--color-text-secondary)] opacity-70">
                       {showMegaMenu === item.megaMenu ? (
                         <ChevronUp className="w-4 h-4" />
                       ) : (
@@ -585,7 +585,7 @@ const Header: React.FC = () => {
                         <Link
                           key={subItem.name}
                           to={subItem.href}
-                          className="block px-3 py-2 rounded-md text-sm text-gray-600 dark:text-gray-400 hover:text-primary hover:bg-light dark:hover:bg-gray-800"
+                          className="block px-3 py-2 rounded-md text-sm text-[var(--color-text-secondary)] dark:text-[var(--color-text-secondary)] opacity-70 hover:text-primary hover:bg-light dark:hover:bg-gray-800"
                           onClick={() => {
                             setShowMegaMenu(null);
                             setIsMobileMenuOpen(false);
@@ -601,14 +601,14 @@ const Header: React.FC = () => {
             })}
             
             {/* Quick Access */}
-            <div className="pt-2 pb-1 border-t border-gray-200 dark:border-gray-700">
-              <p className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <div className="pt-2 pb-1 border-t border-[var(--hairline)] dark:border-gray-700">
+              <p className="px-3 text-xs font-semibold text-[var(--color-text-secondary)] dark:text-[var(--color-text-secondary)] opacity-70 uppercase tracking-wider">
                 Quick Access
               </p>
               <div className="grid grid-cols-2 gap-1 mt-2">
                 <Link
                   to="/health-talk-podcast"
-                  className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                  className="flex items-center space-x-2 px-3 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   <Headphones className="w-4 h-4" />
@@ -616,7 +616,7 @@ const Header: React.FC = () => {
                 </Link>
                 <Link
                   to="/health-news-feed"
-                  className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                  className="flex items-center space-x-2 px-3 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   <Newspaper className="w-4 h-4" />
@@ -624,7 +624,7 @@ const Header: React.FC = () => {
                 </Link>
                 <Link
                   to="/weekly-tips"
-                  className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                  className="flex items-center space-x-2 px-3 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   <Calendar className="w-4 h-4" />
@@ -632,7 +632,7 @@ const Header: React.FC = () => {
                 </Link>
                 <Link
                   to="/timeless-facts"
-                  className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                  className="flex items-center space-x-2 px-3 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   <Star className="w-4 h-4" />
@@ -642,8 +642,8 @@ const Header: React.FC = () => {
             </div>
             
             {/* Mobile Theme and Account Access */}
-            <div className="pt-2 pb-1 border-t border-gray-200 dark:border-gray-700">
-              <p className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <div className="pt-2 pb-1 border-t border-[var(--hairline)] dark:border-gray-700">
+              <p className="px-3 text-xs font-semibold text-[var(--color-text-secondary)] dark:text-[var(--color-text-secondary)] opacity-70 uppercase tracking-wider">
                 Settings & Account
               </p>
               <div className="grid grid-cols-2 gap-1 mt-2">
@@ -652,7 +652,7 @@ const Header: React.FC = () => {
                     // Open theme settings
                     setIsMobileMenuOpen(false);
                   }}
-                  className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                  className="flex items-center space-x-2 px-3 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
                 >
                   <Sun className="w-4 h-4" />
                   <span>Theme</span>
@@ -660,7 +660,7 @@ const Header: React.FC = () => {
                 {!user && (
                   <Link
                     to="/login"
-                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     <User className="w-4 h-4" />
@@ -672,7 +672,7 @@ const Header: React.FC = () => {
                 <>
                   <Link
                     to="/login"
-                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     <User className="w-4 h-4" />
@@ -693,14 +693,14 @@ const Header: React.FC = () => {
             
             {/* User Profile Section for Mobile */}
             {user && (
-              <div className="pt-2 pb-1 border-t border-gray-200 dark:border-gray-700">
-                <p className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              <div className="pt-2 pb-1 border-t border-[var(--hairline)] dark:border-gray-700">
+                <p className="px-3 text-xs font-semibold text-[var(--color-text-secondary)] dark:text-[var(--color-text-secondary)] opacity-70 uppercase tracking-wider">
                   Account
                 </p>
                 <div className="mt-2 space-y-1">
                   <Link
                     to={getDashboardPath(user.user_type)}
-                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     <Settings className="w-4 h-4" />
@@ -708,7 +708,7 @@ const Header: React.FC = () => {
                   </Link>
                   <Link
                     to="/profile"
-                    className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
+                    className="flex items-center space-x-2 px-3 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     <User className="w-4 h-4" />
@@ -716,7 +716,7 @@ const Header: React.FC = () => {
                   </Link>
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md text-left"
+                    className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-[var(--color-text)] dark:text-gray-300 hover:text-primary hover:bg-light dark:hover:bg-gray-800 rounded-md text-left"
                   >
                     <LogOut className="w-4 h-4" />
                     <span>Sign Out</span>

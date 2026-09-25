@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Course, LMSService, CourseLevel, CourseType, COURSE_CATEGORIES } from '../../lib/lms';
 import { useAuth } from '../../lib/auth';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import CurriculumBuilder from '../../components/lms/CurriculumBuilder';
 
 const CourseCreationPage = () => {
   const toast = useToastService();
@@ -14,6 +15,10 @@ const CourseCreationPage = () => {
   const [isEditing, setIsEditing] = useState(!!courseId);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  // BismiLLAH (LMS management uplift): keep the persisted course around so the
+  // CurriculumBuilder can attach modules/lessons/quizzes after first save.
+  const [savedCourse, setSavedCourse] = useState<Course | null>(null);
+  const [activeTab, setActiveTab] = useState<'details' | 'curriculum'>('details');
   
   // Course form data
   const [courseData, setCourseData] = useState({
@@ -63,6 +68,7 @@ const CourseCreationPage = () => {
       setLoading(true);
       const course = await LMSService.getCourse(courseId);
       if (course) {
+        setSavedCourse(course);
         setCourseData({
           title: course.title,
           description: course.description,
@@ -161,9 +167,16 @@ const CourseCreationPage = () => {
       } else {
         result = await LMSService.createCourse(cleanedData);
       }
-      
-      toast.showInfo(isEditing ? 'Course updated successfully!' : 'Course created successfully!');
-      navigate(`/dashboard/lms/courses/${result.id}/edit`);
+
+      // BismiLLAH (LMS management uplift): after a successful save, stay on the
+      // editor and switch to the Curriculum tab so the author can immediately
+      // build modules/lessons/quizzes — the old flow dead-ended on a navigation
+      // to a route that does not exist.
+      setSavedCourse(result);
+      setIsEditing(true);
+      window.history.replaceState(null, '', `/courses/create/${result.id}`);
+      toast.showInfo(isEditing ? 'Course updated successfully!' : 'Course created — now build the curriculum!');
+      setActiveTab('curriculum');
     } catch (error) {
       console.error('Error saving course:', error);
       toast.showSuccess('Failed to save course');
@@ -182,7 +195,7 @@ const CourseCreationPage = () => {
     
     return (
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
           {label} {required && <span className="text-red-500">*</span>}
         </label>
         {fieldValue.map((item, index) => (
@@ -192,7 +205,7 @@ const CourseCreationPage = () => {
               value={item}
               onChange={(e) => handleArrayFieldChange(field, index, e.target.value)}
               placeholder={placeholder}
-              className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+              className="flex-1 p-3 border border-[var(--hairline)] rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
             />
             {fieldValue.length > 1 && (
               <button
@@ -229,10 +242,10 @@ const CourseCreationPage = () => {
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">
+            <h1 className="text-3xl font-bold text-[var(--color-text)]">
               {isEditing ? 'Edit Course' : 'Create New Course'}
             </h1>
-            <p className="text-gray-600 mt-2">
+            <p className="text-[var(--color-text-secondary)] mt-2">
               {isEditing ? 'Update your course information' : 'Build a comprehensive learning experience'}
             </p>
           </div>
@@ -240,7 +253,7 @@ const CourseCreationPage = () => {
           <div className="flex gap-3">
             <button
               onClick={() => navigate('/dashboard/lms')}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-6 py-2 border border-[var(--hairline)] text-[var(--color-text)] rounded-lg hover:bg-[var(--surface-sunken)] transition-colors"
             >
               Cancel
             </button>
@@ -254,15 +267,38 @@ const CourseCreationPage = () => {
           </div>
         </div>
 
+        {/* BismiLLAH — Details / Curriculum tabs */}
+        {savedCourse && (
+          <div className="flex gap-2 mb-6">
+            <button
+              onClick={() => setActiveTab('details')}
+              className={`cc-btn ${activeTab === 'details' ? 'cc-btn--primary' : 'cc-btn--ghost'}`}
+            >
+              Course details
+            </button>
+            <button
+              onClick={() => setActiveTab('curriculum')}
+              className={`cc-btn ${activeTab === 'curriculum' ? 'cc-btn--primary' : 'cc-btn--ghost'}`}
+            >
+              Curriculum (modules, lessons, quizzes)
+            </button>
+          </div>
+        )}
+
+        {/* Curriculum Builder */}
+        {savedCourse && activeTab === 'curriculum' && (
+          <CurriculumBuilder course={savedCourse} onChanged={() => void loadCourseData()} />
+        )}
+
         {/* Course Creation Form */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
+        <div className={`cc-card p-8 ${savedCourse && activeTab === 'curriculum' ? 'hidden' : ''}`}>
           <div className="space-y-8">
             {/* Basic Information */}
             <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-6">Basic Information</h2>
+              <h2 className="text-xl font-semibold text-[var(--color-text)] mb-6">Basic Information</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                     Course Title <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -270,12 +306,12 @@ const CourseCreationPage = () => {
                     value={courseData.title}
                     onChange={(e) => handleInputChange('title', e.target.value)}
                     placeholder="Enter course title"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="w-full p-3 border border-[var(--hairline)] rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
                 </div>
                 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                     Short Description <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -283,12 +319,12 @@ const CourseCreationPage = () => {
                     value={courseData.short_description}
                     onChange={(e) => handleInputChange('short_description', e.target.value)}
                     placeholder="Brief description for course cards"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="w-full p-3 border border-[var(--hairline)] rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
                 </div>
                 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                     Full Description <span className="text-red-500">*</span>
                   </label>
                   <textarea
@@ -296,18 +332,18 @@ const CourseCreationPage = () => {
                     onChange={(e) => handleInputChange('description', e.target.value)}
                     placeholder="Detailed course description"
                     rows={6}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="w-full p-3 border border-[var(--hairline)] rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                     Category <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={courseData.category}
                     onChange={(e) => handleInputChange('category', e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="w-full p-3 border border-[var(--hairline)] rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                   >
                     <option value="">Select Category</option>
                     {COURSE_CATEGORIES.map(category => (
@@ -317,13 +353,13 @@ const CourseCreationPage = () => {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                     Level
                   </label>
                   <select
                     value={courseData.level}
                     onChange={(e) => handleInputChange('level', e.target.value)}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="w-full p-3 border border-[var(--hairline)] rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                   >
                     {Object.values(CourseLevel).map(level => (
                       <option key={level} value={level}>
@@ -337,7 +373,7 @@ const CourseCreationPage = () => {
 
             {/* Pricing */}
             <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-6">Pricing</h2>
+              <h2 className="text-xl font-semibold text-[var(--color-text)] mb-6">Pricing</h2>
               <div className="space-y-4">
                 <div className="flex items-center">
                   <input
@@ -345,9 +381,9 @@ const CourseCreationPage = () => {
                     id="is_free"
                     checked={courseData.is_free}
                     onChange={(e) => handleInputChange('is_free', e.target.checked)}
-                    className="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded"
+                    className="w-4 h-4 text-primary focus:ring-primary border-[var(--hairline)] rounded"
                   />
-                  <label htmlFor="is_free" className="ml-2 text-sm font-medium text-gray-700">
+                  <label htmlFor="is_free" className="ml-2 text-sm font-medium text-[var(--color-text)]">
                     This is a free course
                   </label>
                 </div>
@@ -355,7 +391,7 @@ const CourseCreationPage = () => {
                 {!courseData.is_free && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                         Price
                       </label>
                       <input
@@ -364,12 +400,12 @@ const CourseCreationPage = () => {
                         onChange={(e) => handleInputChange('price', parseFloat(e.target.value) || 0)}
                         min="0"
                         step="0.01"
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        className="w-full p-3 border border-[var(--hairline)] rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       />
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                         Discounted Price (optional)
                       </label>
                       <input
@@ -378,18 +414,18 @@ const CourseCreationPage = () => {
                         onChange={(e) => handleInputChange('discounted_price', parseFloat(e.target.value) || 0)}
                         min="0"
                         step="0.01"
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        className="w-full p-3 border border-[var(--hairline)] rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       />
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                         Currency
                       </label>
                       <select
                         value={courseData.currency}
                         onChange={(e) => handleInputChange('currency', e.target.value)}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        className="w-full p-3 border border-[var(--hairline)] rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       >
                         <option value="USD">USD</option>
                         <option value="EUR">EUR</option>
@@ -403,7 +439,7 @@ const CourseCreationPage = () => {
 
             {/* Course Details */}
             <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-6">Course Details</h2>
+              <h2 className="text-xl font-semibold text-[var(--color-text)] mb-6">Course Details</h2>
               <div className="space-y-6">
                 {renderArrayField('Prerequisites', 'prerequisites', 'Enter prerequisite')}
                 {renderArrayField('Requirements', 'requirements', 'Enter requirement')}
@@ -416,7 +452,7 @@ const CourseCreationPage = () => {
 
             {/* Certification */}
             <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-6">Certification</h2>
+              <h2 className="text-xl font-semibold text-[var(--color-text)] mb-6">Certification</h2>
               <div className="space-y-4">
                 <div className="flex items-center">
                   <input
@@ -424,9 +460,9 @@ const CourseCreationPage = () => {
                     id="provides_certificate"
                     checked={courseData.provides_certificate}
                     onChange={(e) => handleInputChange('provides_certificate', e.target.checked)}
-                    className="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded"
+                    className="w-4 h-4 text-primary focus:ring-primary border-[var(--hairline)] rounded"
                   />
-                  <label htmlFor="provides_certificate" className="ml-2 text-sm font-medium text-gray-700">
+                  <label htmlFor="provides_certificate" className="ml-2 text-sm font-medium text-[var(--color-text)]">
                     Provide certificate upon completion
                   </label>
                 </div>
@@ -434,7 +470,7 @@ const CourseCreationPage = () => {
                 {courseData.provides_certificate && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                         CEU Credits
                       </label>
                       <input
@@ -442,12 +478,12 @@ const CourseCreationPage = () => {
                         value={courseData.ceu_credits}
                         onChange={(e) => handleInputChange('ceu_credits', parseInt(e.target.value) || 0)}
                         min="0"
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        className="w-full p-3 border border-[var(--hairline)] rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       />
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                         Accreditation Body
                       </label>
                       <input
@@ -455,7 +491,7 @@ const CourseCreationPage = () => {
                         value={courseData.accreditation_body}
                         onChange={(e) => handleInputChange('accreditation_body', e.target.value)}
                         placeholder="Enter accreditation body"
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        className="w-full p-3 border border-[var(--hairline)] rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       />
                     </div>
                   </div>

@@ -176,3 +176,263 @@ img {
 .fixed {
   position: fixed;
 }
+
+/* ============================================================
+   BismiLLAH — "Verdant Clinical" design system extension (2026-09-25)
+   100% distinct visual layer for CareConnect. Keeps the official
+   palette (#05B34D green / #F2B91C gold / #181F25 ink / #E9FBF1 mint)
+   and adds: refined ramps, elevation tokens, focus rings, tinted
+   surfaces, and the cc-* component classes. Dark mode parity via .dark.
+   ============================================================ */
+
+@layer base {
+  :root {
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Sora', 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+    /* Green ramp */
+    --green-50: #E9FBF1;
+    --green-100: #CFF5DE;
+    --green-200: #A3EBC0;
+    --green-300: #6DDC9C;
+    --green-400: #2FC872;
+    --green-500: #05B34D;
+    --green-600: #049341;
+    --green-700: #037A34;
+    --green-800: #045F2B;
+    --green-900: #03421E;
+
+    /* Gold ramp */
+    --gold-100: #FCF0CD;
+    --gold-300: #F8D878;
+    --gold-500: #F2B91C;
+    --gold-600: #D99E06;
+    --gold-700: #A4760A;
+
+    /* Elevation */
+    --shadow-xs: 0 1px 2px rgba(16, 24, 20, 0.05);
+    --shadow-sm: 0 2px 8px rgba(16, 24, 20, 0.07);
+    --shadow-md: 0 8px 24px rgba(16, 24, 20, 0.1);
+    --shadow-lg: 0 18px 48px rgba(16, 24, 20, 0.14);
+    --shadow-glow: 0 0 0 1px rgba(5, 179, 77, 0.2), 0 8px 28px rgba(5, 179, 77, 0.22);
+    --ring-focus: 0 0 0 3.5px rgba(5, 179, 77, 0.22);
+
+    /* Surfaces */
+    --surface-sunken: #F3F7F4;
+    --surface-tint: rgba(5, 179, 77, 0.06);
+    --glass: rgba(255, 255, 255, 0.82);
+    --hairline: rgba(16, 24, 20, 0.08);
+  }
+
+  .dark {
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.45);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.55);
+    --shadow-glow: 0 0 0 1px rgba(6, 212, 85, 0.25), 0 8px 28px rgba(6, 212, 85, 0.18);
+    --ring-focus: 0 0 0 3.5px rgba(6, 212, 85, 0.28);
+    --surface-sunken: #0C1210;
+    --surface-tint: rgba(6, 212, 85, 0.1);
+    --glass: rgba(17, 24, 39, 0.82);
+    --hairline: rgba(249, 250, 251, 0.1);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  ::selection { background: rgba(5, 179, 77, 0.25); }
+
+  /* Signature scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(5, 179, 77, 0.28);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background-color: rgba(5, 179, 77, 0.45); }
+}
+
+@layer components {
+  /* ---------- Surfaces ---------- */
+  .cc-card {
+    background: var(--color-background, white);
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.22s ease, transform 0.22s ease, border-color 0.22s ease;
+  }
+  .cc-card:hover { box-shadow: var(--shadow-md); }
+  .cc-card--flat:hover { box-shadow: var(--shadow-sm); transform: none; }
+  .cc-card--tint { background: linear-gradient(180deg, var(--surface-tint), transparent 55%), var(--color-background, white); }
+  .cc-glass {
+    background: var(--glass);
+    backdrop-filter: blur(16px) saturate(1.35);
+    -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  }
+
+  /* Gradient hairline used under headers and on top of cards */
+  .cc-hairline-glow {
+    position: relative;
+  }
+  .cc-hairline-glow::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: -1px;
+    height: 1.5px;
+    background: linear-gradient(90deg, transparent, rgba(5, 179, 77, 0.4) 30%, rgba(242, 185, 28, 0.35) 70%, transparent);
+    pointer-events: none;
+  }
+  .cc-top-accent { position: relative; overflow: hidden; }
+  .cc-top-accent::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 18%; right: 18%;
+    height: 3px;
+    border-radius: 0 0 6px 6px;
+    background: linear-gradient(90deg, transparent, var(--color-primary) 30%, var(--color-accent) 70%, transparent);
+    opacity: 0.85;
+  }
+
+  /* ---------- Buttons ---------- */
+  .cc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 600;
+    border-radius: 12px;
+    padding: 10px 18px;
+    font-size: 14.5px;
+    line-height: 1;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .cc-btn:active { transform: translateY(1px); }
+  .cc-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .cc-btn--primary {
+    background: linear-gradient(135deg, var(--green-500), var(--green-600));
+    color: #fff;
+    box-shadow: 0 8px 22px rgba(5, 179, 77, 0.3);
+  }
+  .cc-btn--primary:hover { box-shadow: 0 12px 30px rgba(5, 179, 77, 0.42); transform: translateY(-1px); }
+  .cc-btn--ghost {
+    background: transparent;
+    color: var(--color-text, #181F25);
+    border-color: var(--hairline);
+  }
+  .cc-btn--ghost:hover { border-color: var(--green-400); background: var(--surface-tint); }
+  .cc-btn--gold {
+    background: linear-gradient(135deg, var(--gold-500), var(--gold-600));
+    color: #231a02;
+    box-shadow: 0 8px 22px rgba(242, 185, 28, 0.28);
+  }
+  .cc-btn--gold:hover { transform: translateY(-1px); }
+
+  /* ---------- Inputs ---------- */
+  .cc-input {
+    width: 100%;
+    border: 1px solid var(--color-border, #E5E7EB);
+    background: var(--color-background, white);
+    color: var(--color-text, #181F25);
+    border-radius: 12px;
+    padding: 11px 14px;
+    font-size: 14.5px;
+    outline: none;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .cc-input:focus { border-color: var(--green-500); box-shadow: var(--ring-focus); }
+
+  /* ---------- Badges ---------- */
+  .cc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 4px 11px;
+  }
+  .cc-badge--green { background: rgba(5, 179, 77, 0.1); color: var(--green-700); border: 1px solid rgba(5, 179, 77, 0.25); }
+  .cc-badge--gold { background: rgba(242, 185, 28, 0.14); color: var(--gold-700); border: 1px solid rgba(242, 185, 28, 0.32); }
+  .cc-badge--neutral { background: var(--surface-tint); color: var(--color-text-secondary, #6B7280); border: 1px solid var(--hairline); }
+  .dark .cc-badge--green { color: var(--green-300); }
+  .dark .cc-badge--gold { color: var(--gold-300); }
+
+  /* ---------- Progress rail ---------- */
+  .cc-progress { height: 8px; border-radius: 999px; background: var(--surface-tint); overflow: hidden; }
+  .cc-progress > div {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--green-500), var(--green-400) 70%, var(--gold-500));
+    transition: width 0.4s ease;
+  }
+
+  /* ---------- Tables ---------- */
+  .cc-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; }
+  .cc-table thead th {
+    text-align: left;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary, #6B7280);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--hairline);
+    background: var(--surface-tint);
+  }
+  .cc-table thead th:first-child { border-radius: 10px 0 0 10px; }
+  .cc-table thead th:last-child { border-radius: 0 10px 10px 0; }
+  .cc-table tbody td { padding: 12px 14px; border-bottom: 1px solid var(--hairline); vertical-align: middle; }
+  .cc-table tbody tr:hover td { background: var(--surface-tint); }
+
+  /* ---------- KPI stat ---------- */
+  .cc-stat {
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    padding: 18px 20px;
+    background: linear-gradient(180deg, var(--surface-tint), transparent 60%), var(--color-background, white);
+    box-shadow: var(--shadow-xs);
+  }
+  .cc-stat-num {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  /* ---------- Page shell ---------- */
+  .cc-page { max-width: 1200px; margin: 0 auto; padding: 28px 20px 64px; }
+  .cc-page-title {
+    font-family: var(--font-display);
+    font-size: clamp(22px, 3vw, 30px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .cc-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--green-700);
+  }
+  .dark .cc-eyebrow { color: var(--green-300); }
+  .cc-eyebrow::before { content: ''; width: 24px; height: 2.5px; border-radius: 2px; background: linear-gradient(90deg, var(--green-500), var(--gold-500)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-card, .cc-btn { transition: none; }
+}
+/* SubhanaLLAH — end of Verdant Clinical extension */

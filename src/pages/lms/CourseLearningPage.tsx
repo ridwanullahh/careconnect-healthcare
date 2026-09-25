@@ -519,10 +519,11 @@ const CourseLearningPage: React.FC = () => {
       case ModuleType.VIDEO:
         return (
           <div className="space-y-6">
-            {currentLesson.content.video_url && (
-              <div className="aspect-video bg-black rounded-lg overflow-hidden">
+            {currentLesson.content.video_url ? (
+              <div className="aspect-video rounded-2xl overflow-hidden bg-[#0b1512] shadow-[var(--shadow-md)] ring-1 ring-[var(--hairline)]">
                 <video
                   controls
+                  playsInline
                   className="w-full h-full"
                   onEnded={handleLessonComplete}
                 >
@@ -530,9 +531,17 @@ const CourseLearningPage: React.FC = () => {
                   Your browser does not support the video tag.
                 </video>
               </div>
+            ) : (
+              <div className="aspect-video rounded-2xl bg-[var(--surface-tint)] border border-[var(--hairline)] flex flex-col items-center justify-center gap-3 text-[var(--color-text-secondary)]">
+                <div className="w-14 h-14 rounded-2xl bg-[var(--green-50)] flex items-center justify-center">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--green-600)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 3 20 12 6 21 6 3" /></svg>
+                </div>
+                <p className="text-sm font-medium">Video for this lesson is being prepared.</p>
+                <p className="text-xs">Read the lesson notes below — they cover the same material.</p>
+              </div>
             )}
             {currentLesson.content.text_content && (
-              <div className="prose max-w-none text-slate-700">
+              <div className="prose max-w-none text-[var(--color-text)]">
                 <div dangerouslySetInnerHTML={{ __html: currentLesson.content.text_content }} />
               </div>
             )}
@@ -546,7 +555,7 @@ const CourseLearningPage: React.FC = () => {
         return (
           <div className="space-y-6">
             {currentLesson.content.text_content && (
-              <div className="prose max-w-none text-slate-700">
+              <div className="prose max-w-none text-[var(--color-text)]">
                 <div dangerouslySetInnerHTML={{ __html: currentLesson.content.text_content }} />
               </div>
             )}
@@ -560,7 +569,7 @@ const CourseLearningPage: React.FC = () => {
         if (!quizData) {
           return (
             <Card>
-              <CardContent className="p-6 text-center text-slate-500">
+              <CardContent className="p-6 text-center text-[var(--color-text-secondary)]">
                 <AlertCircle className="w-8 h-8 mx-auto mb-2 text-amber-500" />
                 This quiz has no questions configured yet.
               </CardContent>
@@ -576,8 +585,8 @@ const CourseLearningPage: React.FC = () => {
           <div className="space-y-6">
             {/* Instructions */}
             <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
-              <h3 className="font-semibold text-teal-800 mb-1">Quiz Instructions</h3>
-              <p className="text-teal-700 text-sm">
+              <h3 className="font-semibold text-[var(--green-800)] mb-1">Quiz Instructions</h3>
+              <p className="text-[var(--green-700)] text-sm">
                 Answer all questions to complete this lesson. You need{' '}
                 <span className="font-semibold">{quizData.passing_score || 70}%</span> to pass.
                 {quizData.attempts_allowed
@@ -596,13 +605,13 @@ const CourseLearningPage: React.FC = () => {
                 <Card key={question.id}>
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between mb-4 gap-3">
-                      <h4 className="font-semibold text-lg text-slate-800">
+                      <h4 className="font-semibold text-lg text-[var(--color-text)]">
                         Question {index + 1}: {question.question}
                       </h4>
                       {quizSubmitted && result && (
                         <div className="flex-shrink-0">
                           {result.correct ? (
-                            <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                            <Badge className="bg-[var(--green-50)] text-[var(--green-700)] border border-[var(--green-200)] flex items-center gap-1">
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               Correct
                             </Badge>
@@ -616,7 +625,7 @@ const CourseLearningPage: React.FC = () => {
                       )}
                     </div>
 
-                    <p className="text-xs text-slate-500 mb-3">
+                    <p className="text-xs text-[var(--color-text-secondary)] mb-3">
                       {question.points} point{question.points === 1 ? '' : 's'} •{' '}
                       {question.type === 'multiple_choice'
                         ? multi
@@ -640,8 +649,8 @@ const CourseLearningPage: React.FC = () => {
                               key={optionIndex}
                               className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                                 isSelected
-                                  ? 'border-emerald-400 bg-emerald-50'
-                                  : 'border-slate-200 hover:border-emerald-300 hover:bg-slate-50'
+                                  ? 'border-[var(--green-400)] bg-[var(--surface-tint)]'
+                                  : 'border-[var(--hairline)] hover:border-[var(--green-300)] hover:bg-[var(--surface-tint)]'
                               } ${quizSubmitted ? 'cursor-default' : ''}`}
                             >
                               <input
@@ -657,22 +666,22 @@ const CourseLearningPage: React.FC = () => {
                                     handleQuizAnswerChange(question.id, option);
                                   }
                                 }}
-                                className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                                className="w-4 h-4 text-[var(--green-600)] focus:ring-emerald-500 border-[var(--hairline)]"
                               />
-                              <span className="text-slate-700">{option}</span>
+                              <span className="text-[var(--color-text)]">{option}</span>
                               {quizSubmitted && result && (
                                 <span className="ml-auto text-xs">
                                   {Array.isArray(question.correct_answer)
                                     ? (question.correct_answer as string[]).includes(option)
                                       ? (
-                                        <span className="text-emerald-700 font-medium flex items-center gap-1">
+                                        <span className="text-[var(--green-700)] font-medium flex items-center gap-1">
                                           <CheckCircle2 className="w-3.5 h-3.5" /> Correct answer
                                         </span>
                                       )
                                       : null
                                     : question.correct_answer === option
                                       ? (
-                                        <span className="text-emerald-700 font-medium flex items-center gap-1">
+                                        <span className="text-[var(--green-700)] font-medium flex items-center gap-1">
                                           <CheckCircle2 className="w-3.5 h-3.5" /> Correct answer
                                         </span>
                                       )
@@ -693,7 +702,7 @@ const CourseLearningPage: React.FC = () => {
                           Array.isArray(userAnswer) ? userAnswer.join(', ') : (userAnswer as string) || ''
                         }
                         onChange={(e) => handleQuizAnswerChange(question.id, e.target.value)}
-                        className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        className="w-full p-3 border border-[var(--hairline)] rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                         placeholder="Enter your answer..."
                       />
                     )}
@@ -701,8 +710,8 @@ const CourseLearningPage: React.FC = () => {
                     {quizSubmitted && result && (
                       <div className="mt-4 space-y-2">
                         {!result.correct && (
-                          <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
-                            <p className="text-sm text-emerald-800">
+                          <div className="p-3 bg-[var(--surface-tint)] rounded-lg border border-emerald-100">
+                            <p className="text-sm text-[var(--green-700)]">
                               <strong>Correct answer:</strong> {result.correctAnswer}
                             </p>
                             {result.userAnswer && (
@@ -713,8 +722,8 @@ const CourseLearningPage: React.FC = () => {
                           </div>
                         )}
                         {result.explanation && (
-                          <div className="p-3 bg-slate-50 rounded-lg">
-                            <p className="text-sm text-slate-600">
+                          <div className="p-3 bg-[var(--surface-tint)] rounded-lg">
+                            <p className="text-sm text-[var(--color-text-secondary)]">
                               <strong>Explanation:</strong> {result.explanation}
                             </p>
                           </div>
@@ -740,22 +749,22 @@ const CourseLearningPage: React.FC = () => {
                 <CardContent className="p-6">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                      <h3 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
+                      <h3 className="font-semibold text-[var(--color-text)] mb-1 flex items-center gap-2">
                         {quizPassed ? (
-                          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                          <CheckCircle2 className="w-5 h-5 text-[var(--green-600)]" />
                         ) : (
                           <XCircle className="w-5 h-5 text-rose-600" />
                         )}
                         Quiz Results
                       </h3>
-                      <p className="text-slate-700">
+                      <p className="text-[var(--color-text)]">
                         Your score:{' '}
                         <span className="font-semibold">{quizScore}%</span> (passing:{' '}
                         {quizData.passing_score || 70}%)
                       </p>
                       <p
                         className={`text-sm mt-1 ${
-                          quizPassed ? 'text-emerald-700' : 'text-rose-700'
+                          quizPassed ? 'text-[var(--green-700)]' : 'text-rose-700'
                         }`}
                       >
                         {quizPassed
@@ -780,9 +789,9 @@ const CourseLearningPage: React.FC = () => {
       case ModuleType.INTERACTIVE:
         return (
           <div className="space-y-6">
-            <div className="bg-slate-100 rounded-lg p-8 text-center">
-              <h3 className="text-lg font-semibold mb-2 text-slate-800">Interactive Content</h3>
-              <p className="text-slate-600">
+            <div className="bg-[var(--surface-sunken)] rounded-lg p-8 text-center">
+              <h3 className="text-lg font-semibold mb-2 text-[var(--color-text)]">Interactive Content</h3>
+              <p className="text-[var(--color-text-secondary)]">
                 Interactive content would be rendered here (3D models, simulations, etc.)
               </p>
             </div>
@@ -794,7 +803,7 @@ const CourseLearningPage: React.FC = () => {
 
       default:
         return (
-          <div className="text-center py-12 text-slate-500">
+          <div className="text-center py-12 text-[var(--color-text-secondary)]">
             Content type not supported
           </div>
         );
@@ -804,7 +813,7 @@ const CourseLearningPage: React.FC = () => {
   // ---- Render: gating ----
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--surface-sunken)] flex items-center justify-center">
         <LoadingSpinner size="lg" text="Loading lesson..." />
       </div>
     );
@@ -812,11 +821,11 @@ const CourseLearningPage: React.FC = () => {
 
   if (error || !course || !currentModule || !currentLesson) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--surface-sunken)] flex items-center justify-center">
         <div className="text-center max-w-md">
           <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-3" />
           <h2 className="text-2xl font-bold text-rose-600 mb-2">Error</h2>
-          <p className="text-slate-600 mb-4">{error || 'Content not found'}</p>
+          <p className="text-[var(--color-text-secondary)] mb-4">{error || 'Content not found'}</p>
           <Button variant="outline" onClick={() => navigate('/courses')}>
             Back to Courses
           </Button>
@@ -826,24 +835,24 @@ const CourseLearningPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex">
+    <div className="min-h-screen bg-[var(--surface-sunken)] flex">
       {/* Sidebar */}
       <div
-        className={`bg-white border-r border-slate-200 transition-all duration-300 ${
+        className={`bg-white border-r border-[var(--hairline)] transition-all duration-300 ${
           sidebarCollapsed ? 'w-0' : 'w-80'
         } overflow-hidden flex-shrink-0`}
       >
-        <div className="p-4 border-b border-slate-200">
-          <h2 className="font-semibold text-lg truncate text-slate-800">{course.title}</h2>
+        <div className="p-4 border-b border-[var(--hairline)]">
+          <h2 className="font-semibold text-lg truncate text-[var(--color-text)]">{course.title}</h2>
           {enrollment && (
             <div className="mt-2">
-              <div className="flex justify-between text-sm text-slate-600 mb-1">
+              <div className="flex justify-between text-sm text-[var(--color-text-secondary)] mb-1">
                 <span>Progress</span>
                 <span>{Math.round(enrollment.progress_percentage || 0)}%</span>
               </div>
               <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-emerald-500 h-2 rounded-full transition-all"
+                  className="bg-[var(--color-primary)] h-2 rounded-full transition-all"
                   style={{ width: `${Math.round(enrollment.progress_percentage || 0)}%` }}
                 />
               </div>
@@ -851,11 +860,11 @@ const CourseLearningPage: React.FC = () => {
           )}
         </div>
 
-        <div className="overflow-y-auto h-[calc(100vh-200px)] pb-4 max-h-[80vh] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-track]:bg-slate-100">
+        <div className="overflow-y-auto h-[calc(100vh-200px)] pb-4 max-h-[80vh] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-track]:bg-[var(--surface-sunken)]">
           {course.modules?.map((module, moduleIndex) => (
-            <div key={module.id} className="border-b border-slate-100">
-              <div className="p-4 bg-slate-50">
-                <h3 className="font-medium text-sm text-slate-800">
+            <div key={module.id} className="border-b border-[var(--hairline)]">
+              <div className="p-4 bg-[var(--surface-tint)]">
+                <h3 className="font-medium text-sm text-[var(--color-text)]">
                   Module {moduleIndex + 1}: {module.title}
                 </h3>
               </div>
@@ -870,9 +879,9 @@ const CourseLearningPage: React.FC = () => {
                     onClick={() =>
                       navigate(`/courses/${courseId}/learn/${module.id}/${lesson.id}`)
                     }
-                    className={`w-full text-left p-4 hover:bg-slate-50 transition-colors border-l-4 ${
+                    className={`w-full text-left p-4 hover:bg-[var(--surface-tint)] transition-colors border-l-4 ${
                       isActive
-                        ? 'bg-emerald-50 border-l-emerald-600 text-emerald-800'
+                        ? 'bg-[var(--surface-tint)] border-l-emerald-600 text-[var(--green-700)]'
                         : isCompleted
                           ? 'border-l-emerald-500'
                           : 'border-l-transparent'
@@ -883,17 +892,17 @@ const CourseLearningPage: React.FC = () => {
                         <div
                           className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${
                             isCompleted
-                              ? 'bg-emerald-500 text-white'
+                              ? 'bg-[var(--color-primary)] text-white'
                               : isActive
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-slate-200 text-slate-600'
+                                ? 'bg-[var(--color-primary)] text-white'
+                                : 'bg-slate-200 text-[var(--color-text-secondary)]'
                           }`}
                         >
                           {isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : lessonIndex + 1}
                         </div>
                         <div>
                           <div className="font-medium text-sm">{lesson.title}</div>
-                          <div className="text-xs text-slate-500 capitalize">
+                          <div className="text-xs text-[var(--color-text-secondary)] capitalize">
                             {lesson.type} • {lesson.estimated_duration} min
                           </div>
                         </div>
@@ -910,25 +919,25 @@ const CourseLearningPage: React.FC = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+        <div className="bg-white border-b border-[var(--hairline)] px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="p-2 hover:bg-slate-100 rounded-lg transition-colors flex-shrink-0"
+              className="p-2 hover:bg-[var(--surface-sunken)] rounded-lg transition-colors flex-shrink-0"
               aria-label="Toggle sidebar"
             >
-              <Menu className="w-5 h-5 text-slate-600" />
+              <Menu className="w-5 h-5 text-[var(--color-text-secondary)]" />
             </button>
 
             <div className="min-w-0">
-              <h1 className="text-lg sm:text-xl font-semibold text-slate-800 truncate">
+              <h1 className="text-lg sm:text-xl font-semibold text-[var(--color-text)] truncate">
                 {currentLesson.title}
               </h1>
-              <p className="text-sm text-slate-600 truncate">{currentModule.title}</p>
+              <p className="text-sm text-[var(--color-text-secondary)] truncate">{currentModule.title}</p>
             </div>
 
             {lessonCompleted && (
-              <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200 hidden sm:inline-flex items-center gap-1">
+              <Badge className="bg-[var(--green-50)] text-[var(--green-700)] border border-[var(--green-200)] hidden sm:inline-flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 Completed
               </Badge>
@@ -937,7 +946,7 @@ const CourseLearningPage: React.FC = () => {
 
           <button
             onClick={() => navigate(`/courses/${courseId}`)}
-            className="text-slate-600 hover:text-slate-800 transition-colors flex items-center gap-1.5 text-sm flex-shrink-0"
+            className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors flex items-center gap-1.5 text-sm flex-shrink-0"
           >
             <LogOut className="w-4 h-4" />
             <span className="hidden sm:inline">Exit Course</span>
@@ -946,8 +955,8 @@ const CourseLearningPage: React.FC = () => {
 
         {/* Certificate banner (course completed) */}
         {courseCompleted && certificateInfo && (
-          <div className="bg-emerald-50 border-b border-emerald-200 px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex items-center gap-2 text-emerald-800">
+          <div className="bg-[var(--surface-tint)] border-b border-[var(--green-200)] px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2 text-[var(--green-700)]">
               <Award className="w-5 h-5 flex-shrink-0" />
               <span className="text-sm font-medium">
                 Congratulations — you completed this course and earned a certificate.
@@ -956,7 +965,7 @@ const CourseLearningPage: React.FC = () => {
             <Button
               size="sm"
               variant="outline"
-              className="border-emerald-300 text-emerald-800 hover:bg-emerald-100 flex items-center gap-1.5 self-start sm:self-auto"
+              className="border-[var(--green-300)] text-[var(--green-700)] hover:bg-[var(--green-50)] flex items-center gap-1.5 self-start sm:self-auto"
               onClick={() => navigate(`/certificate/${certificateInfo.number}`)}
             >
               <Award className="w-4 h-4" />
@@ -969,7 +978,7 @@ const CourseLearningPage: React.FC = () => {
         <div className="flex-1 p-4 sm:p-6 overflow-y-auto">
           <div className="max-w-4xl mx-auto">
             {currentLesson.description && (
-              <p className="text-slate-600 mb-6">{currentLesson.description}</p>
+              <p className="text-[var(--color-text-secondary)] mb-6">{currentLesson.description}</p>
             )}
 
             {renderLessonContent()}
@@ -977,13 +986,13 @@ const CourseLearningPage: React.FC = () => {
         </div>
 
         {/* Navigation Footer */}
-        <div className="bg-white border-t border-slate-200 px-4 sm:px-6 py-4 flex justify-between items-center gap-3">
+        <div className="bg-white border-t border-[var(--hairline)] px-4 sm:px-6 py-4 flex justify-between items-center gap-3">
           <Button variant="outline" onClick={navigateToPreviousLesson} className="flex items-center gap-1.5">
             <ChevronLeft className="w-4 h-4" />
             <span className="hidden sm:inline">Previous</span>
           </Button>
 
-          <div className="text-sm text-slate-500">
+          <div className="text-sm text-[var(--color-text-secondary)]">
             Lesson {(currentModule.lessons?.findIndex((l) => l.id === lessonId) ?? 0) + 1} of{' '}
             {currentModule.lessons?.length ?? 0}
           </div>

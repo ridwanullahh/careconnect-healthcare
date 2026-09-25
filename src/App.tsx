@@ -242,6 +242,8 @@ function App() {
               <Route path="/health-tools/:toolId" element={<ToolDetailPage />} />
               <Route path="/courses" element={<CoursesPage />} />
               <Route path="/courses/create" element={<CourseCreationPage />} />
+              {/* BismiLLAH — edit-by-id route used after first save of a new course */}
+              <Route path="/courses/create/:courseId" element={<CourseCreationPage />} />
               <Route path="/courses/:courseId" element={<CourseDetailPage />} />
               <Route path="/courses/:courseId/learn/:moduleId/:lessonId" element={<CourseLearningPage />} />
               <Route path="/courses/:courseId/complete" element={<CourseCompletionPage />} />

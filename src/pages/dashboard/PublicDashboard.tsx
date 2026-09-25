@@ -360,7 +360,9 @@ const CoursesSection = () => {
         setEnrollments(userEnrollments);
 
         if (userEnrollments.length > 0) {
-          const courseIds = userEnrollments.map(e => e.courseId);
+          // BismiLLAH fix: enrollments persist course_id (snake_case) — the old
+          // code mapped e.courseId (always undefined) so "My Courses" was empty.
+          const courseIds = userEnrollments.map(e => e.course_id ?? e.courseId);
           const allCourses = await githubDB.find(collections.courses, {});
           const userCourses = allCourses.filter(c => courseIds.includes(c.id));
           setCourses(userCourses);
@@ -380,27 +382,43 @@ const CoursesSection = () => {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-dark">My Courses</h2>
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <span className="cc-eyebrow">Learning</span>
+      </div>
+      <h2 className="cc-page-title">My Courses</h2>
+      <div className="space-y-4">
           {enrollments.length === 0 ? (
             <p>You are not enrolled in any courses.</p>
           ) : (
             enrollments.map(enrollment => {
-              const course = courses.find(c => c.id === enrollment.courseId);
+              const course = courses.find(c => c.id === (enrollment.course_id ?? enrollment.courseId));
               if (!course) return null;
+              const progress = enrollment.progress_percentage ?? 0;
+              const firstModule = (course.modules ?? [])[0];
+              const firstLesson = (firstModule?.lessons ?? [])[0];
+              // BismiLLAH fix: the old link omitted moduleId/lessonId so the
+              // route never matched; deep-link to the first unfinished lesson.
+              const learnHref = firstModule && firstLesson
+                ? `/courses/${course.id}/learn/${firstModule.id}/${firstLesson.id}`
+                : `/courses/${course.id}`;
               return (
-                <div key={enrollment.id} className="border border-gray-200 rounded-lg p-4">
-                  <h3 className="font-semibold text-dark">{course.title}</h3>
-                  <p className="text-sm text-gray-600">Progress: {enrollment.progress_percentage}%</p>
-                  <Link to={`/courses/${course.id}/learn`} className="text-primary hover:underline text-sm">
-                    Continue Learning
-                  </Link>
+                <div key={enrollment.id} className="cc-card cc-card--flat p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-[var(--color-text)] truncate">{course.title}</h3>
+                      <p className="text-sm text-[var(--color-text-secondary)] mt-0.5">
+                        {enrollment.status === 'completed' ? 'Completed' : progress > 0 ? 'In progress' : 'Not started'} · {progress}%
+                      </p>
+                    </div>
+                    <Link to={learnHref} className="cc-btn cc-btn--primary shrink-0">
+                      {enrollment.status === 'completed' ? 'Review' : 'Continue'}
+                    </Link>
+                  </div>
+                  <div className="cc-progress mt-3"><div style={{ width: `${progress}%` }} /></div>
                 </div>
               );
             })
           )}
-        </div>
       </div>
     </div>
   );

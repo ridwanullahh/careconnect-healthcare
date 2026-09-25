@@ -90,7 +90,7 @@ const CourseCompletionPage = () => {
       <div className="min-h-screen bg-light flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-red-600 mb-4">Error</h2>
-          <p className="text-gray-600">{error || 'Course completion data not found'}</p>
+          <p className="text-[var(--color-text-secondary)]">{error || 'Course completion data not found'}</p>
           <button
             onClick={() => navigate('/courses')}
             className="mt-4 bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-colors"
@@ -107,19 +107,19 @@ const CourseCompletionPage = () => {
       <div className="container mx-auto px-4 py-12">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
-            <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="w-24 h-24 bg-[var(--color-primary)] rounded-full flex items-center justify-center mx-auto mb-6">
               <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             
-            <h1 className="text-4xl font-bold text-gray-800 mb-4">🎉 Congratulations! 🎉</h1>
-            <p className="text-xl text-gray-600 mb-2">You have successfully completed</p>
+            <h1 className="text-4xl font-bold text-[var(--color-text)] mb-4">🎉 Congratulations! 🎉</h1>
+            <p className="text-xl text-[var(--color-text-secondary)] mb-2">You have successfully completed</p>
             <h2 className="text-3xl font-bold text-primary mb-6">{course.title}</h2>
             
-            <div className="flex justify-center items-center gap-8 text-sm text-gray-600">
+            <div className="flex justify-center items-center gap-8 text-sm text-[var(--color-text-secondary)]">
               <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="w-5 h-5 text-[var(--green-500)]" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
                 <span>{enrollment.lessons_completed.length} Lessons Completed</span>
@@ -137,19 +137,19 @@ const CourseCompletionPage = () => {
           {course.provides_certificate && (
             <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
               <div className="text-center">
-                <h3 className="text-2xl font-bold text-gray-800 mb-4">Your Certificate of Completion</h3>
+                <h3 className="text-2xl font-bold text-[var(--color-text)] mb-4">Your Certificate of Completion</h3>
                 
                 {certificate ? (
                   <div className="space-y-4">
                     <div className="bg-gradient-to-r from-yellow-100 to-yellow-50 border-2 border-yellow-300 rounded-lg p-6">
                       <div className="text-center">
-                        <div className="text-lg font-semibold text-gray-800 mb-2">
+                        <div className="text-lg font-semibold text-[var(--color-text)] mb-2">
                           Certificate #{certificate.certificate_number}
                         </div>
-                        <div className="text-sm text-gray-600 mb-4">
+                        <div className="text-sm text-[var(--color-text-secondary)] mb-4">
                           Issued on {new Date(certificate.issued_date).toLocaleDateString()}
                         </div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm text-[var(--color-text-secondary)]">
                           Verification Code: {certificate.verification_code}
                         </div>
                       </div>
@@ -174,25 +174,25 @@ const CourseCompletionPage = () => {
           )}
 
           <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-            <h3 className="text-xl font-bold text-gray-800 mb-6">Course Summary</h3>
+            <h3 className="text-xl font-bold text-[var(--color-text)] mb-6">Course Summary</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h4 className="font-semibold text-gray-700 mb-3">What You Learned</h4>
+                <h4 className="font-semibold text-[var(--color-text)] mb-3">What You Learned</h4>
                 <ul className="space-y-2">
                   {course.learning_objectives?.slice(0, 4).map((objective, index) => (
                     <li key={index} className="flex items-start gap-2">
-                      <svg className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="w-5 h-5 text-[var(--green-500)] mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
-                      <span className="text-gray-600 text-sm">{objective}</span>
+                      <span className="text-[var(--color-text-secondary)] text-sm">{objective}</span>
                     </li>
                   ))}
                 </ul>
               </div>
               
               <div>
-                <h4 className="font-semibold text-gray-700 mb-3">Skills Gained</h4>
+                <h4 className="font-semibold text-[var(--color-text)] mb-3">Skills Gained</h4>
                 <div className="flex flex-wrap gap-2">
                   {course.skills_gained?.map((skill, index) => (
                     <span key={index} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
@@ -214,7 +214,7 @@ const CourseCompletionPage = () => {
             
             <button
               onClick={() => navigate('/courses')}
-              className="border border-gray-300 text-gray-700 px-8 py-3 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              className="border border-[var(--hairline)] text-[var(--color-text)] px-8 py-3 rounded-lg hover:bg-[var(--surface-sunken)] transition-colors font-medium"
             >
               Browse More Courses
             </button>

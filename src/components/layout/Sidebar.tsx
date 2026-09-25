@@ -147,14 +147,14 @@ const Sidebar: React.FC = () => {
 
       {/* Sidebar */}
       <div className={`
-        fixed left-0 top-16 bottom-0 bg-white border-r border-gray-200 overflow-y-auto z-40 transition-all duration-300
+        fixed left-0 top-16 bottom-0 bg-white border-r border-[var(--hairline)] overflow-y-auto z-40 transition-all duration-300
         ${isCollapsed ? 'w-16' : 'w-64'}
         ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         {/* Collapse Toggle Button (Desktop) */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="hidden lg:block absolute -right-3 top-6 bg-white border border-gray-200 rounded-full p-1 shadow-sm hover:shadow-md transition-shadow"
+          className="hidden lg:block absolute -right-3 top-6 bg-white border border-[var(--hairline)] rounded-full p-1 shadow-sm hover:shadow-md transition-shadow"
         >
           {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
@@ -171,7 +171,7 @@ const Sidebar: React.FC = () => {
                 <p className="text-sm font-medium text-dark truncate">
                   {user.profile ? `${user.profile.first_name} ${user.profile.last_name}` : user.email.split('@')[0]}
                 </p>
-                <p className="text-xs text-gray-500 capitalize">
+                <p className="text-xs text-[var(--color-text-secondary)] capitalize">
                   {user.user_type.replace('_', ' ')}
                 </p>
               </div>
@@ -189,7 +189,7 @@ const Sidebar: React.FC = () => {
             // Render headers differently
             if (item.isHeader) {
               return (
-                <div key={item.name} className={`px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide ${isCollapsed ? 'text-center' : ''}`}>
+                <div key={item.name} className={`px-3 py-2 text-xs font-semibold text-[var(--color-text-secondary)] opacity-70 uppercase tracking-wide ${isCollapsed ? 'text-center' : ''}`}>
                   {!isCollapsed && item.name}
                   {isCollapsed && <Icon className="w-4 h-4 mx-auto" />}
                 </div>
@@ -206,7 +206,7 @@ const Sidebar: React.FC = () => {
                 } ${
                   isActive
                     ? 'bg-primary text-white'
-                    : 'text-gray-700 hover:bg-light hover:text-primary'
+                    : 'text-[var(--color-text)] hover:bg-light hover:text-primary'
                 }`}
                 title={isCollapsed ? item.name : ''}
               >
@@ -225,9 +225,9 @@ const Sidebar: React.FC = () => {
         </nav>
 
         {/* Quick Actions */}
-        <div className="mt-8 pt-6 border-t border-gray-200">
+        <div className="mt-8 pt-6 border-t border-[var(--hairline)]">
           {!isCollapsed && (
-            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            <h4 className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-3">
               Quick Actions
             </h4>
           )}
@@ -236,7 +236,7 @@ const Sidebar: React.FC = () => {
               <>
                 <Link
                   to="/directory"
-                  className={`flex items-center px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-light hover:text-primary group relative ${
+                  className={`flex items-center px-3 py-2 rounded-lg text-sm text-[var(--color-text)] hover:bg-light hover:text-primary group relative ${
                     isCollapsed ? 'justify-center' : 'space-x-3'
                   }`}
                   title={isCollapsed ? 'Book Appointment' : ''}
@@ -251,7 +251,7 @@ const Sidebar: React.FC = () => {
                 </Link>
                 <Link
                   to="/health-tools"
-                  className={`flex items-center px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-light hover:text-primary group relative ${
+                  className={`flex items-center px-3 py-2 rounded-lg text-sm text-[var(--color-text)] hover:bg-light hover:text-primary group relative ${
                     isCollapsed ? 'justify-center' : 'space-x-3'
                   }`}
                   title={isCollapsed ? 'Health Check' : ''}
@@ -269,14 +269,14 @@ const Sidebar: React.FC = () => {
               <>
                 <Link
                   to="/admin/services/new"
-                  className="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-light hover:text-primary"
+                  className="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm text-[var(--color-text)] hover:bg-light hover:text-primary"
                 >
                   <Calendar className="w-4 h-4" />
                   <span>Add Service</span>
                 </Link>
                 <Link
                   to="/admin/analytics"
-                  className="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-light hover:text-primary"
+                  className="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm text-[var(--color-text)] hover:bg-light hover:text-primary"
                 >
                   <BarChart3 className="w-4 h-4" />
                   <span>View Analytics</span>
@@ -287,10 +287,10 @@ const Sidebar: React.FC = () => {
         </div>
 
         {/* Help & Support */}
-        <div className="mt-8 pt-6 border-t border-gray-200">
+        <div className="mt-8 pt-6 border-t border-[var(--hairline)]">
           <Link
             to="/help"
-            className={`flex items-center px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-light hover:text-primary group relative ${
+            className={`flex items-center px-3 py-2 rounded-lg text-sm text-[var(--color-text)] hover:bg-light hover:text-primary group relative ${
               isCollapsed ? 'justify-center' : 'space-x-3'
             }`}
             title={isCollapsed ? 'Help & Support' : ''}
@@ -305,7 +305,7 @@ const Sidebar: React.FC = () => {
           </Link>
           
           {/* Notification Center */}
-          <button className={`w-full flex items-center px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-light hover:text-primary mt-1 group relative ${
+          <button className={`w-full flex items-center px-3 py-2 rounded-lg text-sm text-[var(--color-text)] hover:bg-light hover:text-primary mt-1 group relative ${
             isCollapsed ? 'justify-center' : 'space-x-3'
           }`}
           title={isCollapsed ? 'Notifications' : ''}

@@ -78,10 +78,10 @@ const CertificatePage: React.FC = () => {
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
             <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-3" />
-            <h1 className="text-xl font-semibold text-slate-800 mb-2">
+            <h1 className="text-xl font-semibold text-[var(--color-text)] mb-2">
               Certificate Unavailable
             </h1>
-            <p className="text-slate-600 mb-5">{error || 'Certificate not found.'}</p>
+            <p className="text-[var(--color-text-secondary)] mb-5">{error || 'Certificate not found.'}</p>
             <Button onClick={() => navigate('/courses')} className="inline-flex items-center gap-1.5">
               <ArrowLeft className="w-4 h-4" />
               Back to Courses
@@ -126,7 +126,7 @@ const CertificatePage: React.FC = () => {
         <Button
           variant="ghost"
           onClick={() => navigate(-1)}
-          className="self-start text-slate-600 hover:text-slate-800 inline-flex items-center gap-1.5"
+          className="self-start text-[var(--color-text-secondary)] hover:text-[var(--color-text)] inline-flex items-center gap-1.5"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
@@ -143,61 +143,61 @@ const CertificatePage: React.FC = () => {
           {/* Header */}
           <div className="text-center border-b-2 border-teal-200 pb-6 mb-8">
             <div className="flex items-center justify-center gap-2 mb-3">
-              <Award className="w-6 h-6 text-emerald-700" />
-              <span className="text-emerald-700 text-xs sm:text-sm uppercase tracking-widest font-semibold">
+              <Award className="w-6 h-6 text-[var(--green-700)]" />
+              <span className="text-[var(--green-700)] text-xs sm:text-sm uppercase tracking-widest font-semibold">
                 {organizationName}
               </span>
             </div>
-            <h1 className="text-2xl sm:text-4xl font-bold text-slate-800 tracking-tight">
+            <h1 className="text-2xl sm:text-4xl font-bold text-[var(--color-text)] tracking-tight">
               Certificate of Completion
             </h1>
-            <p className="text-slate-500 text-xs sm:text-sm mt-2">
+            <p className="text-[var(--color-text-secondary)] text-xs sm:text-sm mt-2">
               This certifies that the holder has successfully completed the requirements of the course below.
             </p>
           </div>
 
           {/* Body */}
           <div className="text-center">
-            <p className="text-slate-500 text-xs sm:text-sm uppercase tracking-wide mb-2">
+            <p className="text-[var(--color-text-secondary)] text-xs sm:text-sm uppercase tracking-wide mb-2">
               This is to certify that
             </p>
-            <p className="text-2xl sm:text-3xl font-serif italic text-emerald-800 mb-6 inline-block border-b-2 border-emerald-300 pb-2 px-4 sm:px-8">
+            <p className="text-2xl sm:text-3xl font-serif italic text-[var(--green-700)] mb-6 inline-block border-b-2 border-[var(--green-300)] pb-2 px-4 sm:px-8">
               {recipientName}
             </p>
-            <p className="text-slate-500 text-xs sm:text-sm uppercase tracking-wide mb-2">
+            <p className="text-[var(--color-text-secondary)] text-xs sm:text-sm uppercase tracking-wide mb-2">
               has successfully completed
             </p>
-            <p className="text-xl sm:text-2xl font-semibold text-slate-800 mb-8 px-2">
+            <p className="text-xl sm:text-2xl font-semibold text-[var(--color-text)] mb-8 px-2">
               {courseTitle}
             </p>
 
             {/* Detail grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 text-sm mt-10 sm:mt-12">
-              <div className="border-t border-slate-200 pt-3">
-                <p className="text-slate-500 uppercase tracking-wide text-xs mb-1">
+              <div className="border-t border-[var(--hairline)] pt-3">
+                <p className="text-[var(--color-text-secondary)] uppercase tracking-wide text-xs mb-1">
                   Completion Date
                 </p>
-                <p className="font-semibold text-slate-700">{formattedIssued}</p>
+                <p className="font-semibold text-[var(--color-text)]">{formattedIssued}</p>
               </div>
-              <div className="border-t border-slate-200 pt-3">
-                <p className="text-slate-500 uppercase tracking-wide text-xs mb-1">
+              <div className="border-t border-[var(--hairline)] pt-3">
+                <p className="text-[var(--color-text-secondary)] uppercase tracking-wide text-xs mb-1">
                   Instructor
                 </p>
-                <p className="font-semibold text-slate-700">{instructorName}</p>
+                <p className="font-semibold text-[var(--color-text)]">{instructorName}</p>
               </div>
-              <div className="border-t border-slate-200 pt-3">
-                <p className="text-slate-500 uppercase tracking-wide text-xs mb-1">
+              <div className="border-t border-[var(--hairline)] pt-3">
+                <p className="text-[var(--color-text-secondary)] uppercase tracking-wide text-xs mb-1">
                   Verification Code
                 </p>
-                <p className="font-semibold text-slate-700 font-mono break-all">
+                <p className="font-semibold text-[var(--color-text)] font-mono break-all">
                   {verificationCode}
                 </p>
               </div>
             </div>
 
             {score !== null && (
-              <div className="mt-8 inline-block bg-emerald-50 border border-emerald-200 rounded-full px-5 py-2">
-                <p className="text-sm text-emerald-800">
+              <div className="mt-8 inline-block bg-[var(--surface-tint)] border border-[var(--green-200)] rounded-full px-5 py-2">
+                <p className="text-sm text-[var(--green-700)]">
                   Final Score: <span className="font-semibold">{score}%</span>
                 </p>
               </div>
@@ -205,25 +205,25 @@ const CertificatePage: React.FC = () => {
           </div>
 
           {/* Footer */}
-          <div className="border-t-2 border-teal-200 mt-10 sm:mt-12 pt-6 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 text-xs text-slate-500">
+          <div className="border-t-2 border-teal-200 mt-10 sm:mt-12 pt-6 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 text-xs text-[var(--color-text-secondary)]">
             <div className="space-y-1">
               <p>
                 Certificate Number:{' '}
-                <span className="font-mono text-slate-700 break-all">{certificateNumber}</span>
+                <span className="font-mono text-[var(--color-text)] break-all">{certificateNumber}</span>
               </p>
               {formattedExpiry && (
                 <p>
                   Valid until:{' '}
-                  <span className="font-semibold text-slate-700">{formattedExpiry}</span>
+                  <span className="font-semibold text-[var(--color-text)]">{formattedExpiry}</span>
                 </p>
               )}
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-[var(--color-text-secondary)] opacity-70">
                 Verify online: {typeof window !== 'undefined' ? window.location.origin : ''}/certificate/{certificateNumber}
               </p>
             </div>
             <div className="text-center sm:text-right">
               <div className="w-40 border-t border-slate-400 mx-auto sm:ml-auto mb-1" />
-              <p className="font-semibold text-emerald-700">{organizationName}</p>
+              <p className="font-semibold text-[var(--green-700)]">{organizationName}</p>
               <p>Authorized Signature</p>
             </div>
           </div>
@@ -235,14 +235,14 @@ const CertificatePage: React.FC = () => {
             <div className="flex items-start gap-3">
               <ShieldCheck
                 className={`w-6 h-6 flex-shrink-0 mt-0.5 ${
-                  isVerified ? 'text-emerald-600' : 'text-amber-500'
+                  isVerified ? 'text-[var(--green-600)]' : 'text-amber-500'
                 }`}
               />
               <div>
-                <p className="font-semibold text-slate-800">
+                <p className="font-semibold text-[var(--color-text)]">
                   {isVerified ? 'Verified Certificate' : 'Verification Pending'}
                 </p>
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-[var(--color-text-secondary)]">
                   This certificate was issued electronically by {organizationName} and is valid
                   without a physical signature. To verify authenticity, share the certificate
                   number or verification code with the issuing organization.

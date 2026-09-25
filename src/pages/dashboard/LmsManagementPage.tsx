@@ -435,7 +435,7 @@ const LmsManagementPage: React.FC = () => {
   const getStatusBadge = (status: CourseStatus) => {
     const map: Record<CourseStatus, { className: string; label: string }> = {
       [CourseStatus.DRAFT]: {
-        className: 'bg-slate-100 text-slate-700 border border-slate-200',
+        className: 'bg-[var(--surface-sunken)] text-[var(--color-text)] border border-[var(--hairline)]',
         label: 'Draft',
       },
       [CourseStatus.UNDER_REVIEW]: {
@@ -443,7 +443,7 @@ const LmsManagementPage: React.FC = () => {
         label: 'Under Review',
       },
       [CourseStatus.PUBLISHED]: {
-        className: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+        className: 'bg-[var(--green-50)] text-[var(--green-700)] border border-[var(--green-200)]',
         label: 'Published',
       },
       [CourseStatus.ARCHIVED]: {
@@ -462,11 +462,11 @@ const LmsManagementPage: React.FC = () => {
   const getEnrollmentStatusBadge = (status: EnrollmentStatus) => {
     const map: Record<EnrollmentStatus, { className: string; label: string }> = {
       [EnrollmentStatus.ACTIVE]: {
-        className: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+        className: 'bg-[var(--green-50)] text-[var(--green-700)] border border-[var(--green-200)]',
         label: 'Active',
       },
       [EnrollmentStatus.COMPLETED]: {
-        className: 'bg-teal-100 text-teal-800 border border-teal-200',
+        className: 'bg-teal-100 text-[var(--green-800)] border border-teal-200',
         label: 'Completed',
       },
       [EnrollmentStatus.DROPPED]: {
@@ -505,7 +505,7 @@ const LmsManagementPage: React.FC = () => {
         <Card>
           <CardContent className="p-6 text-center">
             <AlertCircle className="w-10 h-10 text-rose-500 mx-auto mb-3" />
-            <p className="text-slate-700 mb-4">{loadError}</p>
+            <p className="text-[var(--color-text)] mb-4">{loadError}</p>
             <Button onClick={loadCourses}>Retry</Button>
           </CardContent>
         </Card>
@@ -524,8 +524,8 @@ const LmsManagementPage: React.FC = () => {
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">LMS Management</h1>
-          <p className="text-slate-600 mt-2">
+          <h1 className="text-3xl font-bold text-[var(--color-text)]">LMS Management</h1>
+          <p className="text-[var(--color-text-secondary)] mt-2">
             Manage your courses, students, and learning content
           </p>
         </div>
@@ -533,7 +533,7 @@ const LmsManagementPage: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-slate-200 mb-8">
+      <div className="border-b border-[var(--hairline)] mb-8">
         <nav className="flex flex-wrap space-x-6">
           {tabs.map((tab) => (
             <button
@@ -541,14 +541,14 @@ const LmsManagementPage: React.FC = () => {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === tab.id
-                  ? 'border-emerald-600 text-emerald-700'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
+                  ? 'border-emerald-600 text-[var(--green-700)]'
+                  : 'border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]'
               }`}
             >
               {tab.icon}
               {tab.label}
               {tab.count !== undefined && (
-                <span className="ml-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full text-xs">
+                <span className="ml-1 bg-[var(--surface-sunken)] text-[var(--color-text)] px-2 py-0.5 rounded-full text-xs">
                   {tab.count}
                 </span>
               )}
@@ -564,11 +564,11 @@ const LmsManagementPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardContent className="p-5 flex items-center gap-4">
-                <div className="p-3 rounded-full bg-emerald-100">
-                  <BookOpen className="w-6 h-6 text-emerald-700" />
+                <div className="p-3 rounded-full bg-[var(--green-50)]">
+                  <BookOpen className="w-6 h-6 text-[var(--green-700)]" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-600">Total Courses</p>
+                  <p className="text-sm font-medium text-[var(--color-text-secondary)]">Total Courses</p>
                   <p className="text-2xl font-semibold text-slate-900">{courses.length}</p>
                 </div>
               </CardContent>
@@ -576,10 +576,10 @@ const LmsManagementPage: React.FC = () => {
             <Card>
               <CardContent className="p-5 flex items-center gap-4">
                 <div className="p-3 rounded-full bg-teal-100">
-                  <CheckCircle2 className="w-6 h-6 text-teal-700" />
+                  <CheckCircle2 className="w-6 h-6 text-[var(--green-700)]" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-600">Published</p>
+                  <p className="text-sm font-medium text-[var(--color-text-secondary)]">Published</p>
                   <p className="text-2xl font-semibold text-slate-900">
                     {courses.filter((c) => c.status === CourseStatus.PUBLISHED).length}
                   </p>
@@ -592,7 +592,7 @@ const LmsManagementPage: React.FC = () => {
                   <Clock className="w-6 h-6 text-amber-700" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-600">Draft</p>
+                  <p className="text-sm font-medium text-[var(--color-text-secondary)]">Draft</p>
                   <p className="text-2xl font-semibold text-slate-900">
                     {courses.filter((c) => c.status === CourseStatus.DRAFT).length}
                   </p>
@@ -601,11 +601,11 @@ const LmsManagementPage: React.FC = () => {
             </Card>
             <Card>
               <CardContent className="p-5 flex items-center gap-4">
-                <div className="p-3 rounded-full bg-slate-100">
-                  <Users className="w-6 h-6 text-slate-700" />
+                <div className="p-3 rounded-full bg-[var(--surface-sunken)]">
+                  <Users className="w-6 h-6 text-[var(--color-text)]" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-600">Total Students</p>
+                  <p className="text-sm font-medium text-[var(--color-text-secondary)]">Total Students</p>
                   <p className="text-2xl font-semibold text-slate-900">
                     {courses.reduce((sum, course) => sum + (course.enrolled_count || 0), 0)}
                   </p>
@@ -621,45 +621,45 @@ const LmsManagementPage: React.FC = () => {
             </CardHeader>
             <CardContent className="p-0">
               {courses.length === 0 ? (
-                <div className="p-10 text-center text-slate-500">
-                  <BookOpen className="w-10 h-10 mx-auto mb-3 text-slate-400" />
+                <div className="p-10 text-center text-[var(--color-text-secondary)]">
+                  <BookOpen className="w-10 h-10 mx-auto mb-3 text-[var(--color-text-secondary)] opacity-70" />
                   No courses found. Click "Create New Course" to get started.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
+                    <thead className="bg-[var(--surface-tint)]">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                           Course
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                           Status
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                           Students
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                           Revenue
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-200">
                       {courses.map((course) => (
-                        <tr key={course.id} className="hover:bg-slate-50">
+                        <tr key={course.id} className="hover:bg-[var(--surface-tint)]">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
-                              <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                              <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-[var(--surface-sunken)] flex items-center justify-center text-[var(--color-text-secondary)]">
                                 <BookOpen className="w-5 h-5" />
                               </div>
                               <div className="ml-3">
                                 <div className="text-sm font-medium text-slate-900">
                                   {course.title}
                                 </div>
-                                <div className="text-sm text-slate-500">
+                                <div className="text-sm text-[var(--color-text-secondary)]">
                                   {course.category} • {course.level}
                                 </div>
                               </div>
@@ -680,20 +680,20 @@ const LmsManagementPage: React.FC = () => {
                             <div className="flex flex-wrap gap-3">
                               <button
                                 onClick={() => handleViewCourse(course)}
-                                className="text-emerald-700 hover:text-emerald-900"
+                                className="text-[var(--green-700)] hover:text-emerald-900"
                               >
                                 View
                               </button>
                               <button
                                 onClick={() => handleEditCourse(course)}
-                                className="text-teal-700 hover:text-teal-900"
+                                className="text-[var(--green-700)] hover:text-teal-900"
                               >
                                 Edit
                               </button>
                               {course.status === CourseStatus.DRAFT && (
                                 <button
                                   onClick={() => handlePublishCourse(course.id)}
-                                  className="text-emerald-700 hover:text-emerald-900"
+                                  className="text-[var(--green-700)] hover:text-emerald-900"
                                 >
                                   Publish
                                 </button>
@@ -723,7 +723,7 @@ const LmsManagementPage: React.FC = () => {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
-                <Users className="w-5 h-5 text-emerald-700" />
+                <Users className="w-5 h-5 text-[var(--green-700)]" />
                 Student Management
               </CardTitle>
             </CardHeader>
@@ -757,15 +757,15 @@ const LmsManagementPage: React.FC = () => {
                   </Button>
                 </div>
               ) : !studentCourseId ? (
-                <div className="p-10 text-center text-slate-500">
+                <div className="p-10 text-center text-[var(--color-text-secondary)]">
                   Select a course above to view enrolled students.
                 </div>
               ) : enrollments.length === 0 ? (
-                <div className="p-10 text-center text-slate-500">
-                  <Users className="w-10 h-10 mx-auto mb-3 text-slate-400" />
+                <div className="p-10 text-center text-[var(--color-text-secondary)]">
+                  <Users className="w-10 h-10 mx-auto mb-3 text-[var(--color-text-secondary)] opacity-70" />
                   No students are currently enrolled in
                   {selectedCourseForStudents ? (
-                    <span className="font-medium text-slate-700">
+                    <span className="font-medium text-[var(--color-text)]">
                       {' '}
                       "{selectedCourseForStudents.title}"
                     </span>
@@ -775,26 +775,26 @@ const LmsManagementPage: React.FC = () => {
                   .
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <div className="overflow-x-auto rounded-lg border border-[var(--hairline)]">
                   <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
+                    <thead className="bg-[var(--surface-tint)]">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                           Student
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                           Course
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                           Progress
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                           Status
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                           Enrolled
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                           Completed
                         </th>
                       </tr>
@@ -808,10 +808,10 @@ const LmsManagementPage: React.FC = () => {
                         const progress = Math.round(enr.progress_percentage || 0);
                         const course = courses.find((c) => c.id === enr.course_id);
                         return (
-                          <tr key={enr.id} className="hover:bg-slate-50">
+                          <tr key={enr.id} className="hover:bg-[var(--surface-tint)]">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm font-medium">
+                                <div className="w-9 h-9 rounded-full bg-[var(--green-50)] text-[var(--green-700)] flex items-center justify-center text-sm font-medium">
                                   {studentName.charAt(0).toUpperCase()}
                                 </div>
                                 <div className="text-sm font-medium text-slate-900">
@@ -819,18 +819,18 @@ const LmsManagementPage: React.FC = () => {
                                 </div>
                               </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--color-text)]">
                               {course?.title || `Course #${enr.course_id}`}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-2 min-w-[140px]">
                                 <div className="flex-1 bg-slate-200 rounded-full h-2 overflow-hidden">
                                   <div
-                                    className="bg-emerald-500 h-2 rounded-full"
+                                    className="bg-[var(--color-primary)] h-2 rounded-full"
                                     style={{ width: `${progress}%` }}
                                   />
                                 </div>
-                                <span className="text-xs font-medium text-slate-700 w-9 text-right">
+                                <span className="text-xs font-medium text-[var(--color-text)] w-9 text-right">
                                   {progress}%
                                 </span>
                               </div>
@@ -838,12 +838,12 @@ const LmsManagementPage: React.FC = () => {
                             <td className="px-6 py-4 whitespace-nowrap">
                               {getEnrollmentStatusBadge(enr.status)}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--color-text)]">
                               {enr.enrolled_at
                                 ? new Date(enr.enrolled_at).toLocaleDateString()
                                 : '-'}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--color-text)]">
                               {enr.completed_at
                                 ? new Date(enr.completed_at).toLocaleDateString()
                                 : '-'}
@@ -885,11 +885,11 @@ const LmsManagementPage: React.FC = () => {
                 <Card>
                   <CardContent className="p-5">
                     <div className="flex items-center justify-between mb-1">
-                      <p className="text-sm font-medium text-slate-600">Total Courses</p>
-                      <BookOpen className="w-5 h-5 text-emerald-600" />
+                      <p className="text-sm font-medium text-[var(--color-text-secondary)]">Total Courses</p>
+                      <BookOpen className="w-5 h-5 text-[var(--green-600)]" />
                     </div>
                     <p className="text-3xl font-bold text-slate-900">{analytics.totalCourses}</p>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-xs text-[var(--color-text-secondary)] mt-1">
                       {analytics.publishedCourses} published • {analytics.draftCourses} draft
                     </p>
                   </CardContent>
@@ -897,13 +897,13 @@ const LmsManagementPage: React.FC = () => {
                 <Card>
                   <CardContent className="p-5">
                     <div className="flex items-center justify-between mb-1">
-                      <p className="text-sm font-medium text-slate-600">Total Enrollments</p>
+                      <p className="text-sm font-medium text-[var(--color-text-secondary)]">Total Enrollments</p>
                       <Users className="w-5 h-5 text-teal-600" />
                     </div>
                     <p className="text-3xl font-bold text-slate-900">
                       {analytics.totalEnrollments}
                     </p>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-xs text-[var(--color-text-secondary)] mt-1">
                       {analytics.activeEnrollments} active
                     </p>
                   </CardContent>
@@ -911,13 +911,13 @@ const LmsManagementPage: React.FC = () => {
                 <Card>
                   <CardContent className="p-5">
                     <div className="flex items-center justify-between mb-1">
-                      <p className="text-sm font-medium text-slate-600">Completion Rate</p>
-                      <Award className="w-5 h-5 text-emerald-600" />
+                      <p className="text-sm font-medium text-[var(--color-text-secondary)]">Completion Rate</p>
+                      <Award className="w-5 h-5 text-[var(--green-600)]" />
                     </div>
                     <p className="text-3xl font-bold text-slate-900">
                       {analytics.completionRate}%
                     </p>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-xs text-[var(--color-text-secondary)] mt-1">
                       {analytics.completedEnrollments} of {analytics.totalEnrollments} completed
                     </p>
                   </CardContent>
@@ -925,11 +925,11 @@ const LmsManagementPage: React.FC = () => {
                 <Card>
                   <CardContent className="p-5">
                     <div className="flex items-center justify-between mb-1">
-                      <p className="text-sm font-medium text-slate-600">Avg. Progress</p>
+                      <p className="text-sm font-medium text-[var(--color-text-secondary)]">Avg. Progress</p>
                       <TrendingUp className="w-5 h-5 text-teal-600" />
                     </div>
                     <p className="text-3xl font-bold text-slate-900">{analytics.averageProgress}%</p>
-                    <p className="text-xs text-slate-500 mt-1">Across all enrollments</p>
+                    <p className="text-xs text-[var(--color-text-secondary)] mt-1">Across all enrollments</p>
                   </CardContent>
                 </Card>
               </div>
@@ -937,17 +937,17 @@ const LmsManagementPage: React.FC = () => {
               {analytics.mostPopularCourse && (
                 <Card>
                   <CardContent className="p-5 flex items-center gap-4">
-                    <div className="p-3 rounded-full bg-emerald-100">
-                      <Award className="w-6 h-6 text-emerald-700" />
+                    <div className="p-3 rounded-full bg-[var(--green-50)]">
+                      <Award className="w-6 h-6 text-[var(--green-700)]" />
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      <p className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
                         Most Popular Course
                       </p>
                       <p className="text-lg font-semibold text-slate-900">
                         {analytics.mostPopularCourse.title}
                       </p>
-                      <p className="text-sm text-slate-600">
+                      <p className="text-sm text-[var(--color-text-secondary)]">
                         {analytics.mostPopularCourse.enrollments} enrollment
                         {analytics.mostPopularCourse.enrollments === 1 ? '' : 's'}
                       </p>
@@ -962,49 +962,49 @@ const LmsManagementPage: React.FC = () => {
                 </CardHeader>
                 <CardContent className="p-0">
                   {analytics.courseBreakdown.length === 0 ? (
-                    <div className="p-10 text-center text-slate-500">
+                    <div className="p-10 text-center text-[var(--color-text-secondary)]">
                       No course data available yet.
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200">
-                        <thead className="bg-slate-50">
+                        <thead className="bg-[var(--surface-tint)]">
                           <tr>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                               Course
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                               Enrollments
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                               Completions
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                               Completion Rate
                             </th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
                           {analytics.courseBreakdown.map((row) => (
-                            <tr key={row.id} className="hover:bg-slate-50">
+                            <tr key={row.id} className="hover:bg-[var(--surface-tint)]">
                               <td className="px-6 py-4 text-sm font-medium text-slate-900">
                                 {row.title}
                               </td>
-                              <td className="px-6 py-4 text-sm text-slate-700">
+                              <td className="px-6 py-4 text-sm text-[var(--color-text)]">
                                 {row.enrollments}
                               </td>
-                              <td className="px-6 py-4 text-sm text-slate-700">
+                              <td className="px-6 py-4 text-sm text-[var(--color-text)]">
                                 {row.completions}
                               </td>
-                              <td className="px-6 py-4 text-sm text-slate-700">
+                              <td className="px-6 py-4 text-sm text-[var(--color-text)]">
                                 <div className="flex items-center gap-2">
                                   <div className="w-24 bg-slate-200 rounded-full h-2 overflow-hidden">
                                     <div
-                                      className="bg-emerald-500 h-2 rounded-full"
+                                      className="bg-[var(--color-primary)] h-2 rounded-full"
                                       style={{ width: `${row.completionRate}%` }}
                                     />
                                   </div>
-                                  <span className="text-xs font-medium text-slate-700">
+                                  <span className="text-xs font-medium text-[var(--color-text)]">
                                     {row.completionRate}%
                                   </span>
                                 </div>
@@ -1043,8 +1043,8 @@ const LmsManagementPage: React.FC = () => {
             </Card>
           ) : contentData.length === 0 ? (
             <Card>
-              <CardContent className="p-10 text-center text-slate-500">
-                <Library className="w-10 h-10 mx-auto mb-3 text-slate-400" />
+              <CardContent className="p-10 text-center text-[var(--color-text-secondary)]">
+                <Library className="w-10 h-10 mx-auto mb-3 text-[var(--color-text-secondary)] opacity-70" />
                 No content available. Create a course to get started.
               </CardContent>
             </Card>
@@ -1058,10 +1058,10 @@ const LmsManagementPage: React.FC = () => {
                         <CardTitle className="text-lg">{course.title}</CardTitle>
                         {getStatusBadge(course.status)}
                       </div>
-                      <p className="text-sm text-slate-600">
+                      <p className="text-sm text-[var(--color-text-secondary)]">
                         {course.category} • {course.level}
                       </p>
-                      <div className="flex flex-wrap gap-2 mt-2 text-xs text-slate-500">
+                      <div className="flex flex-wrap gap-2 mt-2 text-xs text-[var(--color-text-secondary)]">
                         <Badge variant="secondary">
                           {modules.length} module{modules.length === 1 ? '' : 's'}
                         </Badge>
@@ -1088,26 +1088,26 @@ const LmsManagementPage: React.FC = () => {
                 </CardHeader>
                 <CardContent>
                   {modules.length === 0 ? (
-                    <p className="text-sm text-slate-500 italic">
+                    <p className="text-sm text-[var(--color-text-secondary)] italic">
                       No modules have been added to this course yet.
                     </p>
                   ) : (
-                    <div className="space-y-3 max-h-96 overflow-y-auto pr-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-track]:bg-slate-100">
+                    <div className="space-y-3 max-h-96 overflow-y-auto pr-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-track]:bg-[var(--surface-sunken)]">
                       {modules.map(({ module, lessons }) => (
                         <div
                           key={module.id}
-                          className="border border-slate-200 rounded-lg p-4 bg-slate-50"
+                          className="border border-[var(--hairline)] rounded-lg p-4 bg-[var(--surface-tint)]"
                         >
                           <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-semibold text-slate-800 text-sm">
+                            <h4 className="font-semibold text-[var(--color-text)] text-sm">
                               Module {module.order || 0}: {module.title}
                             </h4>
-                            <span className="text-xs text-slate-500">
+                            <span className="text-xs text-[var(--color-text-secondary)]">
                               {lessons.length} lesson{lessons.length === 1 ? '' : 's'}
                             </span>
                           </div>
                           {lessons.length === 0 ? (
-                            <p className="text-xs text-slate-500 italic">
+                            <p className="text-xs text-[var(--color-text-secondary)] italic">
                               No lessons in this module.
                             </p>
                           ) : (
@@ -1115,17 +1115,17 @@ const LmsManagementPage: React.FC = () => {
                               {lessons.map((lesson) => (
                                 <li
                                   key={lesson.id}
-                                  className="flex items-center gap-2 text-sm text-slate-700"
+                                  className="flex items-center gap-2 text-sm text-[var(--color-text)]"
                                 >
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] flex-shrink-0" />
                                   <span className="flex-1">{lesson.title}</span>
                                   <Badge
                                     variant="outline"
-                                    className="text-xs capitalize border-slate-300 text-slate-600"
+                                    className="text-xs capitalize border-[var(--hairline)] text-[var(--color-text-secondary)]"
                                   >
                                     {lesson.type}
                                   </Badge>
-                                  <span className="text-xs text-slate-500 w-20 text-right">
+                                  <span className="text-xs text-[var(--color-text-secondary)] w-20 text-right">
                                     {lesson.estimated_duration || 0} min
                                   </span>
                                 </li>
