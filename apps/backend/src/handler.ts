@@ -395,7 +395,15 @@ export async function handleRequest(
       if (segments[1] === 'login' && method === 'POST') {
         const body = await request.json();
         if (!body.email || !body.password) return errorResp('email and password are required', 422, corsOrigin);
-        const users = await db.find('users', { email: body.email });
+        let users = await db.find('users', { email: body.email });
+        // BismiLLAH — Lightbase has insert->index visibility lag; a user who
+        // registers and immediately logs in could miss the index. Fall back
+        // to a full-collection scan (email match) before giving up.
+        if (users.length === 0) {
+          const all = await db.get('users');
+          const needle = String(body.email).toLowerCase();
+          users = all.filter((u: any) => String(u?.email || '').toLowerCase() === needle);
+        }
         const user = users[0];
         if (!user) return errorResp('Invalid credentials', 401, corsOrigin);
         if (!user.is_active) return errorResp('Account is deactivated', 403, corsOrigin);
