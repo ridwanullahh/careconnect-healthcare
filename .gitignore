@@ -133,4 +133,4 @@ dev.log
 bun.lock
 .zscripts-dev.log
 .zscripts/*.log
-.zscripts/dev.pid
+.zscripts/dev.piddist_lb/
