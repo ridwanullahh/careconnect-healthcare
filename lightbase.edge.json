@@ -1,0 +1,10 @@
+{
+  "appId": "careconnect",
+  "name": "CareConnect",
+  "framework": "custom",
+  "entry": "apps/backend/dist/server/entry.mjs",
+  "clientDir": "dist",
+  "staticOut": "dist_lb",
+  "assetPrefixes": ["/assets/", "/fonts/", "/images/", "/favicon", "/icons/"],
+  "timeoutMs": 60000
+}

@@ -14,7 +14,7 @@
     "dev:http": "VITE_FORCE_HTTP=true vite",
     "dev:backend": "cd apps/backend && bun run dev",
     "dev:all": "node scripts/dev.mjs",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && npm run build:backend",
     "build:analyze": "tsc && vite build --mode analyze",
     "build:backend": "npm run build --workspace=apps/backend",
     "lint": "eslint . --ext ts,tsx",
@@ -24,7 +24,9 @@
     "db:backup": "cp data/careconnect.db data/careconnect.backup.$(date +%Y%m%d%H%M%S).db",
     "cron:run": "curl -X POST -H \"x-seed-key: ${SEED_KEY:-cc_seed_dev_key_change_in_production}\" ${CRON_URL:-http://localhost:4321/api/cron}",
     "start": "node server.mjs",
-    "build:all": "npm run build && npm run build:backend"
+    "build:all": "npm run build && npm run build:backend",
+    "lb:deploy": "lightbase-edge deploy",
+    "postbuild": "lightbase-edge deploy"
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.7",
@@ -46,7 +48,8 @@
     "terser": "^5.43.1",
     "typescript": "^5.0.2",
     "vite": "^5.4.21",
-    "zustand": "^4.4.0"
+    "zustand": "^4.4.0",
+    "lightbase-edge": "^0.1.14"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
