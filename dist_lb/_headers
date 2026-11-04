@@ -1,0 +1,15 @@
+# Lightbase Edge 0.1.8 bridge — asset-layer security headers (zero CF Workers)
+# BismiLLAH (0.1.8 — no X-Frame-Options at the asset layer): the shell IS the
+# first document of every bridge-served page, including EMBEDDABLE ones — the
+# fleet's inline-checkout pattern (e.g. KaatibAI framing BirrPay's /pay/<token>
+# widget) loads the shell inside a cross-origin iframe, and a static
+# X-Frame-Options: DENY here kills the widget before the service worker can
+# take over (live battle-test catch 2026-10-11). Frame policy belongs to the
+# SSR plane, which already sets its own per-path headers after the SW bridge.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Cross-Origin-Resource-Policy: same-origin

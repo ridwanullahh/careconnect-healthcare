@@ -1,0 +1,4 @@
+Contact: mailto:security@careconnect.pages.dev
+Canonical: https://careconnect.pages.dev
+Policy: https://careconnect.pages.dev/.well-known/security.txt
+Preferred-Languages: en

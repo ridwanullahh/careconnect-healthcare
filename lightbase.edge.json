@@ -5,6 +5,16 @@
   "entry": "apps/backend/dist/server/entry.mjs",
   "clientDir": "dist",
   "staticOut": "dist_lb",
-  "assetPrefixes": ["/assets/", "/fonts/", "/images/", "/favicon", "/icons/"],
-  "timeoutMs": 60000
+  "assetPrefixes": [
+    "/assets/",
+    "/fonts/",
+    "/images/",
+    "/favicon",
+    "/icons/"
+  ],
+  "timeoutMs": 60000,
+  "description": "CareConnect \u2014 healthcare ecosystem for clinics and patients.",
+  "themeColor": "#0b3d2e",
+  "lbUrl": "https://lightbase-10133292663.development.catalystappsail.com",
+  "projectId": "careconnect"
 }

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CareConnect — Healthcare, Learning & Community</title>
+  <meta name="description" content="CareConnect connects patients, professionals and learners — telehealth, health records, courses and a certified LMS in one platform." />
+  <meta name="theme-color" content="#05B34D" />
+  <!-- BismiLLAH — brand typography: Inter (body) + Sora (display). Previously
+       the token stack named Inter but never loaded it, so everything fell
+       back to system-ui. Preconnected for first-paint speed. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- SMTPjs for email notifications -->
+  <script src="https://smtpjs.com/v3/smtp.js"></script>
+  <script type="module" crossorigin src="/assets/index-Dlx_W2ze.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/router-CwAc4ddX.js">
+  <link rel="modulepreload" crossorigin href="/assets/maps-Utr7gFCI.js">
+  <link rel="modulepreload" crossorigin href="/assets/icons-Q6bsxZDX.js">
+  <link rel="modulepreload" crossorigin href="/assets/markdown-8ufK6wxF.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-CyCe47HO.css">
+</head>
+
+<body>
+  <div id="root"></div>
+</body>
+
+</html>
