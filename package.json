@@ -24,9 +24,7 @@
     "db:backup": "cp data/careconnect.db data/careconnect.backup.$(date +%Y%m%d%H%M%S).db",
     "cron:run": "curl -X POST -H \"x-seed-key: ${SEED_KEY:-cc_seed_dev_key_change_in_production}\" ${CRON_URL:-http://localhost:4321/api/cron}",
     "start": "node server.mjs",
-    "build:all": "npm run build && npm run build:backend",
-    "lb:deploy": "lightbase-edge deploy",
-    "postbuild": "lightbase-edge deploy"
+    "build:all": "npm run build && npm run build:backend"
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.7",
@@ -36,7 +34,6 @@
     "better-sqlite3": "^11.7.0",
     "clsx": "^2.1.1",
     "esbuild-wasm": "^0.28.1",
-    "lightbase-edge": "^0.1.14",
     "lucide-react": "^0.263.0",
     "postcss": "^8.4.27",
     "react": "^18.2.0",
@@ -61,7 +58,6 @@
     "eslint": "^8.45.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.3",
-    "lightbase-edge": "0.1.17",
     "wrangler": "^4.125.0"
   },
   "optionalDependencies": {
